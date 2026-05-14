@@ -1,4 +1,5 @@
 'use client';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Package, ShoppingCart, Users, Tag, Percent, Image, Settings, LogOut, Menu, X, RotateCcw, Zap, Truck, Ruler } from 'lucide-react';
@@ -28,8 +29,8 @@ export function AdminSidebar({ user }: { user: any }) {
       <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">FU</div>
-            <div><p className="text-xs font-bold text-white leading-tight">Florida United</p><p className="text-xs text-gray-400">Admin</p></div>
+            <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">{SITE_CONFIG.logoText}</div>
+            <div><p className="text-xs font-bold text-white leading-tight">{SITE_CONFIG.name}</p><p className="text-xs text-gray-400">Admin</p></div>
           </div>
         )}
         <button onClick={()=>setCollapsed(!collapsed)} className="p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors ml-auto">

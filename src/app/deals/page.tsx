@@ -6,7 +6,7 @@ import { ShopClient } from '@/components/product/ShopClient';
 
 export const metadata: Metadata = {
   title: 'Deals & Offers | Up to 40% Off Hardware & Electrical',
-  description: 'Shop the best deals on hardware, electrical supplies, safety equipment and tools. Limited time offers with up to 40% off at Florida United Company.',
+  description: 'Shop the best deals on hardware, electrical supplies, safety equipment and tools. Limited time offers with up to 40% off at Florida Kuwait Company.',
   alternates: { canonical: '/deals' },
 };
 
@@ -20,7 +20,7 @@ export default function DealsPage() {
           <h1 className="text-3xl md:text-4xl font-black font-display mb-2">Hot Deals & Offers</h1>
           <p className="text-orange-100 text-lg mb-6">Up to 40% off — Limited time only!</p>
           <div className="flex flex-wrap justify-center gap-4 text-sm">
-            {['Free shipping $99+','30-day returns','Verified quality','Price match guarantee'].map(b=>(
+            {['Free shipping KWD 15+','30-day returns','Verified quality','Price match guarantee'].map(b=>(
               <span key={b} className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full font-medium">✓ {b}</span>
             ))}
           </div>

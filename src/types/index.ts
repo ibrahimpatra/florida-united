@@ -323,6 +323,7 @@ export interface ProductFilters {
   inStock?: boolean;
   isFeatured?: boolean;
   isNewArrival?: boolean;
+  freeShipping?: boolean;    // This product always ships free regardless of cart total
   isOnSale?: boolean;
   tags?: string[];
   search?: string;

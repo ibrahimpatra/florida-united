@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { toast } from 'react-hot-toast';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 
 export default function ContactPage() {
   const [form, setForm] = useState({ name:'', email:'', subject:'', message:'' });
@@ -37,10 +38,10 @@ export default function ContactPage() {
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-5 font-display">Contact Information</h2>
               {[
-                { icon:Phone, title:'Phone', lines:['1-800-FLU-HARD (358-4273)','Mon-Fri 8AM–6PM, Sat 9AM–4PM'], href:'tel:+18003584273' },
-                { icon:Mail, title:'Email', lines:['info@floridaunited.com','orders@floridaunited.com'], href:'mailto:info@floridaunited.com' },
-                { icon:MapPin, title:'Address', lines:['123 Commerce Blvd','Miami, Florida 33101'], href:'https://maps.google.com' },
-                { icon:Clock, title:'Hours', lines:['Mon–Fri: 8:00 AM – 6:00 PM','Saturday: 9:00 AM – 4:00 PM','Sunday: Closed'], href:null },
+                { icon:Phone, title:'Phone', lines:[SITE_CONFIG.phone, SITE_CONFIG.hoursWeekdays], href:`tel:${SITE_CONFIG.phoneTel}` },
+                { icon:Mail, title:'Email', lines:[SITE_CONFIG.email, SITE_CONFIG.emailOrders], href:`mailto:${SITE_CONFIG.email}` },
+                { icon:MapPin, title:'Address', lines:[SITE_CONFIG.addressLine1, SITE_CONFIG.addressLine2], href:SITE_CONFIG.googleMapsUrl },
+                { icon:Clock, title:'Hours', lines:[SITE_CONFIG.hoursWeekdays, SITE_CONFIG.hoursSaturday, SITE_CONFIG.hoursSunday], href:null },
               ].map(({icon:Icon,title,lines,href})=>(
                 <div key={title} className="flex gap-4 mb-5">
                   <div className="w-10 h-10 bg-brand-50 rounded-xl flex items-center justify-center flex-shrink-0"><Icon className="w-5 h-5 text-brand-600"/></div>
@@ -52,7 +53,7 @@ export default function ContactPage() {
               ))}
             </div>
             {/* WhatsApp CTA */}
-            <a href="https://wa.me/18003584273" target="_blank" rel="noopener noreferrer"
+            <a href={`https://wa.me/${SITE_CONFIG.whatsapp}`} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-2xl hover:bg-green-100 transition-colors group">
               <div className="w-11 h-11 bg-green-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-green-600 transition-colors"><MessageCircle className="w-6 h-6 text-white"/></div>
               <div><p className="font-bold text-green-800">Chat on WhatsApp</p><p className="text-sm text-green-600">Quick answers from our team</p></div>

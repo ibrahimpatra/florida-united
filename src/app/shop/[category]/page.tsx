@@ -13,8 +13,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try { cat = await getCategoryBySlug(params.category); } catch {}
   if (!cat) return { title: 'Category Not Found' };
   return {
-    title: cat.metaTitle || `${cat.name} — Florida United Company`,
-    description: cat.metaDesc || `Shop ${cat.name} at Florida United Company. Best prices on hardware and electrical supplies in Florida.`,
+    title: cat.metaTitle || `${cat.name} — Florida Kuwait Company`,
+    description: cat.metaDesc || `Shop ${cat.name} at Florida Kuwait Company. Best prices on hardware and electrical supplies in Florida.`,
     alternates: { canonical: `/shop/${cat.slug}` },
   };
 }

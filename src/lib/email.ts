@@ -1,5 +1,6 @@
 // src/lib/email.ts
 import nodemailer from 'nodemailer';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import type { Order } from '@/types';
 
 const transporter = nodemailer.createTransport({
@@ -13,7 +14,7 @@ const transporter = nodemailer.createTransport({
 });
 
 const BRAND_COLOR = '#1a56db';
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://floridaunited.com';
+const SITE_URL = SITE_CONFIG.siteUrl;
 
 function baseTemplate(content: string, preheader = '') {
   return `
@@ -22,7 +23,7 @@ function baseTemplate(content: string, preheader = '') {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Florida United Company</title>
+  <title>Florida Kuwait Company</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fb; color: #1f2937; }
@@ -62,18 +63,18 @@ function baseTemplate(content: string, preheader = '') {
   ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;">${preheader}</div>` : ''}
   <div class="wrapper">
     <div class="header">
-      <div class="logo"><span>FU</span>Florida United Company</div>
-      <div class="tagline">Hardware &amp; Electrical Supplies — Miami, Florida</div>
+      <div class="logo"><span>${SITE_CONFIG.logoText}</span>${SITE_CONFIG.fullName}</div>
+      <div class="tagline">${SITE_CONFIG.tagline} — ${SITE_CONFIG.addressLine2}</div>
     </div>
     <div class="body">${content}</div>
     <div class="footer">
-      <p>Florida United Company | 123 Commerce Blvd, Miami, FL 33101</p>
+      <p>${SITE_CONFIG.fullName} | ${SITE_CONFIG.addressFull}</p>
       <p style="margin-top:6px;">
         <a href="${SITE_URL}">Shop</a> · 
         <a href="${SITE_URL}/contact">Contact</a> · 
         <a href="${SITE_URL}/account/orders">My Orders</a>
       </p>
-      <p style="margin-top:8px;">© ${new Date().getFullYear()} Florida United Company. All rights reserved.</p>
+      <p style="margin-top:8px;">© ${new Date().getFullYear()} ${SITE_CONFIG.fullName}. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -147,9 +148,9 @@ export async function sendOrderConfirmation(order: Order) {
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_FROM || '"Florida United Company" <orders@floridaunited.com>',
+    from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailOrders}>`,
     to: order.userEmail,
-    subject: `Order Confirmed #${order.orderNumber} — Florida United Company`,
+    subject: `Order Confirmed #${order.orderNumber} — ${SITE_CONFIG.fullName}`,
     html: baseTemplate(content, `Your order #${order.orderNumber} is confirmed!`),
   });
 }
@@ -198,7 +199,7 @@ export async function sendOrderStatusUpdate(order: Order, newStatus: string, not
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_FROM || '"Florida United Company" <orders@floridaunited.com>',
+    from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailOrders}>`,
     to: order.userEmail,
     subject: `${msg.emoji} ${msg.title} — Order #${order.orderNumber}`,
     html: baseTemplate(content),
@@ -208,11 +209,11 @@ export async function sendOrderStatusUpdate(order: Order, newStatus: string, not
 // ── WELCOME / REGISTRATION EMAIL ─────────────────────────────
 export async function sendWelcomeEmail(email: string, name: string) {
   const content = `
-    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Welcome to Florida United! 🎉</h2>
+    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Welcome to ${SITE_CONFIG.name}! 🎉</h2>
     <p style="color:#6b7280;margin-bottom:24px;">Hi ${name}, your account has been created successfully.</p>
     
     <div class="info-card" style="background:#eff6ff;border-color:#bfdbfe;">
-      <p style="font-size:15px;line-height:1.7;">Florida United Company is your one-stop shop for <strong>hardware, electrical supplies, safety equipment</strong>, and more — all trusted by Florida contractors since 2005.</p>
+      <p style="font-size:15px;line-height:1.7;">${SITE_CONFIG.fullName} is your one-stop shop for <strong>hardware, electrical supplies, safety equipment</strong>, and more — all trusted since ${SITE_CONFIG.foundedYear}.</p>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0;">
@@ -224,7 +225,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
       <div style="background:#f9fafb;border-radius:12px;padding:16px;text-align:center;">
         <div style="font-size:28px;margin-bottom:8px;">🚚</div>
         <p style="font-size:13px;font-weight:600;color:#1f2937">Free Shipping</p>
-        <p style="font-size:12px;color:#6b7280">Orders over $99</p>
+        <p style="font-size:12px;color:#6b7280">Orders over KWD ${SITE_CONFIG.freeShippingThreshold}</p>
       </div>
       <div style="background:#f9fafb;border-radius:12px;padding:16px;text-align:center;">
         <div style="font-size:28px;margin-bottom:8px;">↩️</div>
@@ -244,9 +245,9 @@ export async function sendWelcomeEmail(email: string, name: string) {
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_FROM || '"Florida United Company" <noreply@floridaunited.com>',
+    from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailNoReply}>`,
     to: email,
-    subject: `Welcome to Florida United Company, ${name}! 🎉`,
+    subject: `Welcome to Florida Kuwait Company, ${name}! 🎉`,
     html: baseTemplate(content, 'Welcome! Your account is ready.'),
   });
 }
@@ -255,7 +256,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
 export async function sendPasswordResetEmail(email: string, resetLink: string) {
   const content = `
     <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Reset Your Password 🔐</h2>
-    <p style="color:#6b7280;margin-bottom:24px;">We received a request to reset your password for your Florida United account.</p>
+    <p style="color:#6b7280;margin-bottom:24px;">We received a request to reset your password for your ${SITE_CONFIG.name} account.</p>
     
     <p style="font-size:15px;margin-bottom:20px;">Click the button below to create a new password. This link expires in <strong>1 hour</strong>.</p>
     
@@ -271,9 +272,9 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_FROM || '"Florida United Company" <noreply@floridaunited.com>',
+    from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailNoReply}>`,
     to: email,
-    subject: 'Reset Your Password — Florida United Company',
+    subject: 'Reset Your Password — Florida Kuwait Company',
     html: baseTemplate(content, 'Your password reset link'),
   });
 }
@@ -307,7 +308,7 @@ export async function sendReturnRequestEmail(
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_FROM || '"Florida United Company" <returns@floridaunited.com>',
+    from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailReturns}>`,
     to: email,
     subject: `Return Request Received — Order #${orderNumber}`,
     html: baseTemplate(content),
@@ -316,7 +317,7 @@ export async function sendReturnRequestEmail(
 
 // ── ADMIN NEW ORDER EMAIL ─────────────────────────────────────
 export async function sendAdminNewOrderNotification(order: Order) {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@floridaunited.com';
+  const adminEmail = process.env.ADMIN_EMAIL || SITE_CONFIG.emailAdmin;
   const content = `
     <h2 style="color:#1f2937;">🛍 New Order Received!</h2>
     <div class="info-card">
@@ -333,7 +334,7 @@ export async function sendAdminNewOrderNotification(order: Order) {
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_FROM || '"Florida United Orders" <orders@floridaunited.com>',
+    from: process.env.EMAIL_FROM || `"${SITE_CONFIG.name}" <${SITE_CONFIG.emailOrders}>`,
     to: adminEmail,
     subject: `🛍 New Order #${order.orderNumber} — $${order.total.toFixed(2)}`,
     html: baseTemplate(content),
@@ -341,7 +342,7 @@ export async function sendAdminNewOrderNotification(order: Order) {
 }
 
 export async function sendContactEmail(name: string, email: string, subject: string, message: string) {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@floridaunited.com';
+  const adminEmail = process.env.ADMIN_EMAIL || SITE_CONFIG.emailAdmin;
   await transporter.sendMail({
     from: process.env.EMAIL_FROM!,
     to: adminEmail,

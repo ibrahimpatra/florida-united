@@ -21,7 +21,7 @@ export function ProductForm({ initialData, productId }: Props) {
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
     defaultValues: initialData || {
       isActive: true, isFeatured: false, isNewArrival: false,
-      isOnSale: false, isReturnable: true, returnDays: 30,
+      isOnSale: false, freeShipping: false, isReturnable: true, returnDays: 30,
       stock: 0, lowStockAlert: 5, price: 0,
     }
   });
@@ -226,6 +226,7 @@ export function ProductForm({ initialData, productId }: Props) {
                 {key:'isFeatured', label:'Featured on homepage'},
                 {key:'isNewArrival', label:'New Arrival'},
                 {key:'isOnSale', label:'On Sale'},
+                {key:'freeShipping', label:'🚚 Free Shipping (always ships free, ignores threshold)'},
               ].map(({key,label}) => (
                 <label key={key} className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" {...register(key as any)} className="w-4 h-4 accent-brand-600 rounded"/>

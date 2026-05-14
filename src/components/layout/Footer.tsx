@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import { Phone, Mail, MapPin, Facebook, Instagram, Twitter, Youtube, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
 
 export function Footer() {
@@ -11,28 +12,28 @@ export function Footer() {
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-11 h-11 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg font-display">FU</span>
+                <span className="text-white font-bold text-lg font-display">{SITE_CONFIG.logoText}</span>
               </div>
               <div>
-                <div className="text-white font-bold text-lg font-display">Florida United</div>
-                <div className="text-gray-400 text-xs">Hardware & Electrical Company</div>
+                <div className="text-white font-bold text-lg font-display">{SITE_CONFIG.name}</div>
+                <div className="text-gray-400 text-xs">{SITE_CONFIG.tagline}</div>
               </div>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-6 max-w-xs">
-              Florida's trusted supplier of hardware, electrical, and industrial products since 2005. Serving contractors, businesses, and homeowners across the Sunshine State.
+              {SITE_CONFIG.metaDesc}
             </p>
             <div className="space-y-2.5 text-sm">
-              <a href="tel:+18005678900" className="flex items-center gap-2.5 hover:text-white transition-colors">
+              <a href={`tel:${SITE_CONFIG.phoneTel}`} className="flex items-center gap-2.5 hover:text-white transition-colors">
                 <Phone className="w-4 h-4 text-brand-400" />
-                1-800-FLU-HARD (358-4273)
+                {SITE_CONFIG.phone}
               </a>
-              <a href="mailto:info@floridaunited.com" className="flex items-center gap-2.5 hover:text-white transition-colors">
+              <a href={`mailto:${SITE_CONFIG.email}`} className="flex items-center gap-2.5 hover:text-white transition-colors">
                 <Mail className="w-4 h-4 text-brand-400" />
-                info@floridaunited.com
+                info@floridakuwait.com
               </a>
               <div className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-brand-400 mt-0.5 flex-shrink-0" />
-                <span>123 Commerce Blvd, Miami, FL 33101</span>
+                <span>{SITE_CONFIG.addressFull}</span>
               </div>
             </div>
             {/* Socials */}
@@ -130,7 +131,7 @@ export function Footer() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { Icon: Shield, title: 'Secure Payments', desc: 'SSL encrypted checkout' },
-              { Icon: Truck, title: 'Free Shipping', desc: 'On orders over $99' },
+              { Icon: Truck, title: 'Free Shipping', desc: `On orders over KWD ${SITE_CONFIG.freeShippingThreshold}` },
               { Icon: RotateCcw, title: '30-Day Returns', desc: 'Hassle-free returns' },
               { Icon: CreditCard, title: 'Multiple Payments', desc: 'Card, GPay & more' },
             ].map(({ Icon, title, desc }) => (
@@ -151,11 +152,11 @@ export function Footer() {
       {/* Bottom Bar */}
       <div className="border-t border-gray-800 py-5">
         <div className="container-custom flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-          <p>© {new Date().getFullYear()} Florida United Company. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} {SITE_CONFIG.fullName}. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <span>We accept:</span>
             <div className="flex gap-2">
-              {['VISA', 'MC', 'AMEX', 'GPAY', 'STRIPE'].map((p) => (
+              {['VISA', 'MC', 'COD', 'GPAY', 'KNET'].map((p) => (
                 <span key={p} className="px-2 py-0.5 bg-gray-800 rounded text-gray-400 font-medium text-xs">{p}</span>
               ))}
             </div>

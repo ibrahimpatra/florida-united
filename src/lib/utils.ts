@@ -46,7 +46,7 @@ export function truncate(text: string, maxLength: number): string {
 }
 
 export function generateOrderNumber(): string {
-  const prefix = 'FUK'; // Florida United Kuwait
+  const prefix = 'FUK'; // Florida Kuwait
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `${prefix}-${timestamp}-${random}`;

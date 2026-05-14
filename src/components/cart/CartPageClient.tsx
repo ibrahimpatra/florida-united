@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useCartStore } from '@/store/cartStore';
 import { formatPrice } from '@/lib/utils';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import { toast } from 'react-hot-toast';
 
 export function CartPageClient() {
@@ -12,9 +13,9 @@ export function CartPageClient() {
   const [couponLoading, setCouponLoading] = useState(false);
 
   const subtotal = getSubtotal();
-  const shipping = subtotal >= 99 ? 0 : 9.99;
-  const tax = +(subtotal * 0.07).toFixed(2);
-  const total = subtotal - discountAmount + shipping + tax;
+  const allItemsFreeShip = items.length > 0 && items.every(i => (i as any).freeShipping);
+  const shipping = (subtotal >= SITE_CONFIG.freeShippingThreshold || allItemsFreeShip) ? 0 : SITE_CONFIG.defaultShippingCost;
+  const total = subtotal - discountAmount + shipping; // No VAT in Kuwait
 
   const applyCoupon = async () => {
     if (!couponInput.trim()) return;
@@ -95,15 +96,15 @@ export function CartPageClient() {
               <div className="flex justify-between text-gray-600"><span>Subtotal ({items.reduce((s,i)=>s+i.quantity,0)} items)</span><span>{formatPrice(subtotal)}</span></div>
               {discountAmount>0 && <div className="flex justify-between text-green-600 font-medium"><span>Discount ({couponCode})</span><span>-{formatPrice(discountAmount)}</span></div>}
               <div className="flex justify-between text-gray-600"><span>Shipping</span><span>{shipping===0?<span className="text-green-600 font-semibold">FREE</span>:formatPrice(shipping)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Tax (7%)</span><span>{formatPrice(tax)}</span></div>
+
               <div className="border-t border-gray-200 pt-3 flex justify-between font-bold text-gray-900 text-base">
                 <span>Total</span><span className="text-brand-700 text-lg">{formatPrice(total)}</span>
               </div>
             </div>
             {subtotal<99 && (
               <div className="mt-4 bg-blue-50 rounded-xl p-3 text-xs text-brand-700">
-                Add <strong>{formatPrice(99-subtotal)}</strong> more for FREE shipping! 🚚
-                <div className="mt-2 bg-brand-100 rounded-full h-2"><div className="bg-brand-600 h-full rounded-full" style={{width:`${Math.min((subtotal/99)*100,100)}%`}}/></div>
+                Add <strong>{formatPrice(15-subtotal)}</strong> more for FREE shipping! 🚚
+                <div className="mt-2 bg-brand-100 rounded-full h-2"><div className="bg-brand-600 h-full rounded-full" style={{width:`${Math.min((subtotal / SITE_CONFIG.freeShippingThreshold)*100,100)}%`}}/></div>
               </div>
             )}
             <Link href="/checkout" className="btn-primary w-full mt-4 py-3 justify-center">

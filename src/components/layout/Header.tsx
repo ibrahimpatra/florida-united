@@ -10,6 +10,7 @@ import {
   MapPin, Zap, Wrench, Shield, Truck, Star
 } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import { useWishlistStore } from '@/store/wishlistStore';
 import { SearchModal } from '@/components/layout/SearchModal';
 import { MiniCart } from '@/components/cart/MiniCart';
@@ -104,19 +105,19 @@ export function Header() {
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">
                 <Phone className="w-3 h-3" />
-                <a href="tel:+18005678900" className="hover:text-blue-200 transition-colors">
-                  1-800-FLU-HARD (358-4273)
+                <a href={`tel:${SITE_CONFIG.phoneTel}`} className="hover:text-blue-200 transition-colors">
+                  +965 2222 5050
                 </a>
               </span>
               <span className="flex items-center gap-1.5">
                 <MapPin className="w-3 h-3" />
-                Miami, Florida | Serving all of FL
+                {SITE_CONFIG.addressLine2} | Serving all of Kuwait
               </span>
             </div>
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">
                 <Truck className="w-3 h-3" />
-                Free shipping over $99
+                Free shipping over KWD {SITE_CONFIG.freeShippingThreshold}
               </span>
               <span className="flex items-center gap-1.5">
                 <Star className="w-3 h-3" />
@@ -140,15 +141,15 @@ export function Header() {
             </button>
 
             {/* Logo */}
-            <Link href="/" className="flex-shrink-0 flex items-center gap-2 md:gap-3" aria-label="Florida United Company - Home">
+            <Link href="/" className="flex-shrink-0 flex items-center gap-2 md:gap-3" aria-label={`${SITE_CONFIG.fullName} - Home`}>
               <div className="w-10 h-10 md:w-12 md:h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-lg font-display">FU</span>
+                <span className="text-white font-bold text-lg font-display">{SITE_CONFIG.logoText}</span>
               </div>
               <div className="hidden xs:block">
                 <div className="text-brand-700 font-bold text-base md:text-lg leading-tight font-display">
-                  Florida United
+                  Florida Kuwait
                 </div>
-                <div className="text-gray-500 text-xs leading-tight">Hardware & Electrical</div>
+                <div className="text-gray-500 text-xs leading-tight">{SITE_CONFIG.tagline}</div>
               </div>
             </Link>
 
@@ -352,11 +353,11 @@ export function Header() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <span className="text-white font-bold text-lg">FU</span>
+                      <span className="text-white font-bold text-lg">{SITE_CONFIG.logoText}</span>
                     </div>
                     <div>
-                      <div className="text-white font-bold text-sm">Florida United</div>
-                      <div className="text-blue-200 text-xs">Hardware & Electrical</div>
+                      <div className="text-white font-bold text-sm">{SITE_CONFIG.name}</div>
+                      <div className="text-blue-200 text-xs">{SITE_CONFIG.tagline}</div>
                     </div>
                   </div>
                   <button onClick={() => setMobileMenuOpen(false)} className="p-2 text-white/80 hover:text-white">
@@ -413,8 +414,8 @@ export function Header() {
                 )}
               </nav>
               <div className="p-4 bg-gray-50 border-t border-gray-200">
-                <a href="tel:+18005678900" className="flex items-center gap-2 text-brand-700 font-semibold text-sm">
-                  <Phone className="w-4 h-4" /> 1-800-FLU-HARD
+                <a href={`tel:${SITE_CONFIG.phoneTel}`} className="flex items-center gap-2 text-brand-700 font-semibold text-sm">
+                  <Phone className="w-4 h-4" /> +965 2222 5050
                 </a>
               </div>
             </div>

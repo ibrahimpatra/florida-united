@@ -1,4 +1,5 @@
 'use client';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -33,10 +34,10 @@ export default function RegisterPage() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-3 mb-6">
             <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-xl font-display">FU</span>
+              <span className="text-white font-bold text-xl font-display">{SITE_CONFIG.logoText}</span>
             </div>
             <div className="text-left">
-              <div className="text-brand-700 font-bold text-lg font-display">Florida United</div>
+              <div className="text-brand-700 font-bold text-lg font-display">{SITE_CONFIG.name}</div>
               <div className="text-gray-500 text-xs">Hardware & Electrical</div>
             </div>
           </Link>

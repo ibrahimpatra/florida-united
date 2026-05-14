@@ -1,3 +1,4 @@
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Header } from '@/components/layout/Header';
@@ -16,8 +17,8 @@ import { ProductSkeleton } from '@/components/product/ProductSkeleton';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 
 export const metadata: Metadata = {
-  title: 'Florida United Company | #1 Hardware & Electrical Supplies in Florida',
-  description: "Shop Florida's best selection of hardware, electrical supplies, safety equipment and more. Trusted by contractors since 2005. Free shipping on orders over $99.",
+  title: 'Florida Kuwait | Hardware & Electrical Supplies in Kuwait',
+  description: "Shop Kuwait's best selection of hardware, electrical supplies, safety equipment and more. Trusted by contractors since 2005. Free shipping on orders over KWD 15.",
   alternates: { canonical: '/' },
 };
 
@@ -64,7 +65,7 @@ export default function HomePage() {
       </main>
       <Footer/>
       <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify({
-        '@context':'https://schema.org','@type':'WebSite','name':'Florida United Company',
+        '@context':'https://schema.org','@type':'WebSite','name':SITE_CONFIG.fullName,
         'url': process.env.NEXT_PUBLIC_APP_URL,
         'potentialAction':{'@type':'SearchAction','target':{'@type':'EntryPoint','urlTemplate':`${process.env.NEXT_PUBLIC_APP_URL}/search?q={search_term_string}`},'query-input':'required name=search_term_string'}
       })}}/>

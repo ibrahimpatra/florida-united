@@ -35,7 +35,7 @@ export default async function ProductPage({ params }: Props) {
   } catch {}
   if (!product) notFound();
 
-  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://floridaunited.com';
+  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -47,10 +47,10 @@ export default async function ProductPage({ params }: Props) {
     offers: {
       '@type': 'Offer',
       price: product.price,
-      priceCurrency: 'USD',
+      priceCurrency: 'KWD',
       availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
       url: `${siteUrl}/shop/products/${product.slug}`,
-      seller: { '@type': 'Organization', name: 'Florida United Company' },
+      seller: { '@type': 'Organization', name: 'Florida Kuwait Company' },
     },
     aggregateRating: product.totalReviews > 0 ? {
       '@type': 'AggregateRating',

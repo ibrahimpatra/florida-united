@@ -3,6 +3,7 @@ import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { formatPrice } from '@/lib/utils';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 
 interface Props { isOpen: boolean; onClose: () => void; }
 
@@ -10,7 +11,8 @@ export function MiniCart({ isOpen, onClose }: Props) {
   const { items, removeItem, updateQuantity, getSubtotal, getTotal, discountAmount } = useCartStore();
 
   const subtotal = getSubtotal();
-  const shipping = subtotal >= 99 ? 0 : 9.99;
+  const allItemsFreeShip = items.length > 0 && items.every(i => (i as any).freeShipping);
+  const shipping = (subtotal >= SITE_CONFIG.freeShippingThreshold || allItemsFreeShip) ? 0 : SITE_CONFIG.defaultShippingCost;
 
   return (
     <>
@@ -99,13 +101,13 @@ export function MiniCart({ isOpen, onClose }: Props) {
             {/* Shipping notice */}
             {subtotal < 99 && (
               <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-brand-700">
-                Add <strong>{formatPrice(99 - subtotal)}</strong> more for free shipping! 🚚
+                Add <strong>{formatPrice(SITE_CONFIG.freeShippingThreshold - subtotal)}</strong> more for free shipping! 🚚
                 <div className="mt-1.5 bg-brand-100 rounded-full h-1.5 overflow-hidden">
                   <div className="bg-brand-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min((subtotal / 99) * 100, 100)}%` }} />
                 </div>
               </div>
             )}
-            {subtotal >= 99 && (
+            {subtotal >= SITE_CONFIG.freeShippingThreshold && (
               <div className="bg-green-50 rounded-lg px-3 py-2 text-xs text-green-700 font-semibold">
                 ✅ You qualify for FREE shipping!
               </div>

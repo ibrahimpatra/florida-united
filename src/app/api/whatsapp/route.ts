@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import { getProductById } from '@/lib/firestore';
 
 export async function GET(req: NextRequest) {
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
   const product = await getProductById(productId);
   if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
 
-  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://floridaunited.com';
+  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || SITE_CONFIG.siteUrl;
   const productUrl = `${siteUrl}/shop/products/${product.slug}`;
   const image = product.images[0] || '';
 
@@ -24,10 +25,10 @@ ${product.shortDescription || ''}
 
 🛒 Buy here: ${productUrl}
 
-📞 Florida United Company — Hardware & Electrical
+📞 ${SITE_CONFIG.fullName} — ${SITE_CONFIG.tagline}
 🌐 ${siteUrl}`;
 
-  const whatsappNumber = process.env.WHATSAPP_NUMBER || '';
+  const whatsappNumber = process.env.WHATSAPP_NUMBER || SITE_CONFIG.whatsapp;
   const whatsappUrl = whatsappNumber
     ? `https://wa.me/${whatsappNumber.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`
     : `https://wa.me/?text=${encodeURIComponent(message)}`;

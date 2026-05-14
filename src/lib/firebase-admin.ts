@@ -10,20 +10,48 @@ let adminAuth: Auth;
 let adminStorage: Storage;
 
 function getAdminApp(): App {
-  if (!adminApp) {
-    if (getApps().length > 0) {
-      adminApp = getApps()[0];
-    } else {
-      adminApp = initializeApp({
-        credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID!,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')!,
-        }),
-        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-      });
-    }
+  if (adminApp) return adminApp;
+
+  if (getApps().length > 0) {
+    adminApp = getApps()[0];
+    return adminApp;
   }
+
+  // Support both naming conventions in .env
+  const projectId =
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.FIREBASE_ADMIN_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+  const clientEmail =
+    process.env.FIREBASE_CLIENT_EMAIL ||
+    process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+
+  const privateKey = (
+    process.env.FIREBASE_PRIVATE_KEY ||
+    process.env.FIREBASE_ADMIN_PRIVATE_KEY ||
+    ''
+  ).replace(/\\n/g, '\n');
+
+  const storageBucket =
+    process.env.FIREBASE_STORAGE_BUCKET ||
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      'Firebase Admin credentials are missing. Add these to your .env file:\n' +
+      '  FIREBASE_PROJECT_ID=your-project-id\n' +
+      '  FIREBASE_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com\n' +
+      '  FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"\n' +
+      'Download the service account JSON from Firebase Console → Project Settings → Service Accounts.'
+    );
+  }
+
+  adminApp = initializeApp({
+    credential: cert({ projectId, clientEmail, privateKey }),
+    storageBucket,
+  });
+
   return adminApp;
 }
 

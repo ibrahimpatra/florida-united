@@ -8,7 +8,7 @@ export function generateMetadata({ searchParams }: { searchParams: { q?: string 
   const q = searchParams.q || '';
   return {
     title: q ? `Search results for "${q}"` : 'Search Products',
-    description: `Search results for ${q} — Florida United Company hardware and electrical supplies.`,
+    description: `Search results for ${q} — Florida Kuwait Company hardware and electrical supplies.`,
     robots: { index: false },
   };
 }

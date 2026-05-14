@@ -1,5 +1,6 @@
 // src/app/api/tap/checkout/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
       currency: 'KWD',
       threeDSecure: true,
       save_card: false,
-      description: `Florida United Kuwait - Order ${orderNumber}`,
+      description: `${SITE_CONFIG.fullName} - Order ${orderNumber}`,
       statement_descriptor: 'FLORIDA UNITED KW',
       metadata: { orderId, orderNumber, userId: session.user.id },
       reference: { transaction: orderNumber, order: orderId },

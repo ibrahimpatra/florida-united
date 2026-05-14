@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import { persist } from 'zustand/middleware';
 
 export interface CartItem {
@@ -97,9 +98,14 @@ export const useCartStore = create<CartStore>()(
       },
 
       getTotal: () => {
+        const items = get().items;
         const subtotal = get().getSubtotal();
         const discount = get().discountAmount;
-        const shipping = subtotal > 99 ? 0 : 9.99;
+        // Shipping is free if: cart meets threshold, OR all items have freeShipping flag
+        const allItemsFreeShip = items.length > 0 && items.every(i => (i as any).freeShipping);
+        const shipping = (subtotal >= SITE_CONFIG.freeShippingThreshold || allItemsFreeShip)
+          ? 0
+          : SITE_CONFIG.defaultShippingCost;
         return Math.max(0, subtotal - discount + shipping);
       },
 

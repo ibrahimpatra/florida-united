@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 import { getCategories, getProducts } from '@/lib/firestore';
 
-const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://floridaunited.com';
+const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [

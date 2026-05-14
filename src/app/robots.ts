@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://floridaunited.com';
+const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [

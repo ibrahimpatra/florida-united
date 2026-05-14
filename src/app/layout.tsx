@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from 'next';
-// import '../styles/globals.css';
+import '../styles/globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
-  title: { default: 'Florida United Kuwait', template: '%s | Florida United Kuwait' },
+  title: { default: 'Florida Kuwait', template: '%s | Florida Kuwait' },
   description: "Kuwait's premier hardware store — tools, electrical, plumbing, and building supplies.",
   keywords: ['hardware store', 'Kuwait', 'tools', 'electrical', 'building supplies'],
   openGraph: {
     type: 'website',
     locale: 'en_KW',
     url: process.env.NEXT_PUBLIC_APP_URL,
-    siteName: 'Florida United Kuwait',
+    siteName: 'Florida Kuwait',
   },
   robots: { index: true, follow: true },
 };

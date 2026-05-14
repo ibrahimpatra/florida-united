@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 
 const slides = [
   {
     id: 1,
     title: 'Professional Electrical Supplies',
-    subtitle: 'Trusted by Florida Contractors Since 2005',
+    subtitle: 'Trusted by Kuwait Contractors Since 2005',
     description: 'Shop circuit breakers, wiring, panels & more. Best prices guaranteed with next-day delivery.',
     cta: 'Shop Electrical',
     ctaLink: '/shop/electrical',
@@ -23,7 +24,7 @@ const slides = [
     id: 2,
     title: 'Complete Hardware Solutions',
     subtitle: 'Everything You Need in One Place',
-    description: 'From fasteners to power tools, we carry 50,000+ SKUs. Same-day pickup available at our Miami store.',
+    description: 'From fasteners to power tools, we carry 50,000+ SKUs. Same-day pickup available at our Salmiya store.',
     cta: 'Shop Hardware',
     ctaLink: '/shop/hardware',
     ctaSecondary: 'Find a Store',
@@ -116,7 +117,7 @@ export function HeroBanner() {
 
             {/* Trust indicators */}
             <div className="flex flex-wrap gap-4 mt-8 text-blue-100 text-sm">
-              <span className="flex items-center gap-1.5">✓ Free shipping $99+</span>
+              <span className="flex items-center gap-1.5">✓ Free shipping KWD {SITE_CONFIG.freeShippingThreshold}+</span>
               <span className="flex items-center gap-1.5">✓ 30-day returns</span>
               <span className="flex items-center gap-1.5">✓ Secure checkout</span>
             </div>

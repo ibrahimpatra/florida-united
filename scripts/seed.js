@@ -1,5 +1,5 @@
 /**
- * Florida United Company - Database Seed Script
+ * Florida Kuwait Company - Database Seed Script
  * Run: node scripts/seed.js
  * 
  * Requires FIREBASE_* env vars set in .env.local
@@ -18,12 +18,12 @@ const app = initializeApp({
 const db = getFirestore(app);
 
 async function seed() {
-  console.log('🌱 Seeding Florida United Company database...\n');
+  console.log('🌱 Seeding Florida Kuwait Company database...\n');
 
   // Categories
   console.log('📂 Creating categories...');
   const categories = [
-    { name:'Electrical Supplies', slug:'electrical', description:'Circuit breakers, wiring, panels, switches and all electrical components', icon:'⚡', isActive:true, sortOrder:1, metaTitle:'Electrical Supplies Florida | Florida United Company', metaDesc:'Shop electrical supplies, circuit breakers, wiring and panels.' },
+    { name:'Electrical Supplies', slug:'electrical', description:'Circuit breakers, wiring, panels, switches and all electrical components', icon:'⚡', isActive:true, sortOrder:1, metaTitle:'Electrical Supplies Kuwait | Florida Kuwait Company', metaDesc:'Shop electrical supplies, circuit breakers, wiring and panels.' },
     { name:'Hardware & Tools', slug:'hardware', description:'Hand tools, power tools, fasteners, and general hardware', icon:'🔧', isActive:true, sortOrder:2 },
     { name:'Safety Equipment', slug:'safety', description:'PPE, fire safety, first aid, and workplace safety products', icon:'🦺', isActive:true, sortOrder:3 },
     { name:'Lighting', slug:'lighting', description:'LED fixtures, emergency lighting, exit signs, and bulbs', icon:'💡', isActive:true, sortOrder:4 },
@@ -42,7 +42,7 @@ async function seed() {
   // Products
   console.log('\n📦 Creating products...');
   const products = [
-    { name:'20A Single Pole Circuit Breaker', slug:'20a-single-pole-circuit-breaker', sku:'CB-SP-20A-001', categoryId:catRefs['electrical'], categoryName:'Electrical Supplies', brand:'Siemens', price:8.99, comparePrice:12.99, stock:250, lowStockAlert:20, description:'UL Listed 20-Amp single-pole circuit breaker for Siemens EQ and ITE load centers. Provides overload and short-circuit protection.', shortDescription:'20A single-pole breaker, UL listed, compatible with Siemens panels', images:['https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400'], tags:['circuit breaker','siemens','20amp','electrical'], isFeatured:true, isNewArrival:false, isOnSale:true, isActive:true, isReturnable:true, returnDays:30, weight:0.5, metaTitle:'20A Single Pole Circuit Breaker | Florida United Company', avgRating:4.8, totalReviews:124, totalSold:892 },
+    { name:'20A Single Pole Circuit Breaker', slug:'20a-single-pole-circuit-breaker', sku:'CB-SP-20A-001', categoryId:catRefs['electrical'], categoryName:'Electrical Supplies', brand:'Siemens', price:8.99, comparePrice:12.99, stock:250, lowStockAlert:20, description:'UL Listed 20-Amp single-pole circuit breaker for Siemens EQ and ITE load centers. Provides overload and short-circuit protection.', shortDescription:'20A single-pole breaker, UL listed, compatible with Siemens panels', images:['https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400'], tags:['circuit breaker','siemens','20amp','electrical'], isFeatured:true, isNewArrival:false, isOnSale:true, isActive:true, isReturnable:true, returnDays:30, weight:0.5, metaTitle:'20A Single Pole Circuit Breaker | Florida Kuwait Company', avgRating:4.8, totalReviews:124, totalSold:892 },
     { name:'12/2 NM-B Romex Wire 250ft', slug:'12-2-nm-b-romex-wire-250ft', sku:'WR-12-2-250', categoryId:catRefs['electrical'], categoryName:'Electrical Supplies', brand:'Southwire', price:89.99, comparePrice:109.99, stock:85, lowStockAlert:10, description:'12/2 NM-B (Romex) non-metallic sheathed cable with ground, 250ft coil. For use in dry locations.', shortDescription:'12/2 Romex 250ft - UL Listed, with ground wire', images:['https://images.unsplash.com/photo-1621905251189-08b45249e04c?w=400'], tags:['wire','romex','12-2','southwire','electrical cable'], isFeatured:true, isNewArrival:true, isOnSale:false, isActive:true, isReturnable:true, returnDays:30, weight:8.5, avgRating:4.9, totalReviews:67, totalSold:445 },
     { name:'Klein Tools 11-in-1 Screwdriver', slug:'klein-tools-11-in-1-screwdriver', sku:'KT-32500', categoryId:catRefs['hardware'], categoryName:'Hardware & Tools', brand:'Klein Tools', price:24.99, comparePrice:29.99, stock:180, lowStockAlert:15, description:'Multi-bit screwdriver/nut driver with 11 functions. Features four Phillips, four slotted, and three nut driver sizes.', shortDescription:'11-function multi-bit screwdriver with cushion-grip handle', images:['https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400'], tags:['screwdriver','klein tools','hand tools','multi-bit'], isFeatured:true, isNewArrival:false, isOnSale:false, isActive:true, isReturnable:true, returnDays:30, weight:0.8, avgRating:4.9, totalReviews:203, totalSold:1247 },
     { name:'3M Hard Hat Class E Yellow', slug:'3m-hard-hat-class-e-yellow', sku:'HH-3M-E-YLW', categoryId:catRefs['safety'], categoryName:'Safety Equipment', brand:'3M', price:19.99, comparePrice:null, stock:320, lowStockAlert:30, description:'ANSI/ISEA Z89.1-2014 Type I, Class E hard hat. Protects against impact, penetration, and electrical hazards up to 20,000 volts.', shortDescription:'ANSI Class E hard hat, 6-point suspension, adjustable', images:['https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400'], tags:['hard hat','ppe','safety','3m','helmet'], isFeatured:false, isNewArrival:false, isOnSale:false, isActive:true, isReturnable:true, returnDays:30, weight:0.9, avgRating:4.7, totalReviews:89, totalSold:567 },
@@ -54,15 +54,15 @@ async function seed() {
 
   for (const product of products) {
     const ref = await db.collection('products').add({ ...product, variants:[], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
-    console.log(`  ✅ ${product.name} - $${product.price}`);
+    console.log(`  ✅ ${product.name} - KWD ${product.price}`);
   }
 
   // Shipping Config
   console.log('\n🚚 Creating shipping config...');
   await db.collection('settings').doc('shipping').set({
-    storeLat:25.7617, storeLng:-80.1918, storeAddress:'123 Commerce Blvd, Miami, FL 33101',
+    storeLat:29.3759, storeLng:47.9774, storeAddress:'Block 12, Street 5, Salmiya, Kuwait',
     defaultFreeShippingThreshold:99, defaultTaxRate:7, handlingFee:0,
-    localPickupEnabled:true, localPickupAddress:'123 Commerce Blvd, Miami, FL 33101',
+    localPickupEnabled:true, localPickupAddress:'Block 12, Street 5, Salmiya, Kuwait',
     localPickupInstructions:'Available Mon-Fri 8AM-6PM, Sat 9AM-4PM. Bring your order number.',
     createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(),
   });
@@ -70,18 +70,18 @@ async function seed() {
   // Shipping Zones
   console.log('\n📍 Creating shipping zones...');
   const zones = [
-    { name:'Miami-Dade Metro', type:'radius', centerLat:25.7617, centerLng:-80.1918, radiusMiles:30, isActive:true, sortOrder:1, description:'Miami-Dade county and surroundings within 30 miles',
+    { name:'Salmiya & Hawalli', type:'governorate', isActive:true, sortOrder:1, description:'Salmiya, Hawalli and surrounding areas',
       rates:[
         { id:'mia-std', name:'Standard Delivery', method:'flat', carrier:'UPS', estimatedDays:'1-2', isActive:true, basePrice:4.99, freeAboveAmount:49, badge:'LOCAL' },
         { id:'mia-exp', name:'Express Delivery', method:'flat', carrier:'UPS', estimatedDays:'Same Day', isActive:true, basePrice:14.99, badge:'FAST' },
       ]},
-    { name:'South Florida', type:'zipcode', isActive:true, sortOrder:2, description:'Broward, Palm Beach counties',
+    { name:'Kuwait City & Surroundings', type:'governorate', isActive:true, sortOrder:2, description:'Kuwait City, Shuwaikh, Rumaithiya',
       zipcodes:['33004','33009','33060','33064','33066','33071','33073','33076','33301','33304','33306','33308','33309','33310','33311','33312','33314','33315','33316','33317','33319','33321','33322','33324','33325','33326','33328','33330','33331','33334'],
       rates:[
         { id:'sfl-std', name:'Standard Shipping', method:'flat', carrier:'UPS', estimatedDays:'2-3', isActive:true, basePrice:7.99, freeAboveAmount:79, badge:'' },
         { id:'sfl-exp', name:'2-Day Express', method:'flat', carrier:'FedEx', estimatedDays:'2', isActive:true, basePrice:19.99 },
       ]},
-    { name:'Florida Statewide', type:'state', states:['FL'], isActive:true, sortOrder:3,
+    { name:'All Kuwait Governorates', type:'country', isActive:true, sortOrder:3,
       rates:[
         { id:'fl-std', name:'Standard Shipping', method:'flat', carrier:'UPS', estimatedDays:'2-4', isActive:true, basePrice:9.99, freeAboveAmount:99 },
         { id:'fl-exp', name:'2-Day Express', method:'flat', carrier:'FedEx', estimatedDays:'2', isActive:true, basePrice:24.99 },
@@ -122,7 +122,7 @@ async function seed() {
   // Banner
   console.log('\n🖼 Creating sample banner...');
   await db.collection('banners').add({
-    title:'Professional Electrical Supplies', subtitle:'Trusted by Florida Contractors Since 2005',
+    title:'Professional Electrical Supplies', subtitle:'Trusted by Kuwait Contractors Since 2005',
     image:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200',
     link:'/shop/electrical', buttonText:'Shop Electrical', isActive:true, sortOrder:1,
     createdAt:new Date().toISOString(),

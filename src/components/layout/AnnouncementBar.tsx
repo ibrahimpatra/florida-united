@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import { SITE_CONFIG } from '@/lib/siteConfig';
 import Link from 'next/link';
 
 export function AnnouncementBar() {
