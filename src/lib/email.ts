@@ -3,14 +3,19 @@ import nodemailer from 'nodemailer';
 import { SITE_CONFIG } from '@/lib/siteConfig';
 import type { Order } from '@/types';
 
+// Support both EMAIL_* and SMTP_* naming conventions
+const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+const emailPass = process.env.EMAIL_PASSWORD || process.env.SMTP_PASS;
+const emailHost = process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
+const emailPort = parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || '587');
+
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
+  host: emailHost,
+  port: emailPort,
   secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
+  auth: emailUser && emailPass
+    ? { user: emailUser, pass: emailPass }
+    : undefined, // Skip auth if not configured — prevents crash on startup
 });
 
 const BRAND_COLOR = '#1a56db';

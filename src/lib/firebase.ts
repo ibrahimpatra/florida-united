@@ -1,7 +1,7 @@
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
@@ -15,7 +15,19 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+let app;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+  // Force HTTP long-polling instead of gRPC.
+  // Fixes "GrpcConnection undefined" errors in Codespaces / Docker / restricted networks.
+  // Safe to use in production too — just slightly higher latency than WebChannel.
+  initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+  });
+} else {
+  app = getApp();
+}
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
