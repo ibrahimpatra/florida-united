@@ -1,10 +1,10 @@
 # Dependencies
-node_modules/
+./node_modules/
 /.pnp
 .pnp.js
 
 # Production build
-/.next/
+.next
 /out/
 /build/
 
@@ -37,3 +37,4 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+node_modules
