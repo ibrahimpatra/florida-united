@@ -46,10 +46,14 @@ export function truncate(text: string, maxLength: number): string {
 }
 
 export function generateOrderNumber(): string {
-  const prefix = 'FUK'; // Florida Kuwait
-  const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${prefix}-${timestamp}-${random}`;
+  // Format: 3 uppercase alpha + hyphen + 4 digits  e.g. KXR-7291
+  // No I/O in alpha set to avoid confusion with 1/0
+  const alpha  = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const rand3  = Array.from({ length: 3 }, () => alpha[Math.floor(Math.random() * alpha.length)]).join('');
+  // XOR timestamp with a random salt so the digits look random, not sequential
+  const salt   = Math.floor(Math.random() * 9999);
+  const digits = (((Date.now() % 100000) ^ salt) % 10000).toString().padStart(4, '0');
+  return `${rand3}-${digits}`;
 }
 
 export function isValidKuwaitPhone(phone: string): boolean {

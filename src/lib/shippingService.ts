@@ -149,6 +149,15 @@ export async function calculateShipping(input: ShippingInput): Promise<ShippingC
 
   matchedOptions.sort((a, b) => a.price - b.price);
 
+  // If every item in the cart has freeShipping=true, override all prices to 0
+  if (input.allItemsFreeShipping) {
+    for (const opt of matchedOptions) {
+      opt.price   = 0;
+      opt.isFree  = true;
+      opt.badge   = 'FREE';
+    }
+  }
+
   return {
     options: matchedOptions,
     defaultOption: matchedOptions[0],
@@ -179,7 +188,7 @@ export async function createUOM(data: Omit<UOM, 'id' | 'createdAt'>): Promise<st
 }
 
 export async function updateUOM(id: string, data: Partial<UOM>): Promise<void> {
-  await updateDoc(doc(db, 'uoms'), data);
+  await updateDoc(doc(db, 'uoms', id), data);
 }
 
 export async function deleteUOM(id: string): Promise<void> {

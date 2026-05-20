@@ -30,7 +30,13 @@ export function ProductForm({ initialData, productId }: Props) {
   const nameValue = watch('name');
 
   useEffect(() => {
-    fetch('/api/categories').then(r=>r.json()).then(setCategories);
+    fetch('/api/categories').then(r=>r.json()).then((cats: Category[]) => {
+      setCategories(cats);
+      // Re-apply categoryId after categories load so the <select> shows the correct option
+      if (initialData?.categoryId) {
+        setValue('categoryId', initialData.categoryId);
+      }
+    });
   }, []);
 
   useEffect(() => {

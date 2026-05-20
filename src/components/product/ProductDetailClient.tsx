@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ShoppingCart, Heart, Share2, MessageCircle, Star, Truck, Shield, RotateCcw, ChevronRight, Plus, Minus, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
@@ -12,6 +12,18 @@ import { AIRecommendations } from './AIRecommendations';
 
 export function ProductDetailClient({ product, relatedProducts }: { product: Product; relatedProducts: Product[] }) {
   const [qty, setQty] = useState(1);
+  const [liveStock, setLiveStock] = useState(product.stock);
+
+  // Fetch live stock on mount to override any stale SSR cache
+  useEffect(() => {
+    fetch(`/api/products/${product.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(p => { if (p && typeof p.stock === 'number') setLiveStock(p.stock); })
+      .catch(() => {});
+  }, [product.id]);
+
+  // Use liveStock everywhere stock is referenced
+  const stock = liveStock;
   const [mainImg, setMainImg] = useState(0);
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<'desc' | 'specs' | 'reviews'>('desc');
@@ -21,13 +33,14 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
   const discount = product.comparePrice ? calculateDiscount(product.comparePrice, product.price) : 0;
 
   const handleAddToCart = () => {
-    if (product.stock === 0) return;
+    if (stock === 0) return;
     setAdding(true);
     addItem({
       id: product.id, productId: product.id, name: product.name, slug: product.slug,
       price: product.price, comparePrice: product.comparePrice,
       image: product.images?.[0] || '', sku: product.sku,
-      quantity: qty, stock: product.stock, isReturnable: product.isReturnable,
+      quantity: qty, stock: stock, isReturnable: product.isReturnable,
+      freeShipping: product.freeShipping,
     });
     toast.success(`${qty} × ${product.name} added to cart! 🛒`);
     setTimeout(() => setAdding(false), 800);
@@ -109,9 +122,9 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
           {product.shortDescription && <p className="text-gray-600 text-sm leading-relaxed mb-5 border-l-4 border-brand-200 pl-4">{product.shortDescription}</p>}
 
           {/* Stock */}
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-5 ${product.stock > 10 ? 'bg-green-50 text-green-700' : product.stock > 0 ? 'bg-orange-50 text-orange-700' : 'bg-red-50 text-red-700'}`}>
-            {product.stock > 0 && <Check className="w-3 h-3" />}
-            {product.stock > 10 ? `In Stock (${product.stock} available)` : product.stock > 0 ? `Low Stock — Only ${product.stock} left!` : 'Out of Stock'}
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-5 ${stock > 10 ? 'bg-green-50 text-green-700' : stock > 0 ? 'bg-orange-50 text-orange-700' : 'bg-red-50 text-red-700'}`}>
+            {stock > 0 && <Check className="w-3 h-3" />}
+            {stock > 10 ? `In Stock (${product.stock} available)` : stock > 0 ? `Low Stock — Only ${product.stock} left!` : 'Out of Stock'}
           </div>
 
           {/* Meta */}
@@ -127,12 +140,12 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
             <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
               <button onClick={() => setQty(q => Math.max(1, q - 1))} className="px-3 py-3 hover:bg-gray-50 transition-colors"><Minus className="w-4 h-4" /></button>
               <span className="px-4 py-3 font-bold text-gray-800 min-w-[3rem] text-center">{qty}</span>
-              <button onClick={() => setQty(q => Math.min(product.stock, q + 1))} disabled={qty >= product.stock} className="px-3 py-3 hover:bg-gray-50 transition-colors disabled:opacity-40"><Plus className="w-4 h-4" /></button>
+              <button onClick={() => setQty(q => Math.min(stock, q + 1))} disabled={qty >= stock} className="px-3 py-3 hover:bg-gray-50 transition-colors disabled:opacity-40"><Plus className="w-4 h-4" /></button>
             </div>
-            <button onClick={handleAddToCart} disabled={product.stock === 0 || adding}
+            <button onClick={handleAddToCart} disabled={stock === 0 || adding}
               className="flex-1 btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed">
               {adding ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ShoppingCart className="w-5 h-5" />}
-              {product.stock === 0 ? 'Out of Stock' : adding ? 'Adding...' : 'Add to Cart'}
+              {stock === 0 ? 'Out of Stock' : adding ? 'Adding...' : 'Add to Cart'}
             </button>
           </div>
 

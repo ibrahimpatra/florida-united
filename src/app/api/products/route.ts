@@ -7,7 +7,7 @@ import type { ProductFilters } from '@/types';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const filters: ProductFilters = {
+    const filters: ProductFilters & { admin?: boolean } = {
       categoryId:   searchParams.get('categoryId')  || undefined,
       categorySlug: searchParams.get('categorySlug')|| undefined,
       minPrice:     searchParams.get('minPrice') ? Number(searchParams.get('minPrice')) : undefined,
@@ -21,8 +21,9 @@ export async function GET(req: NextRequest) {
       sortBy:       (searchParams.get('sort') as ProductFilters['sortBy']) || 'newest',
       page:         parseInt(searchParams.get('page')  || '1'),
       pageSize:     parseInt(searchParams.get('limit') || '24'),
+      admin:        searchParams.get('admin') === 'true',
     };
-    const result = await adminGetProducts(filters);
+    const result = await adminGetProducts(filters as any);
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
     });

@@ -13,14 +13,17 @@ const SORT_OPTIONS = [
   { value: 'name_asc', label: 'Name A-Z' },
 ];
 
-const CATEGORIES = [
-  { id:'electrical', name:'Electrical' }, { id:'hardware', name:'Hardware' },
-  { id:'safety', name:'Safety' }, { id:'lighting', name:'Lighting' },
-  { id:'plumbing', name:'Plumbing' }, { id:'industrial', name:'Industrial' },
-  { id:'fasteners', name:'Fasteners' }, { id:'conduit', name:'Conduit & Fittings' },
-];
-
 export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<string,string> }) {
+  const [categories, setCategories] = useState<Array<{id:string; name:string; slug:string}>>([]);
+
+  useEffect(() => {
+    fetch('/api/categories')
+      .then(r => r.json())
+      .then((cats: Array<{id:string; name:string; slug:string; isActive:boolean; parentId?:string}>) => {
+        setCategories(cats.filter(c => c.isActive && !c.parentId).map(c => ({ id: c.id, name: c.name, slug: c.slug })));
+      })
+      .catch(() => {});
+  }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -99,7 +102,7 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
                   <input type="radio" name="cat" value="" checked={!filters.categoryId} onChange={() => updateFilter('categoryId','')} className="accent-brand-600"/>
                   <span className="text-sm text-gray-700 group-hover:text-brand-700">All Categories</span>
                 </label>
-                {CATEGORIES.map(c => (
+                {categories.map(c => (
                   <label key={c.id} className="flex items-center gap-2 cursor-pointer py-1.5 group">
                     <input type="radio" name="cat" value={c.id} checked={filters.categoryId===c.id} onChange={() => updateFilter('categoryId',c.id)} className="accent-brand-600"/>
                     <span className="text-sm text-gray-700 group-hover:text-brand-700">{c.name}</span>

@@ -19,23 +19,40 @@ const LanguageContext = createContext<LanguageContextType>({
   t: (k) => k, setLang: () => {},
 });
 
+function applyLang(l: Language) {
+  document.documentElement.lang = l;
+  document.documentElement.dir  = l === 'ar' ? 'rtl' : 'ltr';
+  if (l === 'ar') {
+    document.documentElement.classList.add('arabic-active');
+  } else {
+    document.documentElement.classList.remove('arabic-active');
+  }
+}
+
+// Dot-notation resolver: 'nav.signIn' → translations.nav.signIn
+function resolve(key: string, lang: Language): string {
+  const dict: Translations = lang === 'ar' ? ar : en;
+  const parts = key.split('.');
+  let val: unknown = dict;
+  for (const p of parts) {
+    if (val && typeof val === 'object') val = (val as Record<string, unknown>)[p];
+    else return key;
+  }
+  return typeof val === 'string' ? val : key;
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
+  // Always start with 'en' on server so hydration matches.
+  // useEffect immediately syncs to the saved localStorage value on the client.
   const [lang, setLangState] = useState<Language>('en');
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const saved = (localStorage.getItem('fk-lang') as Language) || 'en';
-    setLangState(saved);
+    if (saved !== 'en') {
+      setLangState(saved);
+    }
     applyLang(saved);
-    setMounted(true);
   }, []);
-
-  function applyLang(l: Language) {
-    document.documentElement.lang = l;
-    document.documentElement.dir  = l === 'ar' ? 'rtl' : 'ltr';
-    if (l === 'ar') document.documentElement.classList.add('arabic-active');
-    else document.documentElement.classList.remove('arabic-active');
-  }
 
   function setLang(newLang: Language) {
     setLangState(newLang);
@@ -43,27 +60,15 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     applyLang(newLang);
   }
 
-  // Dot-notation resolver: 'nav.signIn' → translations.nav.signIn
-  function t(key: string): string {
-    const dict: Translations = lang === 'ar' ? ar : en;
-    const parts = key.split('.');
-    let val: unknown = dict;
-    for (const p of parts) {
-      if (val && typeof val === 'object') val = (val as Record<string, unknown>)[p];
-      else return key;
-    }
-    return typeof val === 'string' ? val : key;
-  }
-
   return (
     <LanguageContext.Provider value={{
-      lang, dir: lang === 'ar' ? 'rtl' : 'ltr',
-      isArabic: lang === 'ar', t, setLang,
+      lang,
+      dir: lang === 'ar' ? 'rtl' : 'ltr',
+      isArabic: lang === 'ar',
+      t: (key) => resolve(key, lang),
+      setLang,
     }}>
-      {/* Prevent flash of wrong direction on first paint */}
-      {mounted ? children : (
-        <div style={{ visibility: 'hidden' }}>{children}</div>
-      )}
+      {children}
     </LanguageContext.Provider>
   );
 }

@@ -65,11 +65,13 @@ export async function adminDeleteCategory(id: string): Promise<void> {
 }
 
 // ── PRODUCTS ─────────────────────────────────────────────────
-export async function adminGetProducts(filters: ProductFilters = {}): Promise<PaginatedResponse<Product>> {
+export async function adminGetProducts(filters: ProductFilters & { admin?: boolean } = {}): Promise<PaginatedResponse<Product>> {
   const db = getAdminDb();
   const { categoryId, sortBy = 'newest', page = 1, pageSize = 24, search } = filters;
 
-  let q = db.collection('products').where('isActive', '==', true) as FirebaseFirestore.Query;
+  let q = db.collection('products') as FirebaseFirestore.Query;
+  // Only filter by isActive for storefront (not admin panel)
+  if (!filters.admin) q = q.where('isActive', '==', true);
   if (categoryId) q = q.where('categoryId', '==', categoryId);
   if (filters.isFeatured)  q = q.where('isFeatured',  '==', true);
   if (filters.isNewArrival) q = q.where('isNewArrival','==', true);
@@ -116,8 +118,18 @@ export async function adminGetProductBySlug(slug: string): Promise<Product | nul
 }
 
 export async function adminCreateProduct(data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  const ref = await getAdminDb().collection('products').add({
+  const db = getAdminDb();
+  // Resolve categoryName so the product list doesn't need a join
+  let categoryName = data.categoryName || '';
+  if (data.categoryId && !categoryName) {
+    try {
+      const catSnap = await db.collection('categories').doc(data.categoryId).get();
+      if (catSnap.exists) categoryName = (catSnap.data() as any).name || '';
+    } catch { /* non-fatal */ }
+  }
+  const ref = await db.collection('products').add({
     ...data,
+    categoryName,
     avgRating: 0,
     totalReviews: 0,
     totalSold: 0,
@@ -128,7 +140,20 @@ export async function adminCreateProduct(data: Omit<Product, 'id' | 'createdAt' 
 }
 
 export async function adminUpdateProduct(id: string, data: Partial<Product>): Promise<void> {
-  await getAdminDb().collection('products').doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
+  const db = getAdminDb();
+  // Re-resolve categoryName when categoryId changes
+  let categoryName = data.categoryName;
+  if (data.categoryId && !categoryName) {
+    try {
+      const catSnap = await db.collection('categories').doc(data.categoryId).get();
+      if (catSnap.exists) categoryName = (catSnap.data() as any).name || '';
+    } catch { /* non-fatal */ }
+  }
+  await db.collection('products').doc(id).update({
+    ...data,
+    ...(categoryName !== undefined ? { categoryName } : {}),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 }
 
 export async function adminDeleteProduct(id: string): Promise<void> {

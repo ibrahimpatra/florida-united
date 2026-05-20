@@ -39,6 +39,7 @@ export function ProductCard({ product, showQuickView = true }: Props) {
       sku: product.sku,
       stock: product.stock,
       isReturnable: product.isReturnable,
+      freeShipping: product.freeShipping,
     });
     toast.success(`Added to cart!`, { icon: '🛒' });
     setTimeout(() => setAdding(false), 600);
