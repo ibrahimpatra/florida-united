@@ -18,19 +18,26 @@ export interface Address {
 }
 
 export interface ShippingAddress {
-  name: string;
+  id?: string;
+  label?: string;
+  name?: string;          // legacy single-name field
+  firstName?: string;     // Kuwait checkout style
+  lastName?: string;
   phone?: string;
-  street: string;
-  area: string;
+  email?: string;
+  address1?: string;      // Kuwait: "Block X, Street Y, Building Z"
+  street?: string;        // legacy
+  area?: string;          // legacy
   block?: string;
   avenue?: string;
   building?: string;
   floor?: string;
   apartment?: string;
   city: string;
-  governorate: string;
+  governorate?: string;
   country: string;
   instructions?: string;
+  isDefault?: boolean;
 }
 
 export interface Category {
@@ -88,6 +95,7 @@ export interface Product {
   isActive: boolean;
   isReturnable: boolean;
   returnDays?: number;
+  freeShipping?: boolean;
   metaTitle?: string;
   metaDesc?: string;
   avgRating: number;
@@ -312,6 +320,7 @@ export interface CartItem {
   variantName?: string;
   stock: number;
   isReturnable?: boolean;
+  freeShipping?: boolean;
 }
 
 // Product recommendation with reason

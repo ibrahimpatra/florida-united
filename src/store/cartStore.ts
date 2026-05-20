@@ -16,6 +16,7 @@ export interface CartItem {
   variantName?: string;
   stock: number;
   isReturnable: boolean;
+  freeShipping?: boolean;
 }
 
 interface CartStore {

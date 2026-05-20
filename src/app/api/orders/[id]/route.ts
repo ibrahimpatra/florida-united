@@ -22,12 +22,23 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== 'admin')
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
-    const { status, note, trackingNumber, carrier } = await req.json();
+    const body = await req.json();
+    const { status, note, trackingNumber, carrier } = body;
     const order = await adminGetOrderById(params.id);
     if (!order) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // Customers can only cancel their own pending/confirmed orders
+    if (session.user.role !== 'admin') {
+      if (order.userId !== session.user.id)
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      if (status !== 'cancelled')
+        return NextResponse.json({ error: 'Customers can only cancel orders.' }, { status: 403 });
+      if (!['pending', 'confirmed'].includes(order.status))
+        return NextResponse.json({ error: 'This order can no longer be cancelled. Please contact support.' }, { status: 400 });
+    }
 
     if (trackingNumber && carrier) {
       await adminUpdateOrderTracking(params.id, trackingNumber, carrier);

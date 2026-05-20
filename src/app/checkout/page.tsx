@@ -19,6 +19,8 @@ export default function CheckoutPage() {
 
   const subtotal = getSubtotal();
   const shippingCost = shippingOption?.price ?? 1.500; // default KWD 1.500
+  // If every item in the cart has freeShipping=true, force free delivery
+  const allItemsFreeShipping = items.length > 0 && items.every(i => i.freeShipping);
 
   if (!session) return (
     <><Header />
@@ -62,6 +64,7 @@ export default function CheckoutPage() {
                 <ShippingSelector
                   orderAmount={subtotal}
                   governorate={governorate}
+                  allItemsFreeShipping={allItemsFreeShipping}
                   onShippingSelected={setShippingOption}
                   selectedOptionId={shippingOption?.rateId}
                 />

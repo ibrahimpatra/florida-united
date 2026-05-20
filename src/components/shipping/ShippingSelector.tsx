@@ -12,9 +12,11 @@ interface Props {
   lng?: number;
   onShippingSelected: (option: ShippingOption | null) => void;
   selectedOptionId?: string;
+  /** Pass true when all cart items have freeShipping=true — forces 0 cost */
+  allItemsFreeShipping?: boolean;
 }
 
-export function ShippingSelector({ orderAmount, orderWeightKg, governorate, lat, lng, onShippingSelected, selectedOptionId }: Props) {
+export function ShippingSelector({ orderAmount, orderWeightKg, governorate, lat, lng, onShippingSelected, selectedOptionId, allItemsFreeShipping }: Props) {
   const [result, setResult] = useState<ShippingCalculationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string>(selectedOptionId || '');
@@ -26,7 +28,7 @@ export function ShippingSelector({ orderAmount, orderWeightKg, governorate, lat,
       const res = await fetch('/api/shipping/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ governorate, lat, lng, orderAmount, orderWeightKg }),
+        body: JSON.stringify({ governorate, lat, lng, orderAmount, orderWeightKg, allItemsFreeShipping }),
       });
       const data = await res.json();
       setResult(data);
@@ -36,7 +38,7 @@ export function ShippingSelector({ orderAmount, orderWeightKg, governorate, lat,
       }
     } catch {}
     setLoading(false);
-  }, [governorate, lat, lng, orderAmount]);
+  }, [governorate, lat, lng, orderAmount, allItemsFreeShipping]);
 
   useEffect(() => { calculate(); }, [calculate]);
 

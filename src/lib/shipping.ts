@@ -150,6 +150,8 @@ export interface ShippingInput {
   orderAmount: number; // KWD
   orderWeightKg?: number;
   paymentMethod?: 'tap' | 'cod';
+  /** True when ALL items in the cart have freeShipping=true — forces shipping cost to 0 */
+  allItemsFreeShipping?: boolean;
 }
 
 export interface ShippingOption {

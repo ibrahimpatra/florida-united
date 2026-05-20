@@ -17,7 +17,7 @@ export default function AdminProductsPage() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), sort: sortBy, limit: '20' });
+      const params = new URLSearchParams({ page: String(page), sort: sortBy, limit: '20', admin: 'true' });
       if (search) params.set('q', search);
       const res = await fetch(`/api/products?${params}`);
       const data = await res.json();

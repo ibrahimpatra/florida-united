@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+
+// Revalidate every 60 seconds so stock changes show up quickly
+export const revalidate = 60;
 import { notFound } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
