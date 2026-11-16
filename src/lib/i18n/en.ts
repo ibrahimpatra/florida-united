@@ -1,5 +1,9 @@
-export const en = {
+import { p1En } from './parts/p1.en';
+import { p2En } from './parts/p2.en';
+import { p3En } from './parts/p3.en';
+const baseEn = {
   nav: {
+    bundles: 'Bundles & Kits', addresses: 'Address Book',
     home: 'Home', shop: 'All Products', deals: 'Deals',
     cart: 'Cart', account: 'My Account', admin: 'Admin',
     signIn: 'Sign In', signOut: 'Sign Out', register: 'Register',
@@ -44,6 +48,28 @@ export const en = {
     area: 'Area', block: 'Block', street: 'Street', building: 'Building',
     floor: 'Floor', apartment: 'Apartment', governorate: 'Governorate',
     notes: 'Delivery Notes', cod: 'Cash on Delivery', card: 'Credit/Debit Card',
+    contactInfo: 'Contact Information', firstName: 'First Name', lastName: 'Last Name',
+    email: 'Email address', mobile: 'Mobile number', deliveryAddress: 'Delivery Address (Kuwait)',
+    savedAddresses: 'Saved addresses', newAddress: 'New address', areaCity: 'Area / City',
+    selectGovernorate: 'Select governorate', notesPlaceholder: 'Any special instructions for delivery...',
+    saveAddress: 'Save this address to my address book',
+    tapTitle: 'Card / KNET / Apple Pay', tapNote: "You'll be redirected to TAP secure payment.",
+    codTitle: 'Cash on Delivery', codNote: 'Please have exact change ready. Payment is collected on arrival.',
+    subtotal: 'Subtotal', discount: 'Discount', shipping: 'Delivery', total: 'Total', free: 'FREE',
+    noVat: 'All prices in Kuwaiti Dinar (KWD). No VAT.',
+    deliveryOptions: 'Delivery options', selectGovFirst: 'Select your governorate to see delivery charges',
+    addMoreForFree: 'Add {amount} more for FREE delivery',
+    mixedCart: 'Items marked free-shipping do not waive delivery on the other items in your order.',
+    quoteFailed: 'Could not calculate delivery charges. Please try again.',
+    retry: 'Retry', calculating: 'Calculating delivery...',
+    payTap: 'Pay with TAP', placeCod: 'Place COD Order',
+    submitted: 'Order submitted — redirecting you now…',
+    orderPlaced: 'Order placed successfully!',
+    checkOrders: 'If you already placed this order, check My Orders before trying again.',
+    signInTitle: 'Sign in to checkout', signInBtn: 'Sign In to Continue',
+    emptyCart: 'Your cart is empty', continueShopping: 'Continue Shopping',
+    qty: 'Qty', required: 'Required', invalidPhone: 'Enter a valid Kuwait number (8 digits starting with 5, 6 or 9)',
+    invalidEmail: 'Invalid email',
   },
   orders: {
     title: 'My Orders', total: 'orders total', empty: 'No orders yet',
@@ -51,6 +77,16 @@ export const en = {
     requestReturn: 'Request Return', trackOrder: 'Track Order',
     orderNumber: 'Order', placed: 'Placed', status: 'Status',
     items: 'items',
+    viewDetails: 'View Details', cancelOrder: 'Cancel Order', keepOrder: 'Keep Order', yesCancel: 'Yes, Cancel',
+    cancelTitle: 'Cancel this order?', cancelBody: 'This order will be cancelled and the items returned to stock. This cannot be undone.',
+    cancelledOk: 'Order cancelled.', cancelFailed: 'Could not cancel this order.',
+    orderCancelled: 'Order Cancelled', backToOrders: 'Back to Orders', notFound: 'Order not found.',
+    orderItems: 'Order Items', priceBreakdown: 'Price Breakdown', deliveryAddress: 'Delivery Address',
+    history: 'Order History', downloadInvoice: 'Download Invoice', whatsappSupport: 'WhatsApp Support',
+    subtotal: 'Subtotal', discount: 'Discount', shipping: 'Delivery', grandTotal: 'Total', free: 'FREE',
+    placedOn: 'Placed on', payment: 'Payment', refundNote: 'You paid online — your refund will be processed by our team.',
+    s_pending: 'Pending', s_confirmed: 'Confirmed', s_processing: 'Being Packed', s_shipped: 'Out for Delivery',
+    s_delivered: 'Delivered', s_cancelled: 'Cancelled', s_returned: 'Returned',
   },
   auth: {
     signIn: 'Sign In', signUp: 'Create Account',
@@ -70,6 +106,24 @@ export const en = {
     privacy: 'Privacy Policy', terms: 'Terms of Service',
     about: 'About Us', careers: 'Careers', blog: 'Blog',
   },
+  addr: {
+    title: 'Address Book', subtitle: 'Save your Kuwait delivery addresses for faster checkout.',
+    addNew: 'Add New Address', edit: 'Edit Address', new: 'New Address', label: 'Label',
+    home: 'Home', work: 'Work', other: 'Other', save: 'Save Changes', add: 'Add Address', cancel: 'Cancel',
+    setDefault: 'Set as Default', defaultBadge: 'Default', defaultCheckbox: 'Set as default delivery address',
+    none: 'No addresses saved yet', noneSub: 'Add an address to speed up checkout',
+    deleteConfirm: 'Delete this address?', saved: 'Address saved!', deleted: 'Address deleted',
+    fillRequired: 'Please fill in all required fields',
+  },
+  cart2: {
+    deliveryAtCheckout: 'Calculated at checkout by governorate',
+    mixedNote: 'Delivery is charged because your cart has items without free shipping.',
+    bundle: 'Bundle',
+  },
+  bundles: {
+    title: 'Bundles & Kits', subtitle: 'Save more when you buy complete kits.', empty: 'No bundles available right now.',
+    includes: 'Includes', addBundle: 'Add Bundle to Cart', youSave: 'You save', added: 'Bundle added to cart!', outOfStock: 'Unavailable',
+  },
   common: {
     loading: 'Loading...', save: 'Save', cancel: 'Cancel',
     delete: 'Delete', edit: 'Edit', view: 'View', confirm: 'Confirm',
@@ -82,4 +136,5 @@ export const en = {
     poweredBy: 'Powered by Florida Kuwait',
   },
 };
+export const en = { ...baseEn, ...p1En, ...p2En, ...p3En };
 export type Translations = typeof en;

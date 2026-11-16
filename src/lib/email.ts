@@ -1,4 +1,5 @@
 // src/lib/email.ts
+import { formatAddress } from './utils';
 import nodemailer from 'nodemailer';
 import { SITE_CONFIG } from '@/lib/siteConfig';
 import type { Order } from '@/types';
@@ -90,10 +91,16 @@ function baseTemplate(content: string, preheader = '') {
 }
 
 // ── ORDER CONFIRMATION EMAIL ──────────────────────────────────
+/** Escape anything a customer typed before it goes into an HTML email. */
+const esc = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export async function sendOrderConfirmation(order: Order) {
+  const addr = formatAddress(order.shippingAddress);
+  const isCard = order.paymentMethod === 'card';
+  const o: any = order;
   const itemRows = order.items.map(item => `
     <tr>
-      <td><strong>${item.productName}</strong>${item.variantName ? `<br><small style="color:#6b7280">${item.variantName}</small>` : ''}<br><small style="color:#9ca3af">SKU: ${item.productSku}</small></td>
+      <td><strong>${esc(item.productName)}</strong>${item.variantName ? `<br><small style="color:#6b7280">${esc(item.variantName)}</small>` : ''}${(item as any).dealSaving > 0 ? `<br><small style="color:#16a34a">Offer: ${esc((item as any).dealTitle || 'Offer')}</small>` : ''}<br><small style="color:#9ca3af">SKU: ${esc(item.productSku)}</small></td>
       <td style="text-align:center">${item.quantity}</td>
       <td style="text-align:right">${fmtKWD(item.price)}</td>
       <td style="text-align:right"><strong>${fmtKWD(item.total)}</strong></td>
@@ -101,8 +108,8 @@ export async function sendOrderConfirmation(order: Order) {
   `).join('');
 
   const content = `
-    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Order Confirmed! 🎉</h2>
-    <p style="color:#6b7280;margin-bottom:24px;">Thank you, ${order.userName}! Your order has been received and is being processed.</p>
+    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">${isCard ? 'Payment received' : 'Order received'}</h2>
+    <p style="color:#6b7280;margin-bottom:24px;">Thank you, ${esc(order.userName)}! ${isCard ? 'We received your card payment and your order is confirmed.' : 'Your order is confirmed. You pay in cash when it arrives.'}</p>
     
     <div class="info-card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -111,7 +118,7 @@ export async function sendOrderConfirmation(order: Order) {
           <p style="font-size:20px;font-weight:800;color:${BRAND_COLOR}">#${order.orderNumber}</p>
         </div>
         <div>
-          <span class="badge badge-confirmed">✓ Confirmed</span>
+          <span class="badge badge-confirmed">${isCard ? 'Paid' : 'Pay on delivery'}</span>
         </div>
         <div>
           <h4>Order Date</h4>
@@ -119,7 +126,7 @@ export async function sendOrderConfirmation(order: Order) {
         </div>
         <div>
           <h4>Payment</h4>
-          <p style="color:#16a34a;font-weight:700">✓ ${order.paymentMethod?.toUpperCase() || 'PAID'}</p>
+          <p style="font-weight:700">${isCard ? 'Card (paid)' : 'Cash on delivery'}</p>
         </div>
       </div>
     </div>
@@ -129,7 +136,8 @@ export async function sendOrderConfirmation(order: Order) {
       <tbody>${itemRows}</tbody>
       <tfoot>
         <tr><td colspan="3">Subtotal</td><td style="text-align:right">${fmtKWD(order.subtotal)}</td></tr>
-        ${order.discount > 0 ? `<tr><td colspan="3" style="color:#16a34a">Discount ${order.couponCode ? `(${order.couponCode})` : ''}</td><td style="text-align:right;color:#16a34a">-${fmtKWD(order.discount)}</td></tr>` : ''}
+        ${o.dealDiscount > 0 ? `<tr><td colspan="3" style="color:#16a34a">Offer savings (already in the prices above)</td><td style="text-align:right;color:#16a34a">-${fmtKWD(o.dealDiscount)}</td></tr>` : ''}
+        ${order.discount > 0 ? `<tr><td colspan="3" style="color:#16a34a">Discount ${order.couponCode ? `(${esc(order.couponCode)})` : ''}</td><td style="text-align:right;color:#16a34a">-${fmtKWD(order.discount)}</td></tr>` : ''}
         <tr><td colspan="3">Shipping</td><td style="text-align:right">${order.shippingCost === 0 ? '<span style="color:#16a34a">FREE</span>' : fmtKWD(order.shippingCost)}</td></tr>
         <tr><td colspan="3">Tax</td><td style="text-align:right">${order.tax > 0 ? fmtKWD(order.tax) : 'None (Kuwait)'}</td></tr>
         <tr class="total-row"><td colspan="3" style="text-align:left">TOTAL</td><td style="text-align:right;color:${BRAND_COLOR};font-size:18px">${fmtKWD(order.total)}</td></tr>
@@ -138,14 +146,14 @@ export async function sendOrderConfirmation(order: Order) {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="info-card">
-        <h4>📦 Ship To</h4>
-        <p>${order.shippingAddress.name}<br>
-        ${order.shippingAddress.street}${order.shippingAddress.area ? ', ' + order.shippingAddress.area : ''}<br>
-        ${order.shippingAddress.city}${order.shippingAddress.governorate ? ', ' + order.shippingAddress.governorate : ''}, Kuwait</p>
+        <h4>Ship To</h4>
+        <p>${esc(addr.name)}<br>
+        ${esc(addr.line1)}<br>
+        ${esc(addr.line2)}</p>
       </div>
       <div class="info-card">
-        <h4>📞 Contact</h4>
-        <p>${order.userEmail}<br>${order.userPhone || ''}</p>
+        <h4>Contact</h4>
+        <p>${esc(order.userEmail)}<br>${esc(order.userPhone || '')}</p>
       </div>
     </div>
 
@@ -158,28 +166,28 @@ export async function sendOrderConfirmation(order: Order) {
   await transporter.sendMail({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailOrders}>`,
     to: order.userEmail,
-    subject: `Order Confirmed #${order.orderNumber} — ${SITE_CONFIG.fullName}`,
-    html: baseTemplate(content, `Your order #${order.orderNumber} is confirmed!`),
+    subject: `${isCard ? 'Payment received' : 'Order received'} #${order.orderNumber} — ${SITE_CONFIG.fullName}`,
+    html: baseTemplate(content, `Your order #${order.orderNumber} is confirmed.`),
   });
 }
 
 // ── ORDER STATUS UPDATE EMAIL ─────────────────────────────────
 export async function sendOrderStatusUpdate(order: Order, newStatus: string, note?: string) {
-  const statusMessages: Record<string, { title: string; body: string; emoji: string }> = {
-    processing: { title: 'Order Being Processed', body: 'We\'re preparing your items for shipment.', emoji: '⚙️' },
-    shipped: { title: 'Your Order Has Shipped!', body: `Your order is on its way!${order.trackingNumber ? ` Track with: <strong>${order.trackingNumber}</strong> via ${order.shippingCarrier}` : ''}`, emoji: '🚚' },
-    out_for_delivery: { title: 'Out for Delivery Today!', body: 'Your order is out for delivery and will arrive today.', emoji: '🏃' },
-    delivered: { title: 'Order Delivered!', body: 'Your order has been delivered. We hope you love your products!', emoji: '✅' },
-    cancelled: { title: 'Order Cancelled', body: 'Your order has been cancelled. A refund will be processed if payment was made.', emoji: '❌' },
-    return_approved: { title: 'Return Approved', body: 'Your return request has been approved. We\'ll pick up shortly.', emoji: '↩️' },
-    refunded: { title: 'Refund Processed', body: 'Your refund has been processed and will appear in 3-5 business days.', emoji: '💰' },
+  const statusMessages: Record<string, { title: string; body: string; emoji?: string }> = {
+    processing: { title: 'Order Being Processed', body: 'We\'re preparing your items for shipment.' },
+    shipped: { title: 'Your Order Has Shipped!', body: `Your order is on its way!${order.trackingNumber ? ` Track with: <strong>${order.trackingNumber}</strong> via ${order.shippingCarrier}` : ''}` },
+    out_for_delivery: { title: 'Out for Delivery Today!', body: 'Your order is out for delivery and will arrive today.' },
+    delivered: { title: 'Order Delivered!', body: 'Your order has been delivered. We hope you love your products!' },
+    cancelled: { title: 'Order Cancelled', body: 'Your order has been cancelled. A refund will be processed if payment was made.' },
+    return_approved: { title: 'Return Approved', body: 'Your return request has been approved. We\'ll pick up shortly.' },
+    refunded: { title: 'Refund Processed', body: 'Your refund has been processed and will appear in 3-5 business days.' },
   };
 
-  const msg = statusMessages[newStatus] || { title: `Order Update`, body: `Your order status is now: ${newStatus}`, emoji: '📦' };
+  const msg = statusMessages[newStatus] || { title: `Order Update`, body: `Your order status is now: ${newStatus}` };
 
   const content = `
-    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">${msg.emoji} ${msg.title}</h2>
-    <p style="color:#6b7280;margin-bottom:24px;">Hi ${order.userName}, here's an update on your order.</p>
+    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">${msg.title}</h2>
+    <p style="color:#6b7280;margin-bottom:24px;">Hi ${esc(order.userName)}, here's an update on your order.</p>
     
     <div class="info-card" style="background:#eff6ff;border-color:#bfdbfe;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -196,7 +204,7 @@ export async function sendOrderStatusUpdate(order: Order, newStatus: string, not
 
     ${newStatus === 'shipped' && order.trackingNumber ? `
     <div class="info-card" style="background:#f0fdf4;border-color:#bbf7d0;">
-      <h4>📍 Tracking Info</h4>
+      <h4>Tracking Info</h4>
       <p><strong>Carrier:</strong> ${order.shippingCarrier}</p>
       <p><strong>Tracking #:</strong> ${order.trackingNumber}</p>
     </div>` : ''}
@@ -209,7 +217,7 @@ export async function sendOrderStatusUpdate(order: Order, newStatus: string, not
   await transporter.sendMail({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailOrders}>`,
     to: order.userEmail,
-    subject: `${msg.emoji} ${msg.title} — Order #${order.orderNumber}`,
+    subject: `${msg.title} — Order #${order.orderNumber}`,
     html: baseTemplate(content),
   });
 }
@@ -217,7 +225,7 @@ export async function sendOrderStatusUpdate(order: Order, newStatus: string, not
 // ── WELCOME / REGISTRATION EMAIL ─────────────────────────────
 export async function sendWelcomeEmail(email: string, name: string) {
   const content = `
-    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Welcome to ${SITE_CONFIG.name}! 🎉</h2>
+    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Welcome to ${SITE_CONFIG.name}! </h2>
     <p style="color:#6b7280;margin-bottom:24px;">Hi ${name}, your account has been created successfully.</p>
     
     <div class="info-card" style="background:#eff6ff;border-color:#bfdbfe;">
@@ -226,22 +234,19 @@ export async function sendWelcomeEmail(email: string, name: string) {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0;">
       <div style="background:#f9fafb;border-radius:12px;padding:16px;text-align:center;">
-        <div style="font-size:28px;margin-bottom:8px;">🔧</div>
         <p style="font-size:13px;font-weight:600;color:#1f2937">50,000+ Products</p>
         <p style="font-size:12px;color:#6b7280">Hardware & Electrical</p>
       </div>
       <div style="background:#f9fafb;border-radius:12px;padding:16px;text-align:center;">
-        <div style="font-size:28px;margin-bottom:8px;">🚚</div>
         <p style="font-size:13px;font-weight:600;color:#1f2937">Free Shipping</p>
         <p style="font-size:12px;color:#6b7280">Orders over KWD ${SITE_CONFIG.freeShippingThreshold}</p>
       </div>
       <div style="background:#f9fafb;border-radius:12px;padding:16px;text-align:center;">
-        <div style="font-size:28px;margin-bottom:8px;">↩️</div>
+        <div style="font-size:28px;margin-bottom:8px;"></div>
         <p style="font-size:13px;font-weight:600;color:#1f2937">30-Day Returns</p>
         <p style="font-size:12px;color:#6b7280">Hassle-free policy</p>
       </div>
       <div style="background:#f9fafb;border-radius:12px;padding:16px;text-align:center;">
-        <div style="font-size:28px;margin-bottom:8px;">🔒</div>
         <p style="font-size:13px;font-weight:600;color:#1f2937">Secure Payments</p>
         <p style="font-size:12px;color:#6b7280">Stripe & Google Pay</p>
       </div>
@@ -255,7 +260,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
   await transporter.sendMail({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailNoReply}>`,
     to: email,
-    subject: `Welcome to Florida Kuwait Company, ${name}! 🎉`,
+    subject: `Welcome to Florida Kuwait Company, ${name}! `,
     html: baseTemplate(content, 'Welcome! Your account is ready.'),
   });
 }
@@ -263,7 +268,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
 // ── PASSWORD RESET EMAIL ──────────────────────────────────────
 export async function sendPasswordResetEmail(email: string, resetLink: string) {
   const content = `
-    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Reset Your Password 🔐</h2>
+    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Reset Your Password </h2>
     <p style="color:#6b7280;margin-bottom:24px;">We received a request to reset your password for your ${SITE_CONFIG.name} account.</p>
     
     <p style="font-size:15px;margin-bottom:20px;">Click the button below to create a new password. This link expires in <strong>1 hour</strong>.</p>
@@ -273,7 +278,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
     </div>
 
     <div class="info-card" style="background:#fff7ed;border-color:#fed7aa;">
-      <p style="font-size:13px;color:#9a3412;">⚠️ If you didn't request this, you can safely ignore this email. Your password won't change.</p>
+      <p style="font-size:13px;color:#9a3412;">If you didn't request this, you can safely ignore this email. Your password won't change.</p>
     </div>
     
     <p style="font-size:12px;color:#9ca3af;margin-top:16px;">Or copy this link: <a href="${resetLink}" style="color:${BRAND_COLOR};word-break:break-all;">${resetLink}</a></p>
@@ -292,7 +297,7 @@ export async function sendReturnRequestEmail(
   email: string, name: string, orderNumber: string, returnId: string, reason: string
 ) {
   const content = `
-    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Return Request Received ↩️</h2>
+    <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Return Request Received </h2>
     <p style="color:#6b7280;margin-bottom:24px;">Hi ${name}, we've received your return request.</p>
     
     <div class="info-card">
@@ -327,13 +332,14 @@ export async function sendReturnRequestEmail(
 export async function sendAdminNewOrderNotification(order: Order) {
   const adminEmail = process.env.ADMIN_EMAIL || SITE_CONFIG.emailAdmin;
   const content = `
-    <h2 style="color:#1f2937;">🛍 New Order Received!</h2>
+    <h2 style="color:#1f2937;">New Order Received!</h2>
     <div class="info-card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div><h4>Order #</h4><p style="font-weight:800;font-size:18px;color:${BRAND_COLOR}">#${order.orderNumber}</p></div>
-        <div><h4>Customer</h4><p>${order.userName}<br><small>${order.userEmail}</small></p></div>
+        <div><h4>Customer</h4><p>${esc(order.userName)}<br><small>${esc(order.userEmail)}</small></p></div>
         <div><h4>Total</h4><p style="font-weight:800;font-size:18px;color:#16a34a">${fmtKWD(order.total)}</p></div>
         <div><h4>Items</h4><p>${order.items.length} item(s)</p></div>
+        <div><h4>Payment</h4><p>${order.paymentMethod === 'card' ? 'Card (paid)' : 'Cash on delivery'}</p></div>
       </div>
     </div>
     <div style="text-align:center;margin-top:24px;">
@@ -344,7 +350,7 @@ export async function sendAdminNewOrderNotification(order: Order) {
   await transporter.sendMail({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.name}" <${SITE_CONFIG.emailOrders}>`,
     to: adminEmail,
-    subject: `🛍 New Order #${order.orderNumber} — ${fmtKWD(order.total)}`,
+    subject: `New Order #${order.orderNumber} — ${fmtKWD(order.total)}`,
     html: baseTemplate(content),
   });
 }
@@ -356,11 +362,11 @@ export async function sendContactEmail(name: string, email: string, subject: str
     to: adminEmail,
     replyTo: email,
     subject: `Contact Form: ${subject}`,
-    html: baseTemplate(`<h3>New Contact Message</h3><p><strong>From:</strong> ${name} (${email})</p><p><strong>Subject:</strong> ${subject}</p><div class="info-card"><p>${message.replace(/\n/g, '<br>')}</p></div>`),
+    html: baseTemplate(`<h3>New Contact Message</h3><p><strong>From:</strong> ${esc(name)} (${esc(email)})</p><p><strong>Subject:</strong> ${esc(subject)}</p><div class="info-card"><p>${esc(message).replace(/\n/g, '<br>')}</p></div>`),
   });
 }
 
-// Alias expected by TAP webhook and COD route
+// Alias expected by the Stripe webhook and COD route
 export async function sendOrderConfirmationEmail(
   email: string,
   name: string,

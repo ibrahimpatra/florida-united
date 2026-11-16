@@ -55,6 +55,9 @@ function getAdminApp(): App {
   return adminApp;
 }
 
+/** Test seam: lets the unit tests run the real order engine against an in-memory database. */
+export function __setAdminDbForTests(db: any) { adminDb = db; }
+
 export function getAdminDb(): Firestore {
   if (!adminDb) adminDb = getFirestore(getAdminApp());
   return adminDb;

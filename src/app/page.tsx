@@ -7,22 +7,25 @@ import { HeroBanner } from '@/components/home/HeroBanner';
 import { CategoryGrid } from '@/components/home/CategoryGrid';
 import { FeaturedProducts } from '@/components/home/FeaturedProducts';
 import { NewArrivals } from '@/components/home/NewArrivals';
-import { OffersBanner } from '@/components/home/OffersBanner';
 import { FlashDealsSection } from '@/components/home/FlashDealsSection';
 import { BrandsSection } from '@/components/home/BrandsSection';
 import { TrustBadges } from '@/components/home/TrustBadges';
-import { TestimonialsSection } from '@/components/home/TestimonialsSection';
+import { SectionHeader } from '@/components/home/SectionHeader';
+import { getTopBrands } from '@/lib/firestore-admin';
 import { NewsletterSection } from '@/components/home/NewsletterSection';
 import { ProductSkeleton } from '@/components/product/ProductSkeleton';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 
 export const metadata: Metadata = {
   title: 'Florida Kuwait | Hardware & Electrical Supplies in Kuwait',
-  description: "Shop Kuwait's best selection of hardware, electrical supplies, safety equipment and more. Trusted by contractors since 2005. Free shipping on orders over KWD 15.",
+  description: "Shop Kuwait's best selection of hardware, electrical supplies, safety equipment and more. Free shipping on qualifying orders.",
   alternates: { canonical: '/' },
 };
 
-export default function HomePage() {
+export const revalidate = 300;
+
+export default async function HomePage() {
+  const brands = await getTopBrands(12).catch(() => [] as string[]);
   return (
     <>
       <AnnouncementBar/>
@@ -32,35 +35,24 @@ export default function HomePage() {
         <TrustBadges/>
         <section className="section bg-gray-50">
           <div className="container-custom">
-            <div className="flex items-center justify-between mb-8">
-              <div><h2 className="section-title">Shop by Category</h2><p className="section-subtitle">Find exactly what you need</p></div>
-              <a href="/shop" className="text-brand-500 font-semibold hover:text-brand-700 text-sm">View All →</a>
-            </div>
+            <SectionHeader k="shopByCat" href="/shop"/>
             <CategoryGrid/>
           </div>
         </section>
         <FlashDealsSection/>
-        <OffersBanner/>
         <section className="section">
           <div className="container-custom">
-            <div className="flex items-center justify-between mb-8">
-              <div><h2 className="section-title">Featured Products</h2><p className="section-subtitle">Top picks from our catalog</p></div>
-              <a href="/shop?featured=true" className="text-brand-500 font-semibold hover:text-brand-700 text-sm">View All →</a>
-            </div>
+            <SectionHeader k="featured" href="/shop?featured=true"/>
             <Suspense fallback={<ProductSkeleton count={8}/>}><FeaturedProducts/></Suspense>
           </div>
         </section>
         <section className="section bg-gray-50">
           <div className="container-custom">
-            <div className="flex items-center justify-between mb-8">
-              <div><h2 className="section-title">New Arrivals</h2><p className="section-subtitle">Fresh stock just landed</p></div>
-              <a href="/shop?new=true" className="text-brand-500 font-semibold hover:text-brand-700 text-sm">View All →</a>
-            </div>
+            <SectionHeader k="newArrivals" href="/shop?new=true"/>
             <Suspense fallback={<ProductSkeleton count={4}/>}><NewArrivals/></Suspense>
           </div>
         </section>
-        <BrandsSection/>
-        <TestimonialsSection/>
+        <BrandsSection brands={brands}/>
         <NewsletterSection/>
       </main>
       <Footer/>

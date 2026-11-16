@@ -66,7 +66,9 @@ export type UOMCategory = 'length' | 'weight' | 'volume' | 'area' | 'count' | 'e
 export interface UOM {
   id: string;
   name: string;
+  nameAr?: string;
   abbreviation: string;
+  abbreviationAr?: string;
   category: UOMCategory;
   isBase: boolean;
   conversionFactor?: number;
@@ -116,8 +118,11 @@ export interface ProductVariantGroup {
 export interface FlashDeal {
   id: string;
   title: string;
+  titleAr?: string;
   subtitle?: string;
+  subtitleAr?: string;
   badgeText: string;
+  badgeTextAr?: string;
   type: 'percentage' | 'fixed' | 'bogo' | 'bundle';
   discountValue: number;
   scope: 'all' | 'category' | 'products';
@@ -149,7 +154,7 @@ export interface ShippingInput {
   lng?: number;
   orderAmount: number; // KWD
   orderWeightKg?: number;
-  paymentMethod?: 'tap' | 'cod';
+  paymentMethod?: 'card' | 'cod';
   /** True when ALL items in the cart have freeShipping=true — forces shipping cost to 0 */
   allItemsFreeShipping?: boolean;
 }
@@ -158,7 +163,9 @@ export interface ShippingOption {
   rateId: string;
   zoneId: string;
   zoneName: string;
+  zoneNameAr?: string;
   name: string;
+  nameAr?: string;
   carrier?: string;
   estimatedDays: string;
   price: number; // KWD

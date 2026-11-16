@@ -19,9 +19,12 @@ const DEFAULT_UOMS = [
   { name:'Bundle', abbreviation:'bndl', isActive:true },
 ];
 
-const CATEGORY_ICONS: Record<UOMCategory, string> = {
-  count: '🔢', pack: '📦', length: '📏', weight: '⚖️',
-  volume: '🧪', area: '⬛', electrical: '⚡',
+// Arabic names for the standard units (used when seeding defaults)
+const AR_UOM: Record<string, [string, string]> = {
+  Pair: ['زوج', 'زوج'], 'Pack of 10': ['عبوة 10 قطع', 'عبوة 10'], 'Pack of 50': ['عبوة 50 قطعة', 'عبوة 50'],
+  Dozen: ['دزينة', 'دزينة'], Roll: ['لفة', 'لفة'], Meter: ['متر', 'م'], Kilogram: ['كيلوغرام', 'كغ'],
+  Liter: ['لتر', 'ل'], Set: ['طقم', 'طقم'], Bundle: ['حزمة', 'حزمة'], Piece: ['قطعة', 'قطعة'],
+  Box: ['علبة', 'علبة'], Carton: ['كرتون', 'كرتون'],
 };
 const CATEGORY_LABELS: Record<UOMCategory, string> = {
   count: 'Count', pack: 'Pack / Bundle', length: 'Length',
@@ -58,18 +61,21 @@ export default function AdminUOMPage() {
       const url = isNew ? '/api/uoms' : `/api/uoms/${editingUOM.id}`;
       const method = isNew ? 'POST' : 'PUT';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editingUOM) });
-      const data = await res.json();
-      if (data.success || data.id) { toast.success(isNew ? 'UOM created!' : 'UOM updated!'); setEditingUOM(null); fetchUOMs(); }
-      else toast.error(data.error || 'Failed');
-    } catch { toast.error('Error'); }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && (data.success || data.id)) { toast.success(isNew ? 'Unit created.' : 'Unit updated.'); setEditingUOM(null); fetchUOMs(); }
+      else toast.error(data.error || `Failed (${res.status})`);
+    } catch { toast.error('Network error - not saved'); }
     setSaving(false);
   };
 
   const deleteUOM = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"?`)) return;
-    await fetch(`/api/uoms/${id}`, { method: 'DELETE' });
-    setUOMs(us => us.filter(u => u.id !== id));
-    toast.success('Deleted');
+    try {
+      const r = await fetch(`/api/uoms/${id}`, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); toast.error(d.error || 'Could not delete.'); return; }
+      setUOMs(us => us.filter(u => u.id !== id));
+      toast.success('Deleted');
+    } catch { toast.error('Network error'); }
   };
 
   const seedDefaults = async () => {
@@ -78,8 +84,10 @@ export default function AdminUOMPage() {
     let added = 0;
     for (const uom of DEFAULT_UOMS) {
       try {
-        const res = await fetch('/api/uoms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(uom) });
-        if ((await res.json()).id) added++;
+        const ar = AR_UOM[uom.name];
+        const body = { ...uom, ...(ar ? { nameAr: ar[0], abbreviationAr: ar[1] } : {}) };
+        const res = await fetch('/api/uoms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if ((await res.json().catch(() => ({}))).id) added++;
       } catch {}
     }
     toast.success(`Added ${added} UOMs!`);
@@ -117,7 +125,7 @@ export default function AdminUOMPage() {
         {CATEGORIES.map(cat => (
           <button key={cat} onClick={() => setFilterCat(cat)}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${filterCat === cat ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]} ({grouped[cat]?.length || 0})
+            {CATEGORY_LABELS[cat]} ({grouped[cat]?.length || 0})
           </button>
         ))}
       </div>
@@ -133,7 +141,7 @@ export default function AdminUOMPage() {
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <table className="table">
+          <div className="overflow-x-auto"><table className="table">
             <thead>
               <tr><th>Name</th><th>Abbr.</th><th>Category</th><th>Base?</th><th>Conversion</th><th>Status</th><th>Actions</th></tr>
             </thead>
@@ -142,7 +150,7 @@ export default function AdminUOMPage() {
                 <tr key={uom.id}>
                   <td className="font-semibold text-gray-800">{uom.name}</td>
                   <td><code className="bg-gray-100 text-brand-700 font-bold px-2 py-0.5 rounded text-sm">{uom.abbreviation}</code></td>
-                  <td><span className="flex items-center gap-1.5 text-sm text-gray-700">{CATEGORY_ICONS[uom.category]}{CATEGORY_LABELS[uom.category]}</span></td>
+                  <td><span className="flex items-center gap-1.5 text-sm text-gray-700">{CATEGORY_LABELS[uom.category]}</span></td>
                   <td>{uom.isBase ? <span className="badge badge-green text-xs font-bold">Base Unit</span> : <span className="text-gray-400 text-xs">—</span>}</td>
                   <td className="text-sm text-gray-600">{uom.isBase ? '1 (base)' : `× ${uom.conversionFactor}`}</td>
                   <td><span className={`badge text-xs font-bold ${uom.isActive ? 'badge-green' : 'badge-gray'}`}>{uom.isActive ? 'Active' : 'Inactive'}</span></td>
@@ -155,7 +163,7 @@ export default function AdminUOMPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
@@ -170,12 +178,14 @@ export default function AdminUOMPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="label">Name *</label><input value={editingUOM.name || ''} onChange={e => setEditingUOM(u => ({ ...u!, name: e.target.value }))} className="input-field" placeholder="Meter"/></div>
+                <div><label className="label">Arabic Name <span dir="rtl" className="text-gray-400 font-normal">(الاسم بالعربية)</span></label><input value={(editingUOM as any).nameAr || ''} onChange={e => setEditingUOM(u => ({ ...u!, nameAr: e.target.value } as any))} dir="rtl" lang="ar" className="input-field" placeholder="متر"/></div>
                 <div><label className="label">Abbreviation *</label><input value={editingUOM.abbreviation || ''} onChange={e => setEditingUOM(u => ({ ...u!, abbreviation: e.target.value }))} className="input-field" placeholder="m"/></div>
+                <div><label className="label">Arabic Abbreviation <span dir="rtl" className="text-gray-400 font-normal">(الاختصار)</span></label><input value={(editingUOM as any).abbreviationAr || ''} onChange={e => setEditingUOM(u => ({ ...u!, abbreviationAr: e.target.value } as any))} dir="rtl" lang="ar" className="input-field" placeholder="م"/></div>
               </div>
               <div>
                 <label className="label">Category</label>
                 <select value={editingUOM.category} onChange={e => setEditingUOM(u => ({ ...u!, category: e.target.value as UOMCategory }))} className="input-field">
-                  {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_ICONS[c]} {CATEGORY_LABELS[c]}</option>)}
+                  {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
                 </select>
               </div>
               <div className="flex items-center gap-2">

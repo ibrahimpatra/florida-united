@@ -6,7 +6,7 @@ import { generateSlug } from '@/lib/utils';
 import type { Category } from '@/types';
 
 const EMPTY_FORM = {
-  name: '', slug: '', description: '', parentId: '',
+  name: '', nameAr: '', slug: '', description: '', descriptionAr: '', parentId: '',
   isActive: true, showOnHome: true, showOnNav: true,
   sortOrder: 0, metaTitle: '', metaDesc: '',
   image: '', icon: '', productCount: 0,
@@ -34,7 +34,7 @@ export default function AdminCategoriesPage() {
     setEditing(c);
     setCreating(false);
     setForm({
-      name: c.name, slug: c.slug, description: c.description || '',
+      name: c.name, nameAr: c.nameAr || '', slug: c.slug, description: c.description || '', descriptionAr: c.descriptionAr || '',
       parentId: c.parentId || '', isActive: c.isActive,
       showOnHome: c.showOnHome ?? true, showOnNav: c.showOnNav ?? true,
       sortOrder: c.sortOrder, metaTitle: c.metaTitle || '', metaDesc: c.metaDesc || '',
@@ -71,7 +71,8 @@ export default function AdminCategoriesPage() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     try {
-      await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json().catch(() => null); toast.error(d?.error || 'Could not delete this category'); return; }
       setCats(cs => cs.filter(c => c.id !== id));
       toast.success('Deleted');
     } catch { toast.error('Failed to delete'); }
@@ -131,6 +132,11 @@ export default function AdminCategoriesPage() {
               />
             </div>
             <div>
+              <label className="label">Arabic Name <span dir="rtl" className="text-gray-400 font-normal">(الاسم بالعربية)</span></label>
+              <input value={form.nameAr} onChange={e => setForm(f => ({ ...f, nameAr: e.target.value }))}
+                dir="rtl" lang="ar" className="input-field" placeholder="مثال: المستلزمات الكهربائية" />
+            </div>
+            <div>
               <label className="label">Slug <span className="text-gray-400 font-normal text-xs">(auto-generated)</span></label>
               <input
                 value={form.slug}
@@ -160,6 +166,10 @@ export default function AdminCategoriesPage() {
               <label className="label">Description</label>
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="input-field" placeholder="Brief description shown in SEO"/>
             </div>
+            <div className="sm:col-span-2">
+              <label className="label">Arabic Description <span dir="rtl" className="text-gray-400 font-normal">(الوصف بالعربية)</span></label>
+              <input value={form.descriptionAr} onChange={e => setForm(f => ({ ...f, descriptionAr: e.target.value }))} dir="rtl" lang="ar" className="input-field" />
+            </div>
 
             {/* Image URL */}
             <div className="sm:col-span-2">
@@ -176,7 +186,7 @@ export default function AdminCategoriesPage() {
             {/* Icon + Count */}
             <div>
               <label className="label">Icon / Emoji <span className="text-gray-400 font-normal text-xs">(used if no image)</span></label>
-              <input value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} className="input-field text-xl" placeholder="⚡"/>
+              <input value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} className="input-field text-xl" placeholder="e.g. wrench (optional)"/>
               {form.icon && <span className="text-2xl mt-1 block">{form.icon}</span>}
             </div>
             <div>
@@ -225,11 +235,15 @@ export default function AdminCategoriesPage() {
 
       {/* ── Table ──────────────────────────────────────────── */}
       <div className="card overflow-hidden">
-        <table className="table">
+        <div className="overflow-x-auto">
+        <table className="table min-w-full">
           <thead>
             <tr>
-              <th>Name</th><th>Slug</th><th>Parent</th>
-              <th>Homepage</th><th>Nav</th><th>Status</th><th>Order</th><th>Actions</th>
+              <th>Name</th><th className="hidden md:table-cell">Slug</th>
+              <th className="hidden sm:table-cell">Parent</th>
+              <th className="hidden md:table-cell">Home</th>
+              <th className="hidden md:table-cell">Nav</th>
+              <th>Status</th><th className="hidden sm:table-cell">Order</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -249,12 +263,12 @@ export default function AdminCategoriesPage() {
                       {c.image && <img src={c.image} alt="" className="w-6 h-6 rounded object-cover"/>}
                       {c.name}
                     </td>
-                    <td className="font-mono text-xs text-gray-500">{c.slug}</td>
-                    <td className="text-gray-400 text-xs">Root</td>
-                    <td><span className={`badge text-xs font-bold ${(c.showOnHome ?? true) ? 'badge-green' : 'badge-gray'}`}>{(c.showOnHome ?? true) ? 'Yes' : 'No'}</span></td>
-                    <td><span className={`badge text-xs font-bold ${(c.showOnNav  ?? true) ? 'badge-green' : 'badge-gray'}`}>{(c.showOnNav  ?? true) ? 'Yes' : 'No'}</span></td>
+                    <td className="font-mono text-xs text-gray-500 hidden md:table-cell">{c.slug}</td>
+                    <td className="text-gray-400 text-xs hidden sm:table-cell">Root</td>
+                    <td className="hidden md:table-cell"><span className={`badge text-xs font-bold ${(c.showOnHome ?? true) ? 'badge-green' : 'badge-gray'}`}>{(c.showOnHome ?? true) ? 'Yes' : 'No'}</span></td>
+                    <td className="hidden md:table-cell"><span className={`badge text-xs font-bold ${(c.showOnNav  ?? true) ? 'badge-green' : 'badge-gray'}`}>{(c.showOnNav  ?? true) ? 'Yes' : 'No'}</span></td>
                     <td><span className={`badge text-xs font-bold ${c.isActive ? 'badge-green' : 'badge-gray'}`}>{c.isActive ? 'Active' : 'Inactive'}</span></td>
-                    <td className="text-gray-600 text-sm">{c.sortOrder}</td>
+                    <td className="text-gray-600 text-sm hidden sm:table-cell">{c.sortOrder}</td>
                     <td>
                       <div className="flex gap-2">
                         <button onClick={() => startEdit(c)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5"/></button>
@@ -264,13 +278,13 @@ export default function AdminCategoriesPage() {
                   </tr>
                   {children(c.id).map(sub => (
                     <tr key={sub.id}>
-                      <td className="pl-8 text-gray-700">↳ {sub.name}</td>
-                      <td className="font-mono text-xs text-gray-500">{sub.slug}</td>
-                      <td className="text-gray-500 text-xs">{c.name}</td>
-                      <td><span className={`badge text-xs font-bold ${(sub.showOnHome ?? true) ? 'badge-green' : 'badge-gray'}`}>{(sub.showOnHome ?? true) ? 'Yes' : 'No'}</span></td>
-                      <td><span className={`badge text-xs font-bold ${(sub.showOnNav  ?? true) ? 'badge-green' : 'badge-gray'}`}>{(sub.showOnNav  ?? true) ? 'Yes' : 'No'}</span></td>
+                      <td className="pl-8 text-gray-700">- {sub.name}{sub.nameAr ? <span className="text-gray-400" dir="rtl"> / {sub.nameAr}</span> : null}</td>
+                      <td className="font-mono text-xs text-gray-500 hidden md:table-cell">{sub.slug}</td>
+                      <td className="text-gray-500 text-xs hidden sm:table-cell">{c.name}</td>
+                      <td className="hidden md:table-cell"><span className={`badge text-xs font-bold ${(sub.showOnHome ?? true) ? 'badge-green' : 'badge-gray'}`}>{(sub.showOnHome ?? true) ? 'Yes' : 'No'}</span></td>
+                      <td className="hidden md:table-cell"><span className={`badge text-xs font-bold ${(sub.showOnNav  ?? true) ? 'badge-green' : 'badge-gray'}`}>{(sub.showOnNav  ?? true) ? 'Yes' : 'No'}</span></td>
                       <td><span className={`badge text-xs font-bold ${sub.isActive ? 'badge-green' : 'badge-gray'}`}>{sub.isActive ? 'Active' : 'Inactive'}</span></td>
-                      <td className="text-gray-600 text-sm">{sub.sortOrder}</td>
+                      <td className="text-gray-600 text-sm hidden sm:table-cell">{sub.sortOrder}</td>
                       <td>
                         <div className="flex gap-2">
                           <button onClick={() => startEdit(sub)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 className="w-3.5 h-3.5"/></button>
@@ -284,6 +298,7 @@ export default function AdminCategoriesPage() {
             }
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

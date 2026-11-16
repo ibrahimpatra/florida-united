@@ -3,9 +3,15 @@
  * Server-side only — uses Firebase Admin SDK.
  * Import this in API routes (/app/api/**) ONLY.
  * Never import in 'use client' components.
+ *
+ * QUERY STRATEGY: Firestore composite indexes must be pre-created in the
+ * console. To avoid "missing index" silent errors we use a simple base query
+ * (isActive + orderBy createdAt) and perform secondary filtering in-memory.
+ * For a catalog of up to ~10 000 products this is perfectly fast.
  */
 import { getAdminDb } from './firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { fuzzyScore, computeCoupon } from './pricing';
 import type {
   Product, Category, Order, User, Review, Coupon,
   Banner, ReturnRequest, ProductFilters, PaginatedResponse, DashboardStats
@@ -33,78 +39,194 @@ function toList<T>(snaps: FirebaseFirestore.QuerySnapshot): T[] {
   return snaps.docs.map(d => toData<T>(d)).filter(Boolean) as T[];
 }
 
-const now = () => new Date().toISOString();
-
 // ── CATEGORIES ───────────────────────────────────────────────
+// NOTE: no Firestore orderBy here — orderBy silently DROPS documents that lack the
+// field (e.g. categories created without sortOrder). We sort in memory instead.
 export async function adminGetCategories(activeOnly = true): Promise<Category[]> {
-  const db = getAdminDb();
-  let q = db.collection('categories').orderBy('sortOrder', 'asc') as FirebaseFirestore.Query;
-  if (activeOnly) q = q.where('isActive', '==', true);
-  return toList<Category>(await q.get());
+  const snap = await getAdminDb().collection('categories').get();
+  let list = toList<Category>(snap);
+  if (activeOnly) list = list.filter(c => c.isActive !== false);
+  return list.sort((x, y) => (x.sortOrder ?? 999) - (y.sortOrder ?? 999) || x.name.localeCompare(y.name));
 }
 
 export async function adminCreateCategory(data: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
   const db = getAdminDb();
+  const clean: any = { ...data };
+  delete clean.id; delete clean.createdAt; delete clean.updatedAt;
+  if (!String(clean.name || '').trim()) throw new ProductError(400, 'Category name is required.');
+  clean.name = String(clean.name).trim();
+  if (typeof clean.nameAr === 'string') clean.nameAr = clean.nameAr.trim();
+  if (clean.parentId) {
+    const p = await db.collection('categories').doc(clean.parentId).get();
+    if (!p.exists) throw new ProductError(400, 'The selected parent category no longer exists.');
+    clean.parentName = (p.data() as any).name || '';
+    clean.parentNameAr = (p.data() as any).nameAr || '';
+  }
+  clean.slug = String(clean.slug || clean.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `category-${Date.now().toString(36)}`;
+  const dup = await db.collection('categories').where('slug', '==', clean.slug).limit(1).get();
+  if (!dup.empty) clean.slug = `${clean.slug}-${Date.now().toString(36).slice(-4)}`;
   const ref = await db.collection('categories').add({
-    ...data,
-    showOnHome: data.showOnHome ?? true,
-    showOnNav:  data.showOnNav  ?? true,
+    ...clean,
+    isActive: clean.isActive ?? true,
+    sortOrder: Number(clean.sortOrder) || 0,
+    showOnHome: clean.showOnHome ?? true,
+    showOnNav:  clean.showOnNav  ?? true,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
+  invalidateProductCache();
   return ref.id;
 }
 
 export async function adminUpdateCategory(id: string, data: Partial<Category>): Promise<void> {
   const db = getAdminDb();
-  await db.collection('categories').doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
+  const clean: any = { ...data };
+  delete clean.id; delete clean.createdAt; delete clean.updatedAt; delete clean.productCount;
+  if ('name' in clean) {
+    if (!String(clean.name || '').trim()) throw new ProductError(400, 'Category name is required.');
+    clean.name = String(clean.name).trim();
+  }
+  if (typeof clean.nameAr === 'string') clean.nameAr = clean.nameAr.trim();
+  if (clean.parentId === id) throw new ProductError(400, 'A category cannot be its own parent.');
+  if (clean.parentId) {
+    // refuse cycles: the new parent must not be this category's descendant
+    let cur: string | undefined = clean.parentId; const seen = new Set<string>();
+    while (cur && !seen.has(cur)) {
+      if (cur === id) throw new ProductError(400, 'A category cannot be moved under one of its own sub-categories.');
+      seen.add(cur);
+      const d: any = (await db.collection('categories').doc(cur).get()).data();
+      if (!d && cur === clean.parentId) throw new ProductError(400, 'The selected parent category no longer exists.');
+      cur = d?.parentId;
+    }
+    const p: any = (await db.collection('categories').doc(clean.parentId).get()).data();
+    clean.parentName = p?.name || ''; clean.parentNameAr = p?.nameAr || '';
+  } else if ('parentId' in clean) { clean.parentId = ''; clean.parentName = ''; clean.parentNameAr = ''; }
+  await db.collection('categories').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
+
+  // Keep denormalised names in sync (products + child categories) when renamed.
+  if ('name' in clean || 'nameAr' in clean) {
+    const patchP: any = {}, patchC: any = {};
+    if ('name' in clean) { patchP.categoryName = clean.name; patchC.parentName = clean.name; }
+    if ('nameAr' in clean) { patchP.categoryNameAr = clean.nameAr || ''; patchC.parentNameAr = clean.nameAr || ''; }
+    const [prods, kids] = await Promise.all([
+      db.collection('products').where('categoryId', '==', id).get(),
+      db.collection('categories').where('parentId', '==', id).get(),
+    ]);
+    const targets = [...prods.docs.map(d => [d.ref, patchP] as const), ...kids.docs.map(d => [d.ref, patchC] as const)];
+    for (let i = 0; i < targets.length; i += 400) {
+      const batch = db.batch();
+      targets.slice(i, i + 400).forEach(([ref, patch]) => batch.update(ref, patch));
+      await batch.commit();
+    }
+  }
+  invalidateProductCache();
 }
 
 export async function adminDeleteCategory(id: string): Promise<void> {
-  await getAdminDb().collection('categories').doc(id).delete();
+  const db = getAdminDb();
+  const [kids, prods] = await Promise.all([
+    db.collection('categories').where('parentId', '==', id).limit(1).get(),
+    db.collection('products').where('categoryId', '==', id).limit(1).get(),
+  ]);
+  if (!kids.empty) throw new ProductError(409, 'This category has sub-categories. Move or delete them first.');
+  if (!prods.empty) throw new ProductError(409, 'This category still has products. Move them to another category first.');
+  await db.collection('categories').doc(id).delete();
+  invalidateProductCache();
+}
+
+export class ProductError extends Error {
+  constructor(public status: number, message: string) { super(message); }
 }
 
 // ── PRODUCTS ─────────────────────────────────────────────────
-export async function adminGetProducts(filters: ProductFilters & { admin?: boolean } = {}): Promise<PaginatedResponse<Product>> {
-  const db = getAdminDb();
-  const { categoryId, sortBy = 'newest', page = 1, pageSize = 24, search } = filters;
+// WHY NO orderBy/where HERE: Firestore silently omits any document that is missing
+// the ordered/filtered field (imported products without totalSold/createdAt, etc.)
+// which made products "sometimes show, sometimes not". We read the collection with
+// no query constraints (always returns every doc, needs no index) and filter/sort in
+// memory. A 60s cache keeps reads cheap for the storefront; admin requests bypass it.
+// Ceiling: PRODUCT_CAP docs. Beyond that, move search/filter to Algolia/Typesense —
+// everything goes through this one function so the swap is local.
+const PRODUCT_CAP = 3000;
+const PRODUCT_CACHE_MS = 60_000;
+let productCache: { at: number; items: Product[] } | null = null;
+export function invalidateProductCache() { productCache = null; }
 
-  let q = db.collection('products') as FirebaseFirestore.Query;
-  // Only filter by isActive for storefront (not admin panel)
-  if (!filters.admin) q = q.where('isActive', '==', true);
-  if (categoryId) q = q.where('categoryId', '==', categoryId);
-  if (filters.isFeatured)  q = q.where('isFeatured',  '==', true);
-  if (filters.isNewArrival) q = q.where('isNewArrival','==', true);
-  if (filters.isOnSale)    q = q.where('isOnSale',    '==', true);
-  if (filters.brand)       q = q.where('brand',       '==', filters.brand);
-  if (filters.inStock)     q = q.where('stock',       '>',  0);
+async function loadAllProducts(fresh: boolean): Promise<Product[]> {
+  if (!fresh && productCache && Date.now() - productCache.at < PRODUCT_CACHE_MS) return productCache.items;
+  const snap = await getAdminDb().collection('products').limit(PRODUCT_CAP).get();
+  const items = toList<Product>(snap);
+  if (!fresh) productCache = { at: Date.now(), items };
+  return items;
+}
 
-  switch (sortBy) {
-    case 'price_asc':  q = q.orderBy('price', 'asc');  break;
-    case 'price_desc': q = q.orderBy('price', 'desc'); break;
-    case 'popular':    q = q.orderBy('totalSold', 'desc'); break;
-    case 'rating':     q = q.orderBy('avgRating', 'desc'); break;
-    default:           q = q.orderBy('createdAt', 'desc');
+/** categoryId + all of its descendants, so picking a parent also shows sub-category products. */
+export function categoryFamily(cats: Category[], rootId: string): Set<string> {
+  const ids = new Set<string>([rootId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const c of cats) if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) { ids.add(c.id); grew = true; }
+  }
+  return ids;
+}
+
+export async function adminGetProducts(
+  filters: ProductFilters & { admin?: boolean; stockStatus?: 'in' | 'out' | 'low' } = {}
+): Promise<PaginatedResponse<Product>> {
+  const { sortBy = 'newest', page = 1, pageSize = 24 } = filters;
+  let items = await loadAllProducts(!!filters.admin);
+
+  if (!filters.admin) items = items.filter(p => p.isActive !== false);
+
+  // category (+ sub-categories)
+  let catId = filters.categoryId;
+  if (catId || filters.categorySlug) {
+    const cats = await adminGetCategories(false);
+    if (!catId && filters.categorySlug) catId = cats.find(c => c.slug === filters.categorySlug)?.id;
+    if (catId) { const fam = categoryFamily(cats, catId); items = items.filter(p => p.categoryId && fam.has(p.categoryId)); }
+    else items = [];
+  }
+  if (filters.brand) items = items.filter(p => p.brand?.toLowerCase() === filters.brand!.toLowerCase());
+  if (filters.inStock) items = items.filter(p => (p.stock ?? 0) > 0);
+  if (filters.stockStatus === 'out') items = items.filter(p => (p.stock ?? 0) <= 0);
+  if (filters.stockStatus === 'low') items = items.filter(p => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= (p.lowStockAlert ?? 5));
+  if (filters.isFeatured)   items = items.filter(p => p.isFeatured);
+  if (filters.isNewArrival) items = items.filter(p => p.isNewArrival);
+  if (filters.isOnSale)     items = items.filter(p => p.isOnSale);
+  if (filters.minPrice !== undefined) items = items.filter(p => p.price >= filters.minPrice!);
+  if (filters.maxPrice !== undefined) items = items.filter(p => p.price <= filters.maxPrice!);
+
+  // typo-tolerant, synonym-aware search (see pricing.ts → fuzzyScore)
+  let scores: Map<string, number> | null = null;
+  if (filters.search?.trim()) {
+    const q = filters.search.trim();
+    scores = new Map();
+    items = items.filter(p => {
+      const sc = Math.max(
+        fuzzyScore(p.name || '', q) * 1.5, fuzzyScore(p.nameAr || '', q) * 1.5, fuzzyScore(p.sku || '', q), fuzzyScore(p.brand || '', q),
+        fuzzyScore((p.tags || []).join(' '), q), fuzzyScore(p.categoryName || '', q), fuzzyScore(p.categoryNameAr || '', q),
+      );
+      if (sc > 0) scores!.set(p.id, sc);
+      return sc > 0;
+    });
   }
 
-  const totalSnap = await q.count().get();
-  const total = totalSnap.data().count;
+  const num = (v: unknown) => (typeof v === 'number' ? v : 0);
+  const by: Record<string, (a: Product, b: Product) => number> = {
+    price_asc:  (a, b) => a.price - b.price,
+    price_desc: (a, b) => b.price - a.price,
+    popular:    (a, b) => num(b.totalSold) - num(a.totalSold),
+    rating:     (a, b) => num(b.avgRating) - num(a.avgRating),
+    name_asc:   (a, b) => (a.name || '').localeCompare(b.name || ''),
+    name_desc:  (a, b) => (b.name || '').localeCompare(a.name || ''),
+    newest:     (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
+  };
+  if (scores && sortBy === 'newest') items = [...items].sort((a, b) => (scores!.get(b.id)! - scores!.get(a.id)!) || by.newest(a, b));
+  else items = [...items].sort(by[sortBy] || by.newest);
 
+  const total = items.length;
   const offset = (page - 1) * pageSize;
-  const snap = await q.limit(pageSize + offset).get();
-  let items = snap.docs.slice(offset, offset + pageSize).map(d => toData<Product>(d)!);
-
-  if (search) {
-    const s = search.toLowerCase();
-    items = items.filter(p =>
-      p.name.toLowerCase().includes(s) ||
-      p.sku?.toLowerCase().includes(s) ||
-      p.brand?.toLowerCase().includes(s) ||
-      p.tags?.some(t => t.toLowerCase().includes(s))
-    );
-  }
-
-  return { items, total, page, pageSize, hasMore: page * pageSize < total };
+  return { items: items.slice(offset, offset + pageSize), total, page, pageSize, hasMore: offset + pageSize < total };
 }
 
 export async function adminGetProductById(id: string): Promise<Product | null> {
@@ -117,68 +239,402 @@ export async function adminGetProductBySlug(slug: string): Promise<Product | nul
   return toData<Product>(snap.docs[0]);
 }
 
-export async function adminCreateProduct(data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+async function resolveCategory(categoryId?: string) {
+  if (!categoryId) return { categoryName: '', categoryNameAr: '', categoryPath: [] as string[] };
   const db = getAdminDb();
-  // Resolve categoryName so the product list doesn't need a join
-  let categoryName = data.categoryName || '';
-  if (data.categoryId && !categoryName) {
-    try {
-      const catSnap = await db.collection('categories').doc(data.categoryId).get();
-      if (catSnap.exists) categoryName = (catSnap.data() as any).name || '';
-    } catch { /* non-fatal */ }
+  const snap = await db.collection('categories').doc(categoryId).get();
+  if (!snap.exists) throw new ProductError(400, 'The selected category no longer exists. Please pick another.');
+  const c: any = snap.data();
+  const path = [categoryId];
+  if (c.parentId) path.unshift(c.parentId);
+  return { categoryName: c.name || '', categoryNameAr: c.nameAr || '', categoryPath: path };
+}
+
+async function uniqueSlug(slug: string, excludeId?: string): Promise<string> {
+  const db = getAdminDb();
+  const base = (slug || 'product').toLowerCase();
+  for (let i = 0; i < 50; i++) {
+    const candidate = i === 0 ? base : `${base}-${i + 1}`;
+    const snap = await db.collection('products').where('slug', '==', candidate).limit(2).get();
+    if (snap.docs.every(d => d.id === excludeId)) return candidate;
   }
-  const ref = await db.collection('products').add({
-    ...data,
-    categoryName,
-    avgRating: 0,
-    totalReviews: 0,
-    totalSold: 0,
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+async function assertUniqueSku(sku?: string, excludeId?: string) {
+  if (!sku) return;
+  const snap = await getAdminDb().collection('products').where('sku', '==', sku).limit(2).get();
+  if (snap.docs.some(d => d.id !== excludeId)) throw new ProductError(409, `SKU "${sku}" is already used by another product.`);
+}
+
+/** Validates the extra selling units. Throws ProductError on bad input; returns a clean array. */
+function cleanUnits(raw: any): any[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  return raw.map((u: any, i: number) => {
+    const name = String(u?.name || '').trim();
+    const factor = Number(u?.factor), price = Number(u?.price);
+    if (!name) throw new ProductError(400, `Unit ${i + 1}: name is required.`);
+    if (!Number.isFinite(factor) || factor < 1 || !Number.isInteger(factor)) throw new ProductError(400, `Unit "${name}": quantity per unit must be a whole number of 1 or more.`);
+    if (!Number.isFinite(price) || price < 0) throw new ProductError(400, `Unit "${name}": price must be a valid number.`);
+    const id = String(u?.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30) || `u${Date.now().toString(36)}${i}`;
+    if (seen.has(id)) throw new ProductError(400, `Unit "${name}" is duplicated.`);
+    seen.add(id);
+    const nameAr = String(u?.nameAr || '').trim();
+    return { id, name, ...(nameAr ? { nameAr } : {}), factor, price: Math.round(price * 1000) / 1000 };
+  });
+}
+
+const stripServerFields = (d: any) => {
+  const c = { ...d };
+  for (const k of ['id', 'createdAt', 'updatedAt', 'avgRating', 'totalReviews', 'totalSold', 'totalRevenue']) delete c[k];
+  return c;
+};
+
+export async function adminCreateProduct(
+  data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> {
+  const clean: any = stripServerFields(data);
+  if (!clean.name?.trim()) throw new ProductError(400, 'Product name is required.');
+  if (!(Number(clean.price) >= 0)) throw new ProductError(400, 'Price must be a valid number.');
+  if (clean.stock !== undefined && !(Number(clean.stock) >= 0)) throw new ProductError(400, 'Stock cannot be negative.');
+  clean.name = clean.name.trim();
+  if ('units' in clean) clean.units = cleanUnits(clean.units);
+  if (typeof clean.nameAr === 'string') clean.nameAr = clean.nameAr.trim();
+  if (!clean.categoryId) throw new ProductError(400, 'Please choose a category.');
+  await assertUniqueSku(clean.sku);
+  const cat = await resolveCategory(clean.categoryId);
+  const ref = await getAdminDb().collection('products').add({
+    ...clean,
+    slug: await uniqueSlug((clean.slug || clean.name).toString().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'product'),
+    isActive: clean.isActive ?? true,
+    freeShipping: !!clean.freeShipping,
+    stock: Number(clean.stock) || 0,
+    ...cat,
+    avgRating: 0, totalReviews: 0, totalSold: 0, totalRevenue: 0,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  invalidateProductCache();
+  return ref.id;
+}
+
+export async function adminUpdateProduct(id: string, data: Partial<Product>): Promise<void> {
+  const clean: any = stripServerFields(data);
+  if ('name' in clean && !String(clean.name).trim()) throw new ProductError(400, 'Product name is required.');
+  if ('price' in clean && !(Number(clean.price) >= 0)) throw new ProductError(400, 'Price must be a valid number.');
+  if ('stock' in clean && !(Number(clean.stock) >= 0)) throw new ProductError(400, 'Stock cannot be negative.');
+  if ('units' in clean) clean.units = cleanUnits(clean.units);
+  if ('sku' in clean) await assertUniqueSku(clean.sku, id);
+  if ('slug' in clean) clean.slug = await uniqueSlug(clean.slug, id);
+  // ALWAYS re-derive categoryName from the category doc. The edit form posts the OLD
+  // categoryName back, so trusting it made category changes appear not to save.
+  if ('categoryId' in clean) {
+    if (!clean.categoryId) throw new ProductError(400, 'Please choose a category.');
+    Object.assign(clean, await resolveCategory(clean.categoryId));
+  }
+  await getAdminDb().collection('products').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
+  invalidateProductCache();
+}
+
+export async function adminDeleteProduct(id: string): Promise<void> {
+  await getAdminDb().collection('products').doc(id).delete();
+  invalidateProductCache();
+}
+
+// ── ORDERS ───────────────────────────────────────────────────
+export async function adminGetOrders(filters: {
+  status?: string; page?: number; pageSize?: number; search?: string;
+} = {}): Promise<PaginatedResponse<Order>> {
+  const db = getAdminDb();
+  const { status, page = 1, pageSize = 20, search } = filters;
+  const offset = (page - 1) * pageSize;
+  const done = (items: Order[], total: number) =>
+    ({ items, total, page, pageSize, hasMore: offset + pageSize < total });
+
+  // Exact order-number lookup (ABC-1234) — one indexed read, scales to any size.
+  if (search && /^[A-Za-z]{3}-\d{4}$/.test(search.trim())) {
+    const s = await db.collection('orders').where('orderNumber', '==', search.trim().toUpperCase()).limit(1).get();
+    return done(toList<Order>(s), s.size);
+  }
+
+  const filtered = status && status !== 'all';
+  if (!search) {
+    // Preferred: true paginated query (needs composite index status+createdAt when filtered).
+    try {
+      let q = db.collection('orders') as FirebaseFirestore.Query;
+      if (filtered) q = q.where('status', '==', status!);
+      const [snap, cnt] = await Promise.all([
+        q.orderBy('createdAt', 'desc').offset(offset).limit(pageSize).get(),
+        q.count().get(),
+      ]);
+      return done(toList<Order>(snap), cnt.data().count);
+    } catch (e: any) {
+      if (e?.code !== 9 /* FAILED_PRECONDITION: index missing */) throw e;
+      console.warn('[orders] composite index missing — falling back to in-memory sort. Create index status ASC + createdAt DESC.');
+    }
+  }
+  // Fallback / search: bounded in-memory pass over the latest 500 orders.
+  let q = db.collection('orders') as FirebaseFirestore.Query;
+  if (filtered) q = q.where('status', '==', status!);
+  let items = toList<Order>(await q.limit(500).get())
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  if (search) {
+    const s = search.toLowerCase();
+    items = items.filter(o => o.orderNumber?.toLowerCase().includes(s) || o.userEmail?.toLowerCase().includes(s) || o.userName?.toLowerCase().includes(s));
+  }
+  return done(items.slice(offset, offset + pageSize), items.length);
+}
+
+export async function adminGetOrderById(id: string): Promise<Order | null> {
+  return toData<Order>(await getAdminDb().collection('orders').doc(id).get());
+}
+
+export async function adminUpdateOrderStatus(id: string, status: string, note?: string): Promise<void> {
+  const db = getAdminDb();
+  const patch: Record<string, any> = {
+    status,
+    updatedAt: FieldValue.serverTimestamp(),
+    statusHistory: FieldValue.arrayUnion({
+      status, note: note || '', createdAt: new Date().toISOString(),
+    }),
+  };
+  if (status === 'delivered') {
+    // cash on delivery is collected at the door: mark it paid once delivered
+    const cur: any = (await db.collection('orders').doc(id).get()).data();
+    if (cur && String(cur.paymentMethod).toLowerCase() === 'cod' && cur.paymentStatus !== 'paid') {
+      patch.paymentStatus = 'paid'; patch.paidAt = new Date().toISOString();
+    }
+    patch.deliveredAt = new Date().toISOString(); // starts the 14-day return window
+  }
+  await db.collection('orders').doc(id).update(patch);
+}
+
+export async function adminUpdateOrderTracking(id: string, trackingNumber: string, carrier: string): Promise<void> {
+  await getAdminDb().collection('orders').doc(id).update({
+    trackingNumber, shippingCarrier: carrier, status: 'shipped',
+    updatedAt: FieldValue.serverTimestamp(),
+    statusHistory: FieldValue.arrayUnion({
+      status: 'shipped', note: `Tracking: ${trackingNumber} via ${carrier}`, createdAt: new Date().toISOString(),
+    }),
+  });
+}
+
+// ── USERS / ADDRESSES ────────────────────────────────────────
+export async function adminGetUsers(filters: {
+  search?: string; role?: string; page?: number; pageSize?: number;
+} = {}): Promise<PaginatedResponse<User>> {
+  const db = getAdminDb();
+  const { role, search, page = 1, pageSize = 20 } = filters;
+
+  // Unconstrained read, filtered/sorted in memory: orderBy('createdAt') would drop users without that
+  // field and role+orderBy needs a composite index. Capped for safety.
+  const snap = await db.collection('users').limit(3000).get();
+  const ser = (v: any) => (v && typeof v.toDate === 'function' ? v.toDate().toISOString() : v);
+  let items = snap.docs.map(d => {
+    const u: any = d.data();
+    // never send credentials/secrets to the browser
+    const { password, passwordHash, resetToken, resetTokenExpiry, verificationToken, ...safe } = u;
+    return { id: d.id, ...safe, createdAt: ser(u.createdAt), updatedAt: ser(u.updatedAt) } as unknown as User;
+  });
+  if (role) items = items.filter(u => (u as any).role === role);
+
+  if (search) {
+    const s = search.toLowerCase().trim();
+    items = items.filter(u =>
+      u.name?.toLowerCase().includes(s) ||
+      u.email?.toLowerCase().includes(s) ||
+      String(u.phone || '').toLowerCase().includes(s)
+    );
+  }
+  items.sort((a: any, b: any) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+  const total  = items.length;
+  const offset = (page - 1) * pageSize;
+  return { items: items.slice(offset, offset + pageSize), total, page, pageSize, hasMore: offset + pageSize < total };
+}
+
+export async function adminGetUserAddresses(userId: string) {
+  const db = getAdminDb();
+  const snap = await db.collection('users').doc(userId).collection('addresses').orderBy('isDefault','desc').get();
+  return toList<any>(snap);
+}
+
+export async function adminSaveAddress(userId: string, address: any): Promise<string> {
+  const db = getAdminDb();
+  const addrRef = db.collection('users').doc(userId).collection('addresses');
+  if (address.isDefault) {
+    const existing = await addrRef.where('isDefault', '==', true).get();
+    for (const doc of existing.docs) await doc.ref.update({ isDefault: false });
+  }
+  if (address.id) {
+    await addrRef.doc(address.id).set({ ...address, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return address.id;
+  }
+  const ref = await addrRef.add({ ...address, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  return ref.id;
+}
+
+export async function adminDeleteAddress(userId: string, addressId: string): Promise<void> {
+  await getAdminDb().collection('users').doc(userId).collection('addresses').doc(addressId).delete();
+}
+
+// ── DASHBOARD STATS ──────────────────────────────────────────
+export { adminGetDashboardStats, adminRebuildStats } from './stats-server';
+
+// ── COUPONS ──────────────────────────────────────────────────
+export async function adminValidateCoupon(code: string, orderAmount: number) {
+  const c = String(code || '').trim().toUpperCase();
+  if (!c) return { valid: false, error: 'Enter a coupon code' };
+  const snap = await getAdminDb().collection('coupons').where('code', '==', c).limit(1).get();
+  const coupon = snap.empty ? null : (toData<Coupon>(snap.docs[0]) as any);
+  // same rules placeOrder() applies, so the cart preview and the final charge always agree
+  const r = computeCoupon(coupon, Number(orderAmount) || 0);
+  if (!r.valid) return { valid: false, error: r.error };
+  return { valid: true, discount: r.discount, coupon: { code: coupon.code, type: coupon.type, value: coupon.value } };
+}
+
+// ── BANNERS ──────────────────────────────────────────────────
+export async function adminGetBanners(activeOnly = false): Promise<Banner[]> {
+  // unconstrained read, sorted in memory: orderBy('sortOrder') would silently drop banners missing that field
+  const all = toList<Banner>(await getAdminDb().collection('banners').get());
+  const ser = (v: any) => (v && typeof v.toDate === 'function' ? v.toDate().toISOString() : v);
+  return all.filter(b => !activeOnly || b.isActive !== false)
+    .map(b => ({ ...b, createdAt: ser(b.createdAt), updatedAt: ser((b as any).updatedAt) }) as Banner)
+    .sort((x, y) => (Number(x.sortOrder) || 0) - (Number(y.sortOrder) || 0));
+}
+export const adminGetAllBanners = adminGetBanners;
+
+function cleanBanner(data: any, partial: boolean) {
+  const d: any = { ...data };
+  for (const k of ['id', 'createdAt', 'updatedAt']) delete d[k];
+  if (!partial || 'title' in d) { if (!String(d.title || '').trim()) throw new ProductError(400, 'Banner title is required.'); d.title = String(d.title).trim(); }
+  if (!partial || 'image' in d) { if (!String(d.image || '').trim()) throw new ProductError(400, 'Banner image URL is required.'); d.image = String(d.image).trim(); }
+  if ('link' in d && d.link && !/^(\/|https?:\/\/)/.test(String(d.link).trim())) throw new ProductError(400, 'Link must start with "/" or "https://".');
+  for (const k of ['subtitle', 'titleAr', 'subtitleAr', 'buttonText', 'buttonTextAr', 'link']) if (k in d) d[k] = String(d[k] ?? '').trim();
+  if ('sortOrder' in d) d.sortOrder = Number(d.sortOrder) || 0;
+  return d;
+}
+
+export async function adminCreateBanner(data: any): Promise<string> {
+  const ref = await getAdminDb().collection('banners').add({
+    isActive: true, sortOrder: 0, ...cleanBanner(data, false), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function adminUpdateBanner(id: string, data: any): Promise<void> {
+  await getAdminDb().collection('banners').doc(id).update({ ...cleanBanner(data, true), updatedAt: FieldValue.serverTimestamp() });
+}
+
+export async function adminDeleteBanner(id: string): Promise<void> {
+  await getAdminDb().collection('banners').doc(id).delete();
+}
+
+
+// ── RETURN REQUESTS ──────────────────────────────────────────
+export async function adminGetReturnRequests(filters: { status?: string } = {}): Promise<ReturnRequest[]> {
+  const list = toList<ReturnRequest>(await getAdminDb().collection('returnRequests').get());
+  const t = (v: any) => (v ? new Date(v as any).getTime() || 0 : 0);
+  return list.filter(r => !filters.status || r.status === filters.status).sort((a, b) => t(b.createdAt) - t(a.createdAt));
+}
+
+// ── BUNDLES ──────────────────────────────────────────────────
+export async function adminGetBundles(activeOnly = false) {
+  // Unconstrained read + in-memory sort/filter: orderBy/where on a field that is
+  // missing on some docs would silently drop them (and needs a composite index).
+  const all = toList<any>(await getAdminDb().collection('bundles').get());
+  const ts = (v: any) => (v ? new Date(v).getTime() || 0 : 0);
+  return all.filter(b => !activeOnly || b.isActive !== false).sort((x, y) => ts(y.createdAt) - ts(x.createdAt));
+}
+
+/** Public view: adds live availability (min over components) and free-shipping flag. */
+export async function getStorefrontBundles() {
+  const db = getAdminDb();
+  const bundles = await adminGetBundles(true);
+  const ids = [...new Set(bundles.flatMap((b: any) => (b.items || []).map((i: any) => i.productId)))] as string[];
+  const snaps = ids.length ? await db.getAll(...ids.map(id => db.collection('products').doc(id))) : [];
+  const prods = new Map(snaps.filter(s => s.exists).map(s => [s.id, s.data() as any]));
+  return bundles.map((b: any) => {
+    const comps = (b.items || []) as any[];
+    let available = comps.length ? Infinity : 0, allFree = comps.length > 0, valid = comps.length > 0;
+    for (const c of comps) {
+      const p = prods.get(c.productId);
+      if (!p || p.isActive === false) { valid = false; continue; }
+      available = Math.min(available, Math.floor(Number(p.stock || 0) / (Number(c.quantity) || 1)));
+      if (!p.freeShipping) allFree = false;
+    }
+    return { ...b, available: valid && Number.isFinite(available) ? available : 0, freeShipping: allFree };
+  });
+}
+
+export async function adminGetBundleById(id: string) {
+  return toData<any>(await getAdminDb().collection('bundles').doc(id).get());
+}
+
+/** Validate a bundle and rebuild its component snapshot from the live products (never trust the browser). */
+async function normaliseBundle(data: any, partial: boolean) {
+  const d: any = { ...data };
+  for (const k of ['id', 'createdAt', 'updatedAt', 'available', 'freeShipping']) delete d[k];
+  if (!partial || 'name' in d) {
+    if (!String(d.name || '').trim()) throw new ProductError(400, 'Bundle name is required.');
+    d.name = String(d.name).trim();
+  }
+  if (typeof d.nameAr === 'string') d.nameAr = d.nameAr.trim();
+  if (!partial || 'bundlePrice' in d) {
+    d.bundlePrice = Number(d.bundlePrice);
+    if (!(d.bundlePrice > 0)) throw new ProductError(400, 'Bundle price must be greater than zero.');
+  }
+  if (d.comparePrice !== undefined && d.comparePrice !== null && d.comparePrice !== '') d.comparePrice = Number(d.comparePrice) || null;
+  if (!partial || 'items' in d) {
+    const raw: any[] = Array.isArray(d.items) ? d.items : [];
+    if (!raw.length) throw new ProductError(400, 'Add at least one product to the bundle.');
+    const db = getAdminDb();
+    const merged = new Map<string, number>();
+    for (const i of raw) {
+      const q = Math.floor(Number(i.quantity));
+      if (!i.productId || !(q >= 1)) throw new ProductError(400, 'Every bundle item needs a product and a quantity of at least 1.');
+      merged.set(String(i.productId), (merged.get(String(i.productId)) || 0) + q);
+    }
+    const ids = [...merged.keys()];
+    const snaps = await db.getAll(...ids.map(id => db.collection('products').doc(id)));
+    d.items = snaps.map((sn, idx) => {
+      if (!sn.exists) throw new ProductError(400, 'One of the selected products no longer exists.');
+      const p: any = sn.data();
+      return {
+        productId: ids[idx], quantity: merged.get(ids[idx]),
+        productName: p.name, name: p.name, productNameAr: p.nameAr || '', nameAr: p.nameAr || '',
+        price: Number(p.price) || 0, image: p.images?.[0] || '',
+      };
+    });
+  }
+  if (!d.slug && d.name) d.slug = String(d.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return d;
+}
+
+export async function adminCreateBundle(data: any): Promise<string> {
+  const clean = await normaliseBundle(data, false);
+  const ref = await getAdminDb().collection('bundles').add({
+    isActive: true, ...clean,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
   return ref.id;
 }
 
-export async function adminUpdateProduct(id: string, data: Partial<Product>): Promise<void> {
-  const db = getAdminDb();
-  // Re-resolve categoryName when categoryId changes
-  let categoryName = data.categoryName;
-  if (data.categoryId && !categoryName) {
-    try {
-      const catSnap = await db.collection('categories').doc(data.categoryId).get();
-      if (catSnap.exists) categoryName = (catSnap.data() as any).name || '';
-    } catch { /* non-fatal */ }
-  }
-  await db.collection('products').doc(id).update({
-    ...data,
-    ...(categoryName !== undefined ? { categoryName } : {}),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+export async function adminUpdateBundle(id: string, data: any): Promise<void> {
+  const clean = await normaliseBundle(data, true);
+  await getAdminDb().collection('bundles').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
 }
 
-export async function adminDeleteProduct(id: string): Promise<void> {
-  await getAdminDb().collection('products').doc(id).delete();
+export async function adminDeleteBundle(id: string): Promise<void> {
+  await getAdminDb().collection('bundles').doc(id).delete();
 }
 
-// ── ORDERS ───────────────────────────────────────────────────
-export async function adminGetAllOrders(status?: string, page = 1, pageSize = 20): Promise<PaginatedResponse<Order>> {
-  const db = getAdminDb();
-  let q = db.collection('orders').orderBy('createdAt', 'desc') as FirebaseFirestore.Query;
-  if (status && status !== 'all') q = db.collection('orders').where('status', '==', status).orderBy('createdAt', 'desc');
+// ── ALIASES & MISSING EXPORTS ─────────────────────────────────
+// These are used by existing API routes and must stay exported.
 
-  const totalSnap = await q.count().get();
-  const total = totalSnap.data().count;
-
-  const offset = (page - 1) * pageSize;
-  const snap = await q.limit(pageSize + offset).get();
-  const items = snap.docs.slice(offset, offset + pageSize).map(d => toData<Order>(d)!);
-
-  return { items, total, page, pageSize, hasMore: page * pageSize < total };
-}
-
-export async function adminGetOrderById(id: string): Promise<Order | null> {
-  return toData<Order>(await getAdminDb().collection('orders').doc(id).get());
-}
+export const adminGetAllOrders = adminGetOrders;
 
 export async function adminGetOrderByNumber(orderNumber: string): Promise<Order | null> {
   const snap = await getAdminDb().collection('orders').where('orderNumber', '==', orderNumber).limit(1).get();
@@ -186,248 +642,134 @@ export async function adminGetOrderByNumber(orderNumber: string): Promise<Order 
   return toData<Order>(snap.docs[0]);
 }
 
-export async function adminUpdateOrderStatus(orderId: string, status: string, note?: string): Promise<void> {
-  const historyEntry = { status, note: note || '', createdAt: now() };
-  const update: Record<string, unknown> = {
-    status,
-    statusHistory: FieldValue.arrayUnion(historyEntry),
-    updatedAt: FieldValue.serverTimestamp(),
-  };
-  if (status === 'delivered') update.deliveredAt = FieldValue.serverTimestamp();
-  if (status === 'cancelled') update.cancelledAt = FieldValue.serverTimestamp();
-  await getAdminDb().collection('orders').doc(orderId).update(update);
-}
-
-export async function adminUpdateOrderTracking(orderId: string, trackingNumber: string, carrier: string): Promise<void> {
-  await getAdminDb().collection('orders').doc(orderId).update({
-    trackingNumber,
-    shippingCarrier: carrier,
-    status: 'shipped',
-    statusHistory: FieldValue.arrayUnion({
-      status: 'shipped',
-      note: `Shipped via ${carrier}. Tracking: ${trackingNumber}`,
-      createdAt: now(),
-    }),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-}
-
-// ── USERS ────────────────────────────────────────────────────
-export async function adminGetAllUsers(page = 1, pageSize = 20): Promise<PaginatedResponse<User>> {
-  const db = getAdminDb();
-  const q = db.collection('users').orderBy('createdAt', 'desc');
-
-  const totalSnap = await q.count().get();
-  const total = totalSnap.data().count;
-
-  const offset = (page - 1) * pageSize;
-  const snap = await q.limit(pageSize + offset).get();
-  const items = snap.docs.slice(offset, offset + pageSize).map(d => toData<User>(d)!);
-
-  return { items, total, page, pageSize, hasMore: page * pageSize < total };
-}
-
-export async function adminGetUserById(uid: string): Promise<User | null> {
-  return toData<User>(await getAdminDb().collection('users').doc(uid).get());
-}
-
-// ── DASHBOARD STATS ──────────────────────────────────────────
-export async function adminGetDashboardStats(): Promise<DashboardStats> {
-  const db = getAdminDb();
-  const n = new Date();
-  const startThisMonth = new Date(n.getFullYear(), n.getMonth(), 1).toISOString();
-  const startLastMonth = new Date(n.getFullYear(), n.getMonth() - 1, 1).toISOString();
-  const endLastMonth   = startThisMonth;
-  const ago14days      = new Date(n.getTime() - 14 * 864e5).toISOString();
-  const ago1year       = new Date(n.getFullYear() - 1, n.getMonth(), n.getDate()).toISOString();
-
-  const [totalOrders, totalProducts, totalCustomers,
-         recentSnap, thisMonthSnap, lastMonthSnap, last14Snap, yearSnap] = await Promise.all([
-    db.collection('orders').count().get(),
-    db.collection('products').where('isActive','==',true).count().get(),
-    db.collection('users').where('role','==','customer').count().get(),
-    db.collection('orders').orderBy('createdAt','desc').limit(10).get(),
-    db.collection('orders').where('createdAt','>=',startThisMonth).orderBy('createdAt','desc').get(),
-    db.collection('orders').where('createdAt','>=',startLastMonth).where('createdAt','<',endLastMonth).orderBy('createdAt','desc').get(),
-    db.collection('orders').where('createdAt','>=',ago14days).orderBy('createdAt','desc').get(),
-    db.collection('orders').where('createdAt','>=',ago1year).orderBy('createdAt','desc').get(),
-  ]);
-
-  const recentOrders    = toList<Order>(recentSnap);
-  const thisMonthOrders = toList<Order>(thisMonthSnap);
-  const lastMonthOrders = toList<Order>(lastMonthSnap);
-  const last14Orders    = toList<Order>(last14Snap);
-  const yearOrders      = toList<Order>(yearSnap);
-
-  const paid = (list: Order[]) => list.filter(o => o.paymentStatus === 'paid').reduce((s,o) => s + o.total, 0);
-  const thisRevenue = paid(thisMonthOrders);
-  const lastRevenue = paid(lastMonthOrders);
-  const totalRevenue = paid(yearOrders);
-
-  const revenueChange = lastRevenue ? ((thisRevenue - lastRevenue) / lastRevenue) * 100 : 100;
-  const ordersChange  = lastMonthOrders.length ? ((thisMonthOrders.length - lastMonthOrders.length) / lastMonthOrders.length) * 100 : 100;
-
-  const ordersByStatus: Record<string, number> = {};
-  for (const o of last14Orders) ordersByStatus[o.status] = (ordersByStatus[o.status] || 0) + 1;
-
-  const revenueByDay = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() - (13 - i));
-    const dateStr = d.toISOString().split('T')[0];
-    const dayOrders = last14Orders.filter(o => o.createdAt?.startsWith(dateStr));
-    return { date: dateStr, revenue: paid(dayOrders), orders: dayOrders.length };
-  });
-
-  return {
-    totalRevenue,
-    totalOrders:    totalOrders.data().count,
-    totalProducts:  totalProducts.data().count,
-    totalCustomers: totalCustomers.data().count,
-    revenueChange:  Math.round(revenueChange * 10) / 10,
-    ordersChange:   Math.round(ordersChange  * 10) / 10,
-    recentOrders,
-    topProducts: [],
-    ordersByStatus,
-    revenueByDay,
-  };
-}
-
-// ── COUPONS ──────────────────────────────────────────────────
-export async function adminValidateCoupon(code: string, orderAmount: number) {
-  const snap = await getAdminDb().collection('coupons').where('code', '==', code.toUpperCase()).limit(1).get();
-  if (snap.empty) return { valid: false, error: 'Invalid coupon code' };
-  const coupon = toData<Coupon>(snap.docs[0])!;
-  if (!coupon.isActive)                                         return { valid: false, error: 'Coupon is inactive' };
-  if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) return { valid: false, error: 'Coupon has expired' };
-  if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit)  return { valid: false, error: 'Coupon usage limit reached' };
-  if (orderAmount < coupon.minOrderAmount) return { valid: false, error: `Minimum order amount is KWD ${coupon.minOrderAmount.toFixed(3)}` };
-  let discount = coupon.type === 'percentage' ? (orderAmount * coupon.value) / 100 : coupon.value;
-  if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
-  return { valid: true, coupon, discount: Math.round(discount * 1000) / 1000 };
-}
-
-// ── RETURNS ──────────────────────────────────────────────────
-export async function adminGetAllReturns(): Promise<ReturnRequest[]> {
-  return toList<ReturnRequest>(
-    await getAdminDb().collection('returns').orderBy('createdAt', 'desc').get()
-  );
-}
-
-// ── SEARCH ───────────────────────────────────────────────────
-export async function adminSearchProducts(term: string, max = 10): Promise<Product[]> {
-  const snap = await getAdminDb()
-    .collection('products')
-    .where('isActive', '==', true)
-    .orderBy('name')
-    .limit(150)
-    .get();
-  const s = term.toLowerCase();
-  return snap.docs
-    .map(d => toData<Product>(d)!)
-    .filter(p => p.name.toLowerCase().includes(s) || p.sku?.toLowerCase().includes(s) || p.tags?.some(t => t.toLowerCase().includes(s)))
-    .slice(0, max);
-}
-
-// ── BANNERS ──────────────────────────────────────────────────
-export async function adminGetBanners(): Promise<Banner[]> {
-  return toList<Banner>(
-    await getAdminDb().collection('banners').where('isActive','==',true).orderBy('sortOrder','asc').get()
-  );
-}
-
-// ── REVIEWS ──────────────────────────────────────────────────
-export async function adminGetProductReviews(productId: string): Promise<Review[]> {
-  const snap = await getAdminDb().collection('reviews')
-    .where('productId','==',productId)
-    .where('isApproved','==',true)
-    .orderBy('createdAt','desc')
-    .get();
-  return toList<Review>(snap);
-}
-
-export async function adminAddReview(data: Omit<Review,'id'>): Promise<string> {
-  const db  = getAdminDb();
-  const ref = await db.collection('reviews').add({ ...data, createdAt: FieldValue.serverTimestamp() });
-  // Incremental avg — no full refetch
-  await db.runTransaction(async tx => {
-    const pRef  = db.collection('products').doc(data.productId);
-    const pSnap = await tx.get(pRef);
-    if (!pSnap.exists) return;
-    const { avgRating = 0, totalReviews = 0 } = pSnap.data()!;
-    const newTotal = totalReviews + 1;
-    const newAvg   = Math.round(((avgRating * totalReviews + data.rating) / newTotal) * 10) / 10;
-    tx.update(pRef, { avgRating: newAvg, totalReviews: newTotal });
-  });
-  return ref.id;
-}
-
-// ── USER / PROFILE ────────────────────────────────────────────
-export async function adminUpdateUser(uid: string, data: Partial<User>): Promise<void> {
-  await getAdminDb().collection('users').doc(uid).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
-}
-
-// ── ORDERS (extra) ────────────────────────────────────────────
-export async function adminCreateReturnRequest(data: Omit<ReturnRequest,'id'>): Promise<string> {
-  const ref = await getAdminDb().collection('returns').add({
-    ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
-  });
-  await getAdminDb().collection('orders').doc(data.orderId).update({ status: 'return_requested', updatedAt: FieldValue.serverTimestamp() });
-  return ref.id;
-}
-
-export async function adminGetUserReturns(userId: string): Promise<ReturnRequest[]> {
-  return toList<ReturnRequest>(
-    await getAdminDb().collection('returns').where('userId','==',userId).orderBy('createdAt','desc').get()
-  );
-}
-
-export async function adminUpdateReturnStatus(id: string, status: string, note?: string): Promise<void> {
-  await getAdminDb().collection('returns').doc(id).update({
-    status, adminNote: note || '', updatedAt: FieldValue.serverTimestamp(),
-  });
-}
-
-export async function adminUpdateOrder(id: string, data: Record<string, unknown>): Promise<void> {
+export async function adminUpdateOrder(id: string, data: Partial<Order>): Promise<void> {
   await getAdminDb().collection('orders').doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
 }
 
-// ── COUPONS (admin CRUD) ──────────────────────────────────────
-export async function adminGetAllCoupons(): Promise<Coupon[]> {
-  return toList<Coupon>(await getAdminDb().collection('coupons').orderBy('createdAt','desc').get());
+export async function adminUpdateUser(id: string, data: Partial<User>): Promise<void> {
+  await getAdminDb().collection('users').doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
 }
 
-export async function adminCreateCoupon(data: Omit<Coupon,'id'|'usedCount'|'createdAt'>): Promise<string> {
+export const adminGetAllUsers = (filters: Parameters<typeof adminGetUsers>[0] = {}) => adminGetUsers(filters);
+
+export async function adminSearchProducts(query: string, limit = 10): Promise<Product[]> {
+  const result = await adminGetProducts({ search: query, pageSize: limit, admin: true });
+  return result.items;
+}
+
+// ── BANNERS (full CRUD) ───────────────────────────────────────
+
+// ── COUPONS (full CRUD) ───────────────────────────────────────
+export async function adminGetAllCoupons(): Promise<Coupon[]> {
+  const list = toList<Coupon>(await getAdminDb().collection('coupons').get());
+  const t = (v: any) => (v ? new Date(v as any).getTime() || 0 : 0);
+  return list.sort((a, b) => t(b.createdAt) - t(a.createdAt));
+}
+
+async function normaliseCoupon(data: any, partial: boolean, selfId?: string) {
+  const d: any = { ...data };
+  for (const k of ['id', 'createdAt', 'updatedAt', 'usedCount']) delete d[k];
+  if (!partial || 'code' in d) {
+    d.code = String(d.code || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!/^[A-Z0-9_-]{3,30}$/.test(d.code)) throw new ProductError(400, 'Coupon code must be 3-30 letters, numbers, "-" or "_".');
+    const dup = await getAdminDb().collection('coupons').where('code', '==', d.code).limit(3).get();
+    if (dup.docs.some(x => x.id !== selfId)) throw new ProductError(409, `The code "${d.code}" already exists.`);
+  }
+  if (!partial || 'type' in d) { if (!['percentage', 'fixed'].includes(d.type)) throw new ProductError(400, 'Choose a coupon type.'); }
+  if (!partial || 'value' in d) {
+    d.value = Number(d.value);
+    if (!(d.value > 0)) throw new ProductError(400, 'Discount value must be greater than zero.');
+    if (d.type === 'percentage' && d.value > 100) throw new ProductError(400, 'A percentage discount cannot exceed 100.');
+  }
+  for (const k of ['minOrderAmount', 'maxDiscount', 'usageLimit']) if (k in d) {
+    if (d[k] === '' || d[k] === null || d[k] === undefined) { d[k] = k === 'minOrderAmount' ? 0 : null; continue; }
+    d[k] = Number(d[k]);
+    if (!(d[k] >= 0)) throw new ProductError(400, `${k} cannot be negative.`);
+  }
+  if ('expiresAt' in d) {
+    if (!d.expiresAt) d.expiresAt = null;
+    else {
+      // a plain date means "valid through the end of that day" in Kuwait time (UTC+3)
+      const raw = String(d.expiresAt);
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T20:59:59.999Z` : raw;
+      if (isNaN(new Date(iso).getTime())) throw new ProductError(400, 'Invalid expiry date.');
+      d.expiresAt = iso;
+    }
+  }
+  if ('isActive' in d) d.isActive = !!d.isActive;
+  return d;
+}
+
+export async function adminCreateCoupon(data: any): Promise<string> {
+  const clean = await normaliseCoupon(data, false);
   const ref = await getAdminDb().collection('coupons').add({
-    ...data, usedCount: 0, createdAt: FieldValue.serverTimestamp(),
+    isActive: true, minOrderAmount: 0, ...clean, usedCount: 0, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
   return ref.id;
 }
 
-export async function adminUpdateCoupon(id: string, data: Partial<Coupon>): Promise<void> {
-  await getAdminDb().collection('coupons').doc(id).update(data);
+export async function adminUpdateCoupon(id: string, data: any): Promise<void> {
+  const clean = await normaliseCoupon(data, true, id);
+  await getAdminDb().collection('coupons').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
 }
 
 export async function adminDeleteCoupon(id: string): Promise<void> {
   await getAdminDb().collection('coupons').doc(id).delete();
 }
 
-// ── BANNERS (admin CRUD) ──────────────────────────────────────
-export async function adminGetAllBanners(): Promise<Banner[]> {
-  return toList<Banner>(
-    await getAdminDb().collection('banners').orderBy('sortOrder','asc').get()
-  );
+// ── REVIEWS ───────────────────────────────────────────────────
+export async function adminGetProductReviews(productId: string): Promise<Review[]> {
+  const snap = await getAdminDb().collection('reviews')
+    .where('productId', '==', productId).orderBy('createdAt', 'desc').get();
+  return toList<Review>(snap);
 }
 
-export async function adminCreateBanner(data: Omit<Banner,'id'|'createdAt'>): Promise<string> {
-  const ref = await getAdminDb().collection('banners').add({
-    ...data, createdAt: FieldValue.serverTimestamp(),
+export async function adminAddReview(data: Omit<Review, 'id' | 'createdAt'>): Promise<string> {
+  const db  = getAdminDb();
+  const ref = await db.collection('reviews').add({ ...data, createdAt: FieldValue.serverTimestamp() });
+  // Update product avg rating
+  const allReviews = await db.collection('reviews').where('productId', '==', data.productId).get();
+  const ratings    = allReviews.docs.map(d => (d.data().rating as number) || 0);
+  const avg        = ratings.reduce((s, r) => s + r, 0) / ratings.length;
+  await db.collection('products').doc(data.productId).update({
+    avgRating: Math.round(avg * 10) / 10,
+    totalReviews: ratings.length,
   });
   return ref.id;
 }
 
-export async function adminUpdateBanner(id: string, data: Partial<Banner>): Promise<void> {
-  await getAdminDb().collection('banners').doc(id).update(data);
+// ── RETURN REQUESTS (full CRUD) ───────────────────────────────
+export const adminGetAllReturns = (filters: Parameters<typeof adminGetReturnRequests>[0] = {}) =>
+  adminGetReturnRequests(filters);
+
+export async function adminGetUserReturns(userId: string): Promise<ReturnRequest[]> {
+  const snap = await getAdminDb().collection('returnRequests').where('userId', '==', userId).get();
+  const t = (v: any) => (v ? new Date(v as any).getTime() || 0 : 0);
+  return toList<ReturnRequest>(snap).sort((a, b) => t(b.createdAt) - t(a.createdAt));
 }
 
-export async function adminDeleteBanner(id: string): Promise<void> {
-  await getAdminDb().collection('banners').doc(id).delete();
+export async function adminCreateReturnRequest(data: Omit<ReturnRequest, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const ref = await getAdminDb().collection('returnRequests').add({
+    ...data, status: 'pending',
+    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function adminUpdateReturnStatus(id: string, status: string, note?: string): Promise<void> {
+  await getAdminDb().collection('returnRequests').doc(id).update({
+    status, note: note || '', updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/** Most common brands among active products (for the home page brand strip). */
+export async function getTopBrands(limit = 12): Promise<string[]> {
+  const snap = await getAdminDb().collection('products').select('brand', 'isActive').get();
+  const counts = new Map<string, number>();
+  snap.docs.forEach(d => {
+    const x = d.data() as any;
+    const b = String(x.brand || '').trim();
+    if (b && x.isActive !== false) counts.set(b, (counts.get(b) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([b]) => b);
 }

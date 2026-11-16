@@ -21,37 +21,40 @@ export default function AdminOrdersPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [updatingId, setUpdatingId] = useState<string|null>(null);
+  const [q, setQ] = useState('');   // debounced search sent to the server
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page) });
       if (status !== 'all') params.set('status', status);
-      const res = await fetch(`/api/orders?${params}`);
-      const data = await res.json();
+      if (q) params.set('q', q);
+      const res = await fetch(`/api/orders?${params}`, { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Failed to load orders (${res.status})`);
       setOrders(data.items || []);
       setTotal(data.total || 0);
-    } catch { toast.error('Failed to load orders'); }
+    } catch (e: any) { toast.error(e.message || 'Failed to load orders'); }
     setLoading(false);
-  }, [status, page]);
+  }, [status, page, q]);
+
+  useEffect(() => { const t = setTimeout(() => { setQ(search.trim()); setPage(1); }, 350); return () => clearTimeout(t); }, [search]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   const updateStatus = async (orderId: string, newStatus: string) => {
     setUpdatingId(orderId);
     try {
-      await fetch(`/api/orders/${orderId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: newStatus }) });
-      toast.success('Status updated');
+      const res = await fetch(`/api/orders/${orderId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: newStatus }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) toast.error(d.error || `Update failed (${res.status})`);
+      else { toast.success(newStatus === 'cancelled' ? 'Order cancelled and stock restored' : 'Status updated'); }
       fetchOrders();
-    } catch { toast.error('Update failed'); }
+    } catch { toast.error('Network error - status not changed'); }
     setUpdatingId(null);
   };
 
-  const filtered = search ? orders.filter(o =>
-    o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-    o.userName.toLowerCase().includes(search.toLowerCase()) ||
-    o.userEmail.toLowerCase().includes(search.toLowerCase())
-  ) : orders;
+  const filtered = orders; // search is performed on the server across all orders
 
   const totalPages = Math.ceil(total / 20);
 

@@ -43,6 +43,8 @@ export interface ShippingAddress {
 export interface Category {
   id: string;
   name: string;
+  nameAr?: string;          // Arabic name (optional; falls back to English)
+  descriptionAr?: string;
   slug: string;
   description?: string;
   image?: string;
@@ -60,10 +62,21 @@ export interface Category {
   updatedAt: string;
 }
 
+/** An extra way to sell a product (box of 12, carton...). `factor` = base units per unit; `price` is per unit. */
+export interface ProductUnit {
+  id: string;
+  name: string;
+  nameAr?: string;
+  factor: number;
+  price: number;
+}
+
 export interface ProductVariant {
   id: string;
   name: string;
+  nameAr?: string;
   value: string;
+  valueAr?: string;
   price?: number;
   stock: number;
   sku?: string;
@@ -72,6 +85,10 @@ export interface ProductVariant {
 export interface Product {
   id: string;
   name: string;
+  nameAr?: string;
+  descriptionAr?: string;
+  shortDescriptionAr?: string;
+  categoryNameAr?: string;
   slug: string;
   description: string;
   shortDescription?: string;
@@ -104,8 +121,12 @@ export interface Product {
   aiTags?: string[];
   unit?: string;
   unitQty?: number;
+  uomId?: string;
   uomName?: string;
   uomAbbr?: string;
+  uomNameAr?: string;
+  uomAbbrAr?: string;
+  units?: ProductUnit[];
   createdAt: string;
   updatedAt: string;
 }
@@ -113,6 +134,8 @@ export interface Product {
 export interface OrderItem {
   productId: string;
   productName: string;
+  productNameAr?: string;
+  variantNameAr?: string;
   productSku: string;
   variantId?: string;
   variantName?: string;
@@ -121,6 +144,10 @@ export interface OrderItem {
   total: number;
   image?: string;
   isReturnable?: boolean;
+  freeShipping?: boolean;
+  categoryId?: string;
+  categoryName?: string;
+  bundleItems?: Array<{ productId: string; quantity: number }>;
 }
 
 export interface Order {
@@ -201,6 +228,8 @@ export interface Coupon {
 export interface Banner {
   id: string;
   title: string;
+  titleAr?: string;
+  subtitleAr?: string;
   subtitle?: string;
   image: string;
   mobileImage?: string;
@@ -213,6 +242,8 @@ export interface Banner {
 export interface Offer {
   id: string;
   title: string;
+  titleAr?: string;
+  descriptionAr?: string;
   description?: string;
   image?: string;
   link?: string;
@@ -251,6 +282,7 @@ export interface ProductFilters {
   maxPrice?: number;
   brand?: string;
   inStock?: boolean;
+  stockStatus?: 'in' | 'out' | 'low';
   isFeatured?: boolean;
   isNewArrival?: boolean;
   isOnSale?: boolean;
@@ -276,7 +308,12 @@ export interface DashboardStats {
   revenueChange: number;
   ordersChange: number;
   recentOrders: Order[];
-  topProducts: Product[];
+  topProducts: Array<{ id: string; name: string; revenue: number; units: number; image?: string }>;
+  categoryPerformance?: Array<{ name: string; revenue: number; units: number }>;
+  deadStock?: Array<{ id: string; name: string; stock: number; price?: number; image?: string }>;
+  topCustomers?: Array<{ id: string; name: string; email?: string; totalSpent: number; orderCount: number }>;
+  warnings?: string[];
+  avgOrderValue?: number;
   ordersByStatus: Record<string, number>;
   revenueByDay: Array<{ date: string; revenue: number; orders: number }>;
 }
@@ -321,6 +358,7 @@ export interface CartItem {
   stock: number;
   isReturnable?: boolean;
   freeShipping?: boolean;
+  categoryId?: string;
 }
 
 // Product recommendation with reason
@@ -351,6 +389,8 @@ export interface FlashDeal {
 export interface UOM {
   id: string;
   name: string;
+  nameAr?: string;
+  abbreviationAr?: string;
   abbreviation: string;
   isActive: boolean;
   createdAt: string;
@@ -360,6 +400,7 @@ export interface UOM {
 export interface ShippingZone {
   id: string;
   name: string;
+  nameAr?: string;
   governorates: string[];
   baseRate: number;
   freeShippingThreshold?: number;

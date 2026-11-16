@@ -5,7 +5,10 @@ const nextConfig = {
   // Tell Next.js to bundle firebase-admin and grpc modules server-side only
   // This eliminates the protobufjs/grpc webpack warning
   experimental: {
+    // the invoice PDF reads its Arabic font from disk at runtime
+    outputFileTracingIncludes: { '/api/orders/[id]/invoice': ['./assets/fonts/**/*'] },
     serverComponentsExternalPackages: [
+      'pdfkit',
       'firebase-admin',
       '@firebase/firestore',
       '@grpc/grpc-js',

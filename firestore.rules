@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// Florida United Kuwait - Firestore rules
+//
+// The whole app reads and writes Firestore on the SERVER through the Firebase Admin SDK
+// (API routes, NextAuth, Stripe webhook, cron). The Admin SDK bypasses these rules, so the
+// browser never needs direct database access. Prices, stock, orders, users, coupons, flash
+// deals, order locks, order numbers, stats and password-reset tokens must NOT be readable or
+// writable from a browser, so everything is denied to client SDKs.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
   freeShippingThreshold: SITE_CONFIG.freeShippingThreshold,
   defaultShippingCost:   SITE_CONFIG.defaultShippingCost,
   taxRate:               SITE_CONFIG.taxRate,
+  usdRate:               3.25,
   defaultReturnDays:     SITE_CONFIG.defaultReturnDays,
   metaTitle:             SITE_CONFIG.metaTitle,
   metaDesc:              SITE_CONFIG.metaDesc,
@@ -34,7 +35,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     fetch('/api/admin/settings')
       .then(r => r.json())
-      .then(d => { if (!d.error) setSettings({ ...DEFAULT_SETTINGS, ...d }); })
+      .then(d => { if (!d.error) setSettings({ ...DEFAULT_SETTINGS, ...d }); else toast.error(d.error); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -50,9 +51,9 @@ export default function AdminSettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       });
-      const data = await res.json();
-      if (data.success) {
-        toast.success('✅ Settings saved — changes are live across the site!');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        toast.success('Settings saved. Shipping and delivery settings apply to checkout immediately.');
       } else {
         toast.error(data.error || 'Failed to save');
       }
@@ -147,7 +148,7 @@ export default function AdminSettingsPage() {
 
         <Section icon={Truck} title="Shipping & Orders">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700 mb-2">
-            🚚 Cart totals at or above the threshold get free shipping. You can also mark individual products as
+            Cart totals at or above the threshold get free shipping. You can also mark individual products as
             <strong> "Always Free Shipping"</strong> in the product form — they ship free regardless of cart total.
           </div>
           <div className="grid sm:grid-cols-3 gap-4">
@@ -162,7 +163,10 @@ export default function AdminSettingsPage() {
 
         <Section icon={CreditCard} title="Payment">
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700">
-            ⚠️ TAP and Stripe API keys are set in your <code className="bg-amber-100 px-1 rounded">.env</code> file for security.
+            Stripe keys (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) are set in your <code className="bg-amber-100 px-1 rounded">.env</code> file for security.
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <NumField label="USD per 1 KWD" value={settings.usdRate} onChange={v => update('usdRate', v)} step={0.001} hint="Card payments are charged in USD: order total (KWD) x this rate" />
           </div>
           <div>
             <label className="label">Payment Mode (reminder label)</label>

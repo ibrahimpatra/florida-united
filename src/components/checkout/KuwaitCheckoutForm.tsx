@@ -1,267 +1,265 @@
 'use client';
-// Kuwait-specific checkout form — governorates, +965 phone, TAP + COD
-import { useState, useRef } from 'react';
+// Kuwait checkout form: address book picker, server-priced totals, double-submit-proof.
+import { useStoreSettings } from '@/lib/useStoreSettings';
+import { useState, useRef, useEffect, ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { CreditCard, Banknote, MapPin, User, ChevronDown, Loader2, Lock, AlertTriangle } from 'lucide-react';
-import { formatPrice } from '@/lib/utils';
+import { CreditCard, Banknote, MapPin, User, ChevronDown, Loader2, Lock, AlertTriangle, Plus } from 'lucide-react';
+import { formatPrice, govLabel } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import { KUWAIT_GOVERNORATES } from '@/types';
-import type { ShippingOption } from '@/lib/shipping';
+import { useCartStore } from '@/store/cartStore';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { CartItem } from '@/types';
 
 interface FormData {
   firstName: string; lastName: string; phone: string; email: string;
-  block: string; street: string; building: string; floor?: string;
-  apartment?: string; address1: string; governorate: string; city: string; notes?: string;
+  block: string; street: string; building: string; floor?: string; apartment?: string;
+  city: string; notes?: string; saveAddress?: boolean;
 }
 interface Props {
-  items: CartItem[]; subtotal: number; discount: number;
-  shippingOption: ShippingOption | null; couponCode?: string; userEmail?: string;
+  items: CartItem[];
+  governorate: string; onGovernorateChange: (g: string) => void;
+  rateId?: string; quoteReady: boolean; codFee: number; total: number;
+  couponCode?: string; userEmail?: string; shippingSlot: ReactNode;
 }
-type PaymentMethod = 'tap' | 'cod';
+type Pay = 'card' | 'cod';
 
-function genIdemKey() { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
+const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-async function safeJson(res: Response): Promise<Record<string, any> | null> {
-  const ct = res.headers.get('content-type') || '';
-  if (!ct.includes('application/json')) return null;
+async function readJson(res: Response): Promise<any | null> {
+  if (!(res.headers.get('content-type') || '').includes('application/json')) return null;
   try { return await res.json(); } catch { return null; }
 }
 
-export function KuwaitCheckoutForm({ items, subtotal, discount, shippingOption, couponCode, userEmail }: Props) {
+export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, rateId, quoteReady, codFee, total, couponCode, userEmail, shippingSlot }: Props) {
   const router = useRouter();
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('tap');
-  const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  // One key per checkout session — prevents duplicate orders on multi-click or retry
-  const idemKey = useRef(genIdemKey());
+  const { t, isArabic } = useLanguage();
+  const { clearCart, removeCoupon } = useCartStore();
+  const [pay, setPay] = useState<Pay>('cod');
+  const settings = useStoreSettings();
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [govError, setGovError] = useState(false);
+  const [saved, setSaved] = useState<any[]>([]);
+  const [pickedId, setPickedId] = useState<string>('new');
+  const inFlight = useRef(false);          // synchronous guard — state updates are async and a fast double-click beats them
+  const idemKey = useRef(newKey());         // one key per attempt; regenerated after any failed attempt
 
-  const shippingCost = shippingOption?.price ?? 0;
-  const total = subtotal - discount + shippingCost;
-
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({
-    defaultValues: { governorate: KUWAIT_GOVERNORATES[0], email: userEmail || '' },
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
+    defaultValues: { email: userEmail || '', saveAddress: true },
   });
 
-  const block = watch('block'); const street = watch('street'); const building = watch('building');
-  const buildAddress1 = () => `Block ${block}, Street ${street}, Building ${building}`;
+  // ── address book ──
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/account/addresses').then(r => (r.ok ? r.json() : [])).then((list: any[]) => {
+      if (!alive || !Array.isArray(list) || !list.length) return;
+      setSaved(list);
+      const def = list.find(a => a.isDefault) || list[0];
+      applyAddress(def);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onSubmit = async (data: FormData) => {
-    if (loading || submitted) return; // Hard guard against double-submit
-    setLoading(true);
+  function applyAddress(a: any) {
+    setPickedId(a.id);
+    const phone = String(a.phone || '').replace(/\D/g, '').replace(/^965/, '');
+    reset({
+      firstName: a.firstName || '', lastName: a.lastName || '', phone, email: watch('email') || userEmail || '',
+      block: a.block || '', street: a.street || '', building: a.building || '', floor: a.floor || '',
+      apartment: a.apartment || '', city: a.city || '', notes: watch('notes') || '', saveAddress: false,
+    });
+    const g = (KUWAIT_GOVERNORATES as readonly string[]).find(x => x === a.governorate) || a.governorate || '';
+    onGovernorateChange(g); setGovError(false);
+  }
+  function startNew() {
+    setPickedId('new');
+    reset({ email: watch('email') || userEmail || '', saveAddress: true });
+    onGovernorateChange('');
+  }
+
+  const onSubmit = async (d: FormData) => {
+    if (inFlight.current || done) return;
+    if (!governorate) { setGovError(true); toast.error(t('checkout.selectGovernorate')); return; }
+    if (!quoteReady || !rateId) { toast.error(t('checkout.quoteFailed')); return; }
+    inFlight.current = true; setBusy(true);
 
     const shippingAddress = {
-      id: 'checkout', label: 'Delivery Address',
-      firstName: data.firstName, lastName: data.lastName,
-      phone: data.phone.startsWith('+') ? data.phone : `+965${data.phone}`,
-      address1: buildAddress1(), block: data.block, street: data.street,
-      building: data.building, floor: data.floor, apartment: data.apartment,
-      city: data.city || data.governorate, governorate: data.governorate,
-      country: 'Kuwait', isDefault: false,
+      firstName: d.firstName, lastName: d.lastName, phone: d.phone, city: d.city, governorate,
+      block: d.block, street: d.street, building: d.building, floor: d.floor || '', apartment: d.apartment || '',
     };
-
     const payload = {
-      idempotencyKey: idemKey.current,
-      items: items.map(i => ({
-        productId: i.productId, productName: i.name, productSku: i.sku,
-        variantName: i.variantName, price: i.price, quantity: i.quantity,
-        total: i.price * i.quantity, image: i.image, isReturnable: i.isReturnable,
-      })),
-      shippingAddress, subtotal, discount, shippingCost, tax: 0, total,
-      couponCode: couponCode || '', notes: data.notes || '', currency: 'KWD',
+      idempotencyKey: idemKey.current, paymentMethod: pay, shippingRateId: rateId, contactEmail: d.email,
+      items: items.map(i => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId, variantName: i.variantName })),
+      shippingAddress, couponCode: couponCode || '', notes: d.notes || '',
     };
 
+    let orderCreated = false;
+    // True when we cannot tell whether the server saved the order (connection dropped / unreadable answer).
+    // Then the SAME idempotency key is reused on retry, so a second click can never create a second order.
+    let unknownOutcome = false;
     try {
-      if (paymentMethod === 'cod') {
-        const res = await fetch('/api/orders/cod', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-        });
-        const result = await safeJson(res);
-        if (!res.ok) throw new Error(result?.error || `Server error (${res.status}). Please try again.`);
-        if (!result?.orderId) throw new Error('Unexpected server response. Check your Orders page before retrying.');
-
-        setSubmitted(true); // Never allow resubmit after success
-        toast.success('Order placed! Cash on Delivery confirmed.');
-        router.push(`/checkout/success?orderId=${result.orderId}`);
-
-      } else {
-        const orderRes = await fetch('/api/orders/cod', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, paymentMethod: 'tap', paymentStatus: 'pending' }),
-        });
-        const orderResult = await safeJson(orderRes);
-        if (!orderRes.ok) throw new Error(orderResult?.error || `Server error (${orderRes.status}).`);
-        if (!orderResult?.orderId) throw new Error('Unexpected server response. Check your Orders page before retrying.');
-
-        setSubmitted(true);
-
-        const tapRes = await fetch('/api/tap/checkout', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ total, orderId: orderResult.orderId, orderNumber: orderResult.orderNumber, shippingAddress }),
-        });
-        const tapData = await safeJson(tapRes);
-        if (!tapRes.ok) throw new Error(tapData?.error || 'TAP payment setup failed. Order was created — check your Orders page.');
-        window.location.href = tapData!.redirectUrl;
+      let res: Response;
+      try { res = await fetch('/api/orders/cod', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+      catch { unknownOutcome = true; throw new Error(t('c2_chk.failGeneric')); }
+      const r = await readJson(res);
+      if (res.ok && !r?.orderId) unknownOutcome = true;
+      if (!res.ok || !r?.orderId) {
+        if (r?.code === 'BAD_COUPON') removeCoupon();
+        const msg = r?.error || (res.status >= 500 || !r
+          ? t('c2_chk.failGeneric')
+          : t('c2_chk.failShort'));
+        throw new Error(msg);
       }
-    } catch (err: any) {
-      if (!submitted) setLoading(false); // Only re-enable button if we're sure order wasn't placed
-      toast.error(err.message || 'Something went wrong. If you already placed the order, check your Orders page.');
+      orderCreated = true;
+
+      // optionally remember the address (fire-and-forget; never blocks the order)
+      if (d.saveAddress && pickedId === 'new') {
+        fetch('/api/account/addresses', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...shippingAddress, label: 'Home', country: 'Kuwait', isDefault: saved.length === 0 }) }).catch(() => {});
+      }
+
+      if (pay === 'cod') {
+        setDone(true); clearCart(); removeCoupon();
+        toast.success(t('checkout.orderPlaced'));
+        router.push(`/checkout/success?orderId=${r.orderId}&n=${encodeURIComponent(r.orderNumber)}&cod=1`);
+        return;
+      }
+
+      // Stripe: the USD amount is computed on the server from the saved order.
+      const tapRes = await fetch('/api/stripe/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: r.orderId }) });
+      const tap = await readJson(tapRes);
+      if (!tapRes.ok || !tap?.url) {
+        // Payment could not start → cancel the unpaid order so no ghost order / stock hold remains.
+        await fetch(`/api/orders/${r.orderId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled', note: 'Payment could not be started' }) }).catch(() => {});
+        orderCreated = false;
+        throw new Error(tap?.error || t('c2_chk.cardFail'));
+      }
+      setDone(true); clearCart(); removeCoupon();
+      window.location.href = tap.url;
+    } catch (e: any) {
+      if (!unknownOutcome) idemKey.current = newKey(); // a definite failure must not poison the next attempt
+      inFlight.current = false; setBusy(false);
+      toast.error(e?.message || t('c2_chk.wrong'), { duration: 7000 });
+      if (orderCreated) toast(t('checkout.checkOrders'), { duration: 9000 });
     }
   };
 
+  const L = ({ k, req }: { k: string; req?: boolean }) => <label className="text-xs text-gray-500 font-semibold mb-1 block">{t(k)}{req ? ' *' : ''}</label>;
+  const E = ({ m }: { m?: string }) => (m ? <p className="text-red-500 text-xs mt-1">{m}</p> : null);
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-      {/* Contact Info */}
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-7" noValidate>
+      {saved.length > 0 && (
+        <section>
+          <h3 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-600" />{t('checkout.savedAddresses')}</h3>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {saved.map(a => (
+              <button key={a.id} type="button" onClick={() => applyAddress(a)}
+                className={`flex-shrink-0 text-start rounded-xl border-2 px-3 py-2 text-xs min-w-[170px] ${pickedId === a.id ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
+                <div className="font-bold text-gray-800">{a.label || t('c2_chk.addrLabel')} {a.isDefault && <span className="text-brand-600">({t('c2_chk.default')})</span>}</div>
+                <div className="text-gray-500 truncate">{a.firstName} {a.lastName}</div>
+                <div className="text-gray-400 truncate">{a.city}, {govLabel(a.governorate, isArabic)}</div>
+              </button>
+            ))}
+            <button type="button" onClick={startNew}
+              className={`flex-shrink-0 rounded-xl border-2 border-dashed px-3 py-2 text-xs flex items-center gap-1 ${pickedId === 'new' ? 'border-brand-500 text-brand-700' : 'border-gray-300 text-gray-500'}`}>
+              <Plus className="w-3.5 h-3.5" />{t('checkout.newAddress')}
+            </button>
+          </div>
+        </section>
+      )}
+
       <section>
-        <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <User className="w-4 h-4 text-brand-600" /> Contact Information
-        </h3>
+        <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><User className="w-4 h-4 text-brand-600" />{t('checkout.contactInfo')}</h3>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <input {...register('firstName', { required: 'Required' })} placeholder="First Name" className="input-field" />
-            {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName.message}</p>}
-          </div>
-          <div>
-            <input {...register('lastName', { required: 'Required' })} placeholder="Last Name" className="input-field" />
-            {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName.message}</p>}
-          </div>
+          <div><input {...register('firstName', { required: t('checkout.required') })} placeholder={t('checkout.firstName')} className="input-field" autoComplete="given-name" /><E m={errors.firstName?.message} /></div>
+          <div><input {...register('lastName')} placeholder={t('checkout.lastName')} className="input-field" autoComplete="family-name" /></div>
           <div className="col-span-2">
-            <input {...register('email', { required: 'Required', pattern: { value: /\S+@\S+\.\S+/, message: 'Invalid email' } })}
-              type="email" placeholder="Email address" className="input-field" />
-            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
+            <input {...register('email', { required: t('checkout.required'), pattern: { value: /\S+@\S+\.\S+/, message: t('checkout.invalidEmail') } })}
+              type="email" placeholder={t('checkout.email')} className="input-field" dir="ltr" autoComplete="email" /><E m={errors.email?.message} />
           </div>
           <div className="col-span-2 relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-semibold">+965</span>
-            <input {...register('phone', {
-              required: 'Required',
-              pattern: { value: /^[569]\d{7}$/, message: 'Enter valid Kuwait number (8 digits starting with 5,6,9)' }
-            })} placeholder="5x xxx xxxx" className="input-field pl-14" maxLength={8} />
-            {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone.message}</p>}
+            <span className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-semibold" dir="ltr">+965</span>
+            <input {...register('phone', { required: t('checkout.required'), setValueAs: v => String(v || '').replace(/\D/g, '').replace(/^965/, ''), pattern: { value: /^[569]\d{7}$/, message: t('checkout.invalidPhone') } })}
+              inputMode="numeric" placeholder={t('checkout.mobile')} className="input-field ps-14" maxLength={12} dir="ltr" autoComplete="tel-national" />
+            <E m={errors.phone?.message} />
           </div>
         </div>
       </section>
 
-      {/* Kuwait Address */}
       <section>
-        <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-brand-600" /> Delivery Address (Kuwait)
-        </h3>
+        <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-600" />{t('checkout.deliveryAddress')}</h3>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Governorate *</label>
+            <L k="checkout.governorate" req />
             <div className="relative">
-              <select {...register('governorate', { required: true })} className="input-field appearance-none pr-8">
-                {KUWAIT_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
+              <select value={governorate} onChange={e => { onGovernorateChange(e.target.value); setGovError(false); }}
+                className={`input-field appearance-none pe-8 ${govError ? 'border-red-400' : ''}`}>
+                <option value="">{t('checkout.selectGovernorate')}</option>
+                {KUWAIT_GOVERNORATES.map(g => <option key={g} value={g}>{govLabel(g, isArabic)}</option>)}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
+            {govError && <E m={t('checkout.required')} />}
           </div>
-          <div>
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Area / City *</label>
-            <input {...register('city', { required: 'Required' })} placeholder="e.g. Salmiya" className="input-field" />
-            {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city.message}</p>}
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Block *</label>
-            <input {...register('block', { required: 'Required' })} placeholder="e.g. 7" className="input-field" />
-            {errors.block && <p className="text-red-500 text-xs mt-1">{errors.block.message}</p>}
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Street *</label>
-            <input {...register('street', { required: 'Required' })} placeholder="e.g. 23" className="input-field" />
-            {errors.street && <p className="text-red-500 text-xs mt-1">{errors.street.message}</p>}
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Building / House *</label>
-            <input {...register('building', { required: 'Required' })} placeholder="e.g. 14" className="input-field" />
-            {errors.building && <p className="text-red-500 text-xs mt-1">{errors.building.message}</p>}
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Floor</label>
-            <input {...register('floor')} placeholder="e.g. 3" className="input-field" />
-          </div>
-          <div className="col-span-2">
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Apartment / Office</label>
-            <input {...register('apartment')} placeholder="e.g. Flat 5" className="input-field" />
-          </div>
-          {block && street && building && (
-            <div className="col-span-2 p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-800">
-              📍 {buildAddress1()}, {watch('city') || watch('governorate')}, Kuwait
-            </div>
+          <div><L k="checkout.areaCity" req /><input {...register('city', { required: t('checkout.required') })} className="input-field" /><E m={errors.city?.message} /></div>
+          <div><L k="checkout.block" req /><input {...register('block', { required: t('checkout.required') })} className="input-field" /><E m={errors.block?.message} /></div>
+          <div><L k="checkout.street" req /><input {...register('street', { required: t('checkout.required') })} className="input-field" /><E m={errors.street?.message} /></div>
+          <div><L k="checkout.building" req /><input {...register('building', { required: t('checkout.required') })} className="input-field" /><E m={errors.building?.message} /></div>
+          <div><L k="checkout.floor" /><input {...register('floor')} className="input-field" /></div>
+          <div className="col-span-2"><L k="checkout.apartment" /><input {...register('apartment')} className="input-field" /></div>
+          <div className="col-span-2"><L k="checkout.notes" /><textarea {...register('notes')} placeholder={t('checkout.notesPlaceholder')} className="input-field resize-none h-16 text-sm" /></div>
+          {pickedId === 'new' && (
+            <label className="col-span-2 flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input type="checkbox" {...register('saveAddress')} className="w-4 h-4 accent-brand-600" />{t('checkout.saveAddress')}
+            </label>
           )}
-          <div className="col-span-2">
-            <label className="text-xs text-gray-500 font-semibold mb-1 block">Delivery Notes</label>
-            <textarea {...register('notes')} placeholder="Any special instructions for delivery..."
-              className="input-field resize-none h-16 text-sm" />
-          </div>
         </div>
       </section>
 
-      {/* Payment Method */}
       <section>
-        <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <CreditCard className="w-4 h-4 text-brand-600" /> Payment Method
-        </h3>
+        <h3 className="text-base font-bold text-gray-900 mb-3">{t('checkout.deliveryOptions')}</h3>
+        {shippingSlot}
+      </section>
+
+      <section>
+        <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4 text-brand-600" />{t('checkout.paymentMethod')}</h3>
         <div className="grid grid-cols-2 gap-3">
-          <button type="button" onClick={() => setPaymentMethod('tap')}
-            className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'tap' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-            <div className="flex gap-1 items-center">
-              <span className="text-xl">💳</span>
-              <span className="text-lg font-black text-brand-700">tap</span>
-            </div>
-            <span className="text-xs font-semibold text-gray-700">Card / KNET / Apple Pay</span>
-            <div className="flex gap-1">
-              {['KNET','Visa','MC'].map(b => <span key={b} className="text-[9px] bg-gray-100 px-1 py-0.5 rounded font-bold text-gray-600">{b}</span>)}
-            </div>
-          </button>
-          <button type="button" onClick={() => setPaymentMethod('cod')}
-            className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'cod' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'}`}>
+          <button type="button" onClick={() => setPay('cod')}
+            className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${pay === 'cod' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
             <Banknote className="w-6 h-6 text-green-600" />
-            <span className="text-xs font-semibold text-gray-700">Cash on Delivery</span>
-            <span className="text-[10px] text-gray-400 text-center">Pay when your order arrives</span>
+            <span className="text-xs font-semibold text-gray-700">{t('checkout.codTitle')}</span>
+            {codFee > 0 && <span className="text-[10px] text-gray-400">+ {formatPrice(codFee)}</span>}
+          </button>
+          <button type="button" disabled={!settings.cardEnabled} onClick={() => setPay('card')}
+            className={`disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${pay === 'card' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
+            <CreditCard className="w-6 h-6 text-brand-700" />
+            <span className="text-xs font-semibold text-gray-700">{t('c2_pay.cardTitle')}</span>
           </button>
         </div>
-        {paymentMethod === 'tap' && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 bg-gray-50 p-3 rounded-xl">
-            <Lock className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-            You'll be redirected to TAP secure payment. Supports KNET, Visa, Mastercard &amp; Apple Pay.
-          </div>
-        )}
-        {paymentMethod === 'cod' && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 bg-green-50 p-3 rounded-xl border border-green-200">
-            <Banknote className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-            Please have exact change ready. Our delivery team will collect payment on arrival.
-          </div>
+        <p className="mt-3 flex items-center gap-2 text-xs text-gray-500 bg-gray-50 p-3 rounded-xl">
+          {pay === 'card' ? <Lock className="w-3.5 h-3.5 text-green-500 flex-shrink-0" /> : <Banknote className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />}
+          {pay === 'card' ? t('c2_pay.cardNote') : t('checkout.codNote')}
+        </p>
+        {!settings.cardEnabled && <p className="mt-2 text-xs text-amber-700">{t('c2_pay.cardOff')}</p>}
+        {pay === 'card' && quoteReady && settings.cardEnabled && (
+          <p className="mt-2 text-xs text-gray-500">{t('c2_pay.usdNote', { usd: (total * settings.usdRate).toFixed(2), rate: String(settings.usdRate) })}</p>
         )}
       </section>
 
-      {/* Order Summary */}
-      <section className="bg-gray-50 rounded-2xl p-4 space-y-2 text-sm">
-        <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{formatPrice(subtotal)}</span></div>
-        {discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{formatPrice(discount)}</span></div>}
-        <div className="flex justify-between text-gray-600">
-          <span>Shipping</span>
-          <span>{shippingCost === 0 ? <span className="text-green-600 font-semibold">FREE</span> : formatPrice(shippingCost)}</span>
-        </div>
-        <div className="flex justify-between font-black text-gray-900 text-base border-t pt-2 mt-2">
-          <span>Total</span><span className="text-brand-700">{formatPrice(total)}</span>
-        </div>
-        <p className="text-xs text-gray-400 text-center pt-1">No VAT — Kuwait</p>
-      </section>
-
-      {submitted && (
-        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          Order submitted — redirecting you now…
+      {done && (
+        <div className="flex items-center gap-2 p-3 bg-brand-50 border border-brand-200 rounded-xl text-sm text-brand-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />{t('checkout.submitted')}
         </div>
       )}
 
-      <button type="submit" disabled={loading || submitted}
+      <button type="submit" disabled={busy || done || !quoteReady}
         className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-base">
-        {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing…</> :
-          paymentMethod === 'tap' ? <><CreditCard className="w-5 h-5" /> Pay with TAP — {formatPrice(total)}</> :
-          <><Banknote className="w-5 h-5" /> Place COD Order — {formatPrice(total)}</>}
+        {busy ? <><Loader2 className="w-5 h-5 animate-spin" />{t('checkout.processing')}</>
+          : pay === 'card' ? <><CreditCard className="w-5 h-5" />{t('c2_pay.payCard')} — {quoteReady ? formatPrice(total) : '...'}</>
+          : <><Banknote className="w-5 h-5" />{t('checkout.placeCod')} — {quoteReady ? formatPrice(total + codFee) : '...'}</>}
       </button>
     </form>
   );

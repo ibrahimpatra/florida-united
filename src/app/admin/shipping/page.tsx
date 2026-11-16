@@ -10,10 +10,10 @@ import { KUWAIT_GOVERNORATES } from '@/types';
 import { nanoid } from 'nanoid';
 
 const ZONE_TYPES = [
-  { value: 'governorate', label: 'Governorate', icon: '🗺️', desc: 'Kuwait governorate-based' },
-  { value: 'area',        label: 'Area / District', icon: '📍', desc: 'Specific areas e.g. Salmiya' },
-  { value: 'radius',      label: 'Radius', icon: '🔵', desc: 'Distance from store (km)' },
-  { value: 'country',     label: 'Country', icon: '🌍', desc: 'International shipping' },
+  { value: 'governorate', label: 'Governorate', icon: '', desc: 'Kuwait governorate-based' },
+  { value: 'area',        label: 'Area / District', icon: '', desc: 'Specific areas e.g. Salmiya' },
+  { value: 'radius',      label: 'Radius', icon: '', desc: 'Distance from store (km)' },
+  { value: 'country',     label: 'Country', icon: '', desc: 'International shipping' },
 ];
 
 const RATE_METHODS = [
@@ -74,7 +74,7 @@ export default function AdminShippingPage() {
   const [saving, setSaving] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'zones' | 'config' | 'test'>('zones');
-  const [testInput, setTestInput] = useState({ governorate: '', area: '', orderAmount: 5 });
+  const [testInput, setTestInput] = useState({ governorate: '', area: '', orderAmount: 5, freeAmount: 0 });
   const [testResult, setTestResult] = useState<any>(null);
   const [areaInput, setAreaInput] = useState('');
 
@@ -92,12 +92,14 @@ export default function AdminShippingPage() {
   const saveConfig = async () => {
     setConfigSaving(true);
     try {
-      await fetch('/api/shipping/config', {
+      const res = await fetch('/api/shipping/config', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
-      toast.success('Configuration saved!');
-    } catch { toast.error('Failed to save'); }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) toast.error(d.error || `Failed to save (${res.status})`);
+      else toast.success('Configuration saved.');
+    } catch { toast.error('Network error - not saved'); }
     setConfigSaving(false);
   };
 
@@ -107,39 +109,45 @@ export default function AdminShippingPage() {
     try {
       const isNew = !editingZone.id;
       const url = isNew ? '/api/shipping/zones' : `/api/shipping/zones/${editingZone.id}`;
-      await fetch(url, {
+      const res = await fetch(url, {
         method: isNew ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingZone),
       });
-      toast.success(isNew ? 'Zone created!' : 'Zone updated!');
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(d.error || `Could not save the zone (${res.status}).`); setSaving(false); return; }
+      toast.success(isNew ? 'Zone created.' : 'Zone updated.');
       const z = await fetch('/api/shipping/zones').then(r => r.json());
-      setZones(z);
+      setZones(Array.isArray(z) ? z : []);
       setEditingZone(null);
-    } catch { toast.error('Failed to save zone'); }
+    } catch { toast.error('Network error - zone not saved'); }
     setSaving(false);
   };
 
   const deleteZone = async (id: string) => {
     if (!confirm('Delete this shipping zone?')) return;
-    await fetch(`/api/shipping/zones/${id}`, { method: 'DELETE' });
-    setZones(z => z.filter(x => x.id !== id));
-    toast.success('Zone deleted');
+    try {
+      const res = await fetch(`/api/shipping/zones/${id}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d.error || 'Could not delete the zone.'); return; }
+      setZones(z => z.filter(x => x.id !== id));
+      toast.success('Zone deleted.');
+    } catch { toast.error('Network error - zone not deleted'); }
   };
 
   const testShipping = async () => {
     try {
-      const res = await fetch('/api/shipping/calculate', {
+      const res = await fetch('/api/shipping/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           governorate: testInput.governorate || undefined,
-          area: testInput.area || undefined,
-          country: 'Kuwait',
-          orderAmount: Number(testInput.orderAmount),
+          paidSubtotal: Number(testInput.orderAmount) || 0,
+          freeSubtotal: Number(testInput.freeAmount) || 0,
         }),
       });
-      setTestResult(await res.json());
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(d.error || 'Test failed'); setTestResult(null); return; }
+      setTestResult(d);
     } catch { toast.error('Test failed'); }
   };
 
@@ -236,7 +244,7 @@ export default function AdminShippingPage() {
               <div className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
                 onClick={() => setExpandedZone(expandedZone === zone.id ? null : zone.id)}>
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 ${zone.isActive ? 'bg-green-100' : 'bg-gray-100'}`}>
-                  {ZONE_TYPES.find(t => t.value === zone.type)?.icon}
+                  
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -305,6 +313,11 @@ export default function AdminShippingPage() {
                         className="input-field" placeholder="e.g. Hawalli Governorate"/>
                     </div>
                     <div>
+                      <label className="label">Arabic Zone Name <span dir="rtl" className="text-gray-400 font-normal">(اسم المنطقة)</span></label>
+                      <input value={(editingZone as any).nameAr || ''} onChange={e => setEditingZone(z => ({ ...z!, nameAr: e.target.value } as any))}
+                        dir="rtl" lang="ar" className="input-field" placeholder="مثال: محافظة حولي"/>
+                    </div>
+                    <div>
                       <label className="label">Sort Order</label>
                       <input type="number" value={editingZone.sortOrder || 0}
                         onChange={e => setEditingZone(z => ({ ...z!, sortOrder: Number(e.target.value) }))} className="input-field"/>
@@ -324,7 +337,7 @@ export default function AdminShippingPage() {
                         <button key={t.value} type="button"
                           onClick={() => setEditingZone(z => ({ ...z!, type: t.value as any }))}
                           className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-xs font-semibold transition-all ${editingZone.type === t.value ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 hover:border-gray-300 text-gray-600'}`}>
-                          <span className="text-xl">{t.icon}</span>{t.label}
+                          {t.label}
                           <span className="text-[10px] text-gray-400 text-center leading-tight">{t.desc}</span>
                         </button>
                       ))}
@@ -398,7 +411,7 @@ export default function AdminShippingPage() {
                           className="input-field" placeholder="20"/>
                       </div>
                       <div className="sm:col-span-3 bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
-                        📍 Default coordinates: Kuwait City (29.3759, 47.9774).{' '}
+                        Default coordinates: Kuwait City (29.3759, 47.9774).{' '}
                         <a href="https://www.latlong.net" target="_blank" rel="noreferrer" className="font-bold underline">Find coordinates →</a>
                       </div>
                     </div>
@@ -444,6 +457,11 @@ export default function AdminShippingPage() {
                               <label className="text-xs font-semibold text-gray-600 block mb-1">Rate Name *</label>
                               <input value={rate.name} onChange={e => updateRate(rate.id, 'name', e.target.value)}
                                 className="input-field text-sm py-2" placeholder="Same Day Delivery"/>
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-gray-600 block mb-1">Arabic Rate Name <span dir="rtl" className="font-normal text-gray-400">(الاسم بالعربية)</span></label>
+                              <input value={(rate as any).nameAr || ''} onChange={e => updateRate(rate.id, 'nameAr', e.target.value)}
+                                dir="rtl" lang="ar" className="input-field text-sm py-2" placeholder="توصيل في نفس اليوم"/>
                             </div>
                             <div>
                               <label className="text-xs font-semibold text-gray-600 block mb-1">Method</label>
@@ -570,7 +588,7 @@ export default function AdminShippingPage() {
 
           <div className="card p-6">
             <div className="flex items-center gap-3 mb-4">
-              <h3 className="font-bold text-gray-800">💵 Cash on Delivery (COD)</h3>
+              <h3 className="font-bold text-gray-800">Cash on Delivery (COD)</h3>
               <label className="flex items-center gap-2 ml-auto cursor-pointer">
                 <input type="checkbox" checked={config.codEnabled ?? true}
                   onChange={e => setConfig(c => ({ ...c, codEnabled: e.target.checked }))}
@@ -643,10 +661,17 @@ export default function AdminShippingPage() {
                   className="input-field" placeholder="e.g. Salmiya"/>
               </div>
               <div>
-                <label className="label">Order Amount (KWD)</label>
+                <label className="label">Items WITH paid shipping (KWD)</label>
                 <input type="number" step="0.001" value={testInput.orderAmount}
                   onChange={e => setTestInput(t => ({ ...t, orderAmount: Number(e.target.value) }))}
                   className="input-field" placeholder="5.000"/>
+              </div>
+              <div>
+                <label className="label">Items flagged FREE shipping (KWD)</label>
+                <input type="number" step="0.001" value={testInput.freeAmount}
+                  onChange={e => setTestInput(t => ({ ...t, freeAmount: Number(e.target.value) }))}
+                  className="input-field" placeholder="0.000"/>
+                <p className="text-xs text-gray-400 mt-1">Mixed cart check: a free-shipping item must never waive the fee of a paid-shipping item.</p>
               </div>
               <button onClick={testShipping} className="btn-primary py-2.5 px-6 text-sm">
                 <Navigation className="w-4 h-4"/> Calculate Shipping
@@ -659,12 +684,12 @@ export default function AdminShippingPage() {
               <h4 className="font-bold text-gray-800 mb-3">Results</h4>
               {testResult.zoneMatched && (
                 <p className="text-sm text-green-700 bg-green-50 rounded-xl px-3 py-2 mb-3">
-                  ✅ Matched zone: <strong>{testResult.zoneMatched}</strong>
+                  Matched zone: <strong>{testResult.zoneMatched}</strong>
                 </p>
               )}
               {!testResult.zoneMatched && (
                 <p className="text-sm text-amber-700 bg-amber-50 rounded-xl px-3 py-2 mb-3">
-                  ⚠️ No zone matched — using default fallback rate
+                  No zone matched — using default fallback rate
                 </p>
               )}
               {testResult.amountToFreeShipping > 0 && (

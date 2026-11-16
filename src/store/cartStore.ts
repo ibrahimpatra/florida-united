@@ -6,6 +6,7 @@ export interface CartItem {
   id: string;
   productId: string;
   name: string;
+  nameAr?: string;   // Arabic name shown when the site is in Arabic
   slug: string;
   price: number;
   comparePrice?: number;
@@ -14,9 +15,11 @@ export interface CartItem {
   sku: string;
   variantId?: string;
   variantName?: string;
+  variantNameAr?: string;
   stock: number;
   isReturnable: boolean;
   freeShipping?: boolean;
+  categoryId?: string;   // lets category-scoped flash deals be shown in the cart
 }
 
 interface CartStore {

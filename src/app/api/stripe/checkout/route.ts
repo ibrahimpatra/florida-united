@@ -1,79 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { getServerSession } from 'next-auth';
+import { FieldValue } from 'firebase-admin/firestore';
 import { authOptions } from '@/lib/auth';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { cardEnabled, getStripe, getUsdRate, kwdToUsdCents } from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-04-10' });
+export const dynamic = 'force-dynamic';
 
+/**
+ * Starts (or restarts) card payment for a saved order. The amount is ALWAYS computed here from the
+ * order stored in Firestore - nothing about money is read from the browser.
+ */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session?.user?.id) return NextResponse.json({ error: 'Please sign in.' }, { status: 401 });
+  if (!cardEnabled()) return NextResponse.json({ error: 'Card payment is not available right now.' }, { status: 503 });
 
   try {
-    const { items, shippingAddress, couponCode, discount, tax, shippingCost } = await req.json();
+    const { orderId } = await req.json();
+    if (!orderId) return NextResponse.json({ error: 'Missing order.' }, { status: 400 });
+    const db = getAdminDb();
+    const ref = db.collection('orders').doc(String(orderId));
+    const snap = await ref.get();
+    if (!snap.exists || (snap.data() as any).userId !== session.user.id) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
+    const o: any = { id: snap.id, ...snap.data() };
+    if (o.paymentMethod !== 'card') return NextResponse.json({ error: 'This order is not a card order.' }, { status: 400 });
+    if (o.paymentStatus === 'paid') return NextResponse.json({ error: 'This order is already paid.' }, { status: 400 });
+    if (o.status !== 'pending') return NextResponse.json({ error: 'This order can no longer be paid.' }, { status: 400 });
 
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = items.map((item: {
-      name: string; image?: string; price: number; quantity: number; variantName?: string;
-    }) => ({
-      price_data: {
-        currency: 'usd',
-        unit_amount: Math.round(item.price * 100),
-        product_data: {
-          name: item.name + (item.variantName ? ` - ${item.variantName}` : ''),
-          images: item.image ? [item.image] : [],
-        },
-      },
-      quantity: item.quantity,
-    }));
+    const stripe = getStripe();
 
-    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    // Re-use a still-open session instead of creating duplicates.
+    if (o.stripeSessionId) {
+      try {
+        const old = await stripe.checkout.sessions.retrieve(o.stripeSessionId);
+        if (old.status === 'open' && old.url) return NextResponse.json({ url: old.url });
+        if (old.payment_status === 'paid') return NextResponse.json({ error: 'This order is already paid.' }, { status: 400 });
+      } catch {}
+    }
+
+    const rate = await getUsdRate(db);
+    const cents = kwdToUsdCents(o.total, rate);
+    if (cents < 50) return NextResponse.json({ error: 'The order total is below the minimum card payment amount.' }, { status: 400 });
+
+    const app = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+    const checkout = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card', 'us_bank_account'],
-      line_items: lineItems,
-      shipping_address_collection: { allowed_countries: ['US'] },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/checkout`,
-      customer_email: session.user.email!,
-      metadata: {
-        userId: session.user.id,
-        couponCode: couponCode || '',
-      },
-      allow_promotion_codes: true,
-    };
-
-    // Add shipping as line item if applicable
-    if (shippingCost > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          unit_amount: Math.round(shippingCost * 100),
-          product_data: { name: 'Shipping & Handling' },
-        },
+      line_items: [{
         quantity: 1,
-      });
-    }
-
-    // Tax
-    if (tax > 0) {
-      sessionParams.automatic_tax = { enabled: false };
-    }
-
-    // Apply discount as coupon
-    if (discount > 0) {
-      const coupon = await stripe.coupons.create({
-        amount_off: Math.round(discount * 100),
-        currency: 'usd',
-        name: couponCode || 'Discount',
-        duration: 'once',
-      });
-      sessionParams.discounts = [{ coupon: coupon.id }];
-    }
-
-    const checkoutSession = await stripe.checkout.sessions.create(sessionParams);
-
-    return NextResponse.json({ url: checkoutSession.url, sessionId: checkoutSession.id });
-  } catch (err) {
-    console.error('Stripe error:', err);
-    return NextResponse.json({ error: 'Payment initialization failed' }, { status: 500 });
+        price_data: {
+          currency: 'usd', unit_amount: cents,
+          product_data: { name: `Order ${o.orderNumber}`, description: `Florida Kuwait Company - KWD ${Number(o.total).toFixed(3)} at 1 KWD = ${rate} USD` },
+        },
+      }],
+      customer_email: o.userEmail || session.user.email || undefined,
+      client_reference_id: o.id,
+      metadata: { orderId: o.id, orderNumber: o.orderNumber },
+      payment_intent_data: { metadata: { orderId: o.id, orderNumber: o.orderNumber } },
+      success_url: `${app}/checkout/success?orderId=${o.id}&n=${encodeURIComponent(o.orderNumber)}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${app}/account/orders/${o.id}?payment=cancelled`,
+      expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
+    });
+    await ref.update({ stripeSessionId: checkout.id, usdRate: rate, usdAmount: cents / 100, updatedAt: FieldValue.serverTimestamp() });
+    return NextResponse.json({ url: checkout.url });
+  } catch (e: any) {
+    console.error('[stripe checkout]', e?.message || e);
+    return NextResponse.json({ error: 'We could not start the card payment. Please try again.' }, { status: 502 });
   }
 }

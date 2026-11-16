@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { adminGetProducts, adminCreateProduct } from '@/lib/firestore-admin';
+import { adminGetProducts, adminCreateProduct, ProductError } from '@/lib/firestore-admin';
 import type { ProductFilters } from '@/types';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    // admin=true exposes inactive/draft products → only honour it for a real admin session.
+    let isAdmin = false;
+    if (searchParams.get('admin') === 'true') {
+      const session = await getServerSession(authOptions);
+      isAdmin = session?.user?.role === 'admin';
+    }
+    const stock = searchParams.get('stock');
     const filters: ProductFilters & { admin?: boolean } = {
       categoryId:   searchParams.get('categoryId')  || undefined,
       categorySlug: searchParams.get('categorySlug')|| undefined,
@@ -14,6 +21,7 @@ export async function GET(req: NextRequest) {
       maxPrice:     searchParams.get('maxPrice') ? Number(searchParams.get('maxPrice')) : undefined,
       brand:        searchParams.get('brand')        || undefined,
       inStock:      searchParams.get('inStock')     === 'true',
+      stockStatus:  stock === 'out' || stock === 'low' ? stock : undefined,
       isFeatured:   searchParams.get('featured')    === 'true' ? true : undefined,
       isNewArrival: searchParams.get('new')         === 'true' ? true : undefined,
       isOnSale:     searchParams.get('sale')        === 'true' ? true : undefined,
@@ -21,11 +29,11 @@ export async function GET(req: NextRequest) {
       sortBy:       (searchParams.get('sort') as ProductFilters['sortBy']) || 'newest',
       page:         parseInt(searchParams.get('page')  || '1'),
       pageSize:     parseInt(searchParams.get('limit') || '24'),
-      admin:        searchParams.get('admin') === 'true',
+      admin:        isAdmin,
     };
     const result = await adminGetProducts(filters as any);
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
+      headers: { 'Cache-Control': isAdmin ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=60' },
     });
   } catch (err) {
     console.error('[GET /api/products]', err);
@@ -42,6 +50,7 @@ export async function POST(req: NextRequest) {
     const id = await adminCreateProduct(data);
     return NextResponse.json({ success: true, id });
   } catch (err) {
+    if (err instanceof ProductError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error('[POST /api/products]', err);
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
   }
