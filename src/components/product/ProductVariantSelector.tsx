@@ -379,7 +379,7 @@ export function ProductVariantSelector({
         {/* Bulk price note */}
         {quantity >= 10 && (
           <p className="text-xs text-green-600 mt-1.5 flex items-center gap-1">
-            💰 Buying in bulk? <a href="/contact" className="underline font-bold">Contact us for wholesale pricing</a>
+            Buying in bulk? <a href="/contact" className="underline font-bold">Contact us for wholesale pricing</a>
           </p>
         )}
       </div>

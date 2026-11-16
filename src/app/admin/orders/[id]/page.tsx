@@ -1,4 +1,5 @@
 'use client';
+import { formatAddress } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Truck, Package, CheckCircle, Mail, MessageCircle, Printer } from 'lucide-react';
@@ -19,29 +20,39 @@ export default function AdminOrderDetailPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/orders/${id}`).then(r=>r.json()).then(d=>{ setOrder(d); setNewStatus(d.status); setLoading(false); }).catch(()=>setLoading(false));
+    load();
   }, [id]);
+
+  const load = () => fetch(`/api/orders/${id}`, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(d => { if (d?.id) { setOrder(d); setNewStatus(d.status); } else setOrder(null); setLoading(false); })
+    .catch(() => setLoading(false));
 
   const updateStatus = async () => {
     if (!newStatus) return;
     setSaving(true);
     try {
-      await fetch(`/api/orders/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: newStatus, note: statusNote }) });
-      toast.success('Status updated & email sent');
-      setOrder(o => o ? { ...o, status: newStatus as any } : o);
-      setStatusNote('');
-    } catch { toast.error('Update failed'); }
+      const res = await fetch(`/api/orders/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: newStatus, note: statusNote }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(d.error || `Update failed (${res.status})`); setNewStatus(order?.status || ''); }
+      else {
+        toast.success(newStatus === 'cancelled' ? 'Order cancelled, stock restored' : 'Status updated, customer notified');
+        if (d.needsRefund) toast('This order was already paid online - issue the refund in Stripe.', { duration: 9000 });
+        setStatusNote(''); await load();
+      }
+    } catch { toast.error('Network error - status not changed'); }
     setSaving(false);
   };
 
   const updateTracking = async () => {
-    if (!tracking) return;
+    if (!tracking.trim()) { toast.error('Enter a tracking number first.'); return; }
     setSaving(true);
     try {
-      await fetch(`/api/orders/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trackingNumber: tracking, carrier }) });
-      toast.success('Tracking updated & email sent');
-      setOrder(o => o ? { ...o, trackingNumber: tracking, shippingCarrier: carrier, status: 'shipped' } : o);
-    } catch { toast.error('Failed'); }
+      const res = await fetch(`/api/orders/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trackingNumber: tracking.trim(), carrier }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) toast.error(d.error || `Failed (${res.status})`);
+      else { toast.success('Tracking saved, order marked as shipped'); await load(); }
+    } catch { toast.error('Network error - tracking not saved'); }
     setSaving(false);
   };
 
@@ -63,6 +74,9 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <a href={`/api/orders/${order.id}/invoice`} target="_blank" rel="noopener" className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50 transition-colors no-print">
+            Invoice PDF
+          </a>
           <button onClick={()=>window.print()} className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50 transition-colors no-print">
             <Printer className="w-4 h-4"/> Print
           </button>
@@ -78,7 +92,7 @@ export default function AdminOrderDetailPage() {
             <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
               <Package className="w-5 h-5 text-brand-600"/><h3 className="font-bold text-gray-800">Order Items</h3>
             </div>
-            <table className="table">
+            <div className="overflow-x-auto"><table className="table">
               <thead><tr><th>Product</th><th>SKU</th><th className="text-center">Qty</th><th className="text-right">Price</th><th className="text-right">Total</th></tr></thead>
               <tbody>
                 {order.items.map((item,i) => (
@@ -88,7 +102,9 @@ export default function AdminOrderDetailPage() {
                         {item.image && <img src={item.image} alt={item.productName} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/>}
                         <div>
                           <p className="font-semibold text-gray-800 text-sm">{item.productName}</p>
+                          {item.productNameAr && <p className="text-xs text-gray-500" dir="rtl">{item.productNameAr}</p>}
                           {item.variantName && <p className="text-xs text-gray-500">{item.variantName}</p>}
+                          {(item as any).dealId && <p className="text-xs text-amber-700">Offer: {(item as any).dealTitle || 'Flash deal'} (was {formatPrice((item as any).listPrice)} each)</p>}
                           <span className={`badge text-xs ${item.isReturnable?'badge-green':'badge-red'}`}>{item.isReturnable?'Returnable':'Non-returnable'}</span>
                         </div>
                       </div>
@@ -107,7 +123,7 @@ export default function AdminOrderDetailPage() {
                 <tr><td colSpan={4} className="text-right text-gray-600">Tax</td><td className="text-right font-bold">{formatPrice(order.tax)}</td></tr>
                 <tr className="bg-gray-50"><td colSpan={4} className="text-right font-black text-gray-900 text-base">TOTAL</td><td className="text-right font-black text-brand-700 text-lg">{formatPrice(order.total)}</td></tr>
               </tfoot>
-            </table>
+            </table></div>
           </div>
 
           {/* Status History */}
@@ -144,12 +160,10 @@ export default function AdminOrderDetailPage() {
           <div className="card p-5">
             <h3 className="font-bold text-gray-800 mb-3">Ship To</h3>
             <p className="text-sm text-gray-700 leading-relaxed">
-              {order.shippingAddress?.name}<br/>
-              {order.shippingAddress?.street}{order.shippingAddress?.area && `, ${order.shippingAddress.area}`}<br/>
-              {order.shippingAddress?.block && `Block ${order.shippingAddress.block}, `}
-              {order.shippingAddress?.city}{order.shippingAddress?.governorate && `, ${order.shippingAddress.governorate}`}<br/>
-              {order.shippingAddress?.country}
-              {order.shippingAddress?.phone && <><br/>📞 {order.shippingAddress.phone}</>}
+              {formatAddress(order.shippingAddress).name}<br/>
+              {formatAddress(order.shippingAddress).line1}<br/>
+              {formatAddress(order.shippingAddress).line2}
+              {formatAddress(order.shippingAddress).phone && <><br/><span dir="ltr">{formatAddress(order.shippingAddress).phone}</span></>}
             </p>
           </div>
 
@@ -159,7 +173,7 @@ export default function AdminOrderDetailPage() {
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">Method</span><span className="font-semibold uppercase">{order.paymentMethod}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Status</span><span className={`badge text-xs font-bold ${order.paymentStatus==='paid'?'badge-green':'badge-yellow'}`}>{order.paymentStatus}</span></div>
-              {order.stripePaymentId && <div className="flex justify-between"><span className="text-gray-500">Stripe ID</span><span className="font-mono text-xs text-gray-600 truncate max-w-[120px]">{order.stripePaymentId}</span></div>}
+              {(order as any).stripePaymentIntent && <div className="flex justify-between"><span className="text-gray-500">Stripe ID</span><span className="font-mono text-xs text-gray-600 truncate max-w-[120px]">{(order as any).stripePaymentIntent}</span></div>}
               {order.couponCode && <div className="flex justify-between"><span className="text-gray-500">Coupon</span><span className="badge-green badge text-xs">{order.couponCode}</span></div>}
             </div>
           </div>

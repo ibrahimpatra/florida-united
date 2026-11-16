@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle, XCircle, Camera, Eye, Loader2, RefreshCw, Filter } from 'lucide-react';
+import { X, CheckCircle, XCircle, Camera, Eye, Loader2, RefreshCw, Filter } from 'lucide-react';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import type { ReturnRequest, ReturnStatus } from '@/types';
@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<ReturnStatus, string> = {
 export default function AdminReturnsPage() {
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restock, setRestock] = useState(true);
   const [filter, setFilter] = useState<ReturnStatus | 'all'>('all');
   const [selected, setSelected] = useState<ReturnRequest | null>(null);
   const [adminNote, setAdminNote] = useState('');
@@ -72,17 +73,18 @@ export default function AdminReturnsPage() {
           status,
           refundAmount: selected.refundAmount,
           adminNote,
+          restock,
           photoVerified: !!adminPhotoUrl,
           adminImages: adminPhotoUrl ? [adminPhotoUrl] : [],
         }),
       });
-      if (!res.ok) throw new Error('Failed');
-      toast.success(`Return ${status === 'approved' ? 'approved ✓' : status === 'rejected' ? 'rejected ✗' : 'updated'}`);
+      if (!res.ok) { const d = await res.json().catch(() => null); throw new Error(d?.error || 'Failed'); }
+      toast.success(`Return ${status === 'approved' ? 'approved ' : status === 'rejected' ? 'rejected ' : 'updated'}`);
       setSelected(null);
       setAdminNote('');
       setAdminPhotoUrl(null);
       fetchReturns();
-    } catch { toast.error('Action failed'); }
+    } catch (e: any) { toast.error(e?.message || 'Action failed'); }
     setActionLoading(false);
   };
 
@@ -128,7 +130,7 @@ export default function AdminReturnsPage() {
                       {ret.status.replace('_', ' ')}
                     </span>
                     {ret.autoApproved && <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Auto-approved</span>}
-                    {ret.photoVerified && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">📷 Photo verified</span>}
+                    {ret.photoVerified && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">Photo verified</span>}
                   </div>
                   <p className="text-sm text-gray-600 mb-1"><strong>Reason:</strong> {ret.reason}</p>
                   {ret.description && <p className="text-xs text-gray-500 mb-1">{ret.description}</p>}
@@ -173,7 +175,7 @@ export default function AdminReturnsPage() {
             <div className="flex justify-between items-start">
               <h2 className="font-bold text-gray-900 text-lg">Review Return #{selected.orderNumber}</h2>
               <button onClick={() => { setSelected(null); setCameraActive(false); streamRef.current?.getTracks().forEach(t => t.stop()); }}
-                className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold" aria-label="Close"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="space-y-2 text-sm bg-gray-50 rounded-xl p-3">
@@ -208,14 +210,14 @@ export default function AdminReturnsPage() {
                       <Camera className="w-6 h-6 text-gray-800" />
                     </button>
                     <button onClick={() => { streamRef.current?.getTracks().forEach(t => t.stop()); setCameraActive(false); }}
-                      className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">✕</button>
+                      className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold" aria-label="Close"><X className="w-4 h-4" /></button>
                   </div>
                 </div>
               )}
               {adminPhotoUrl && !cameraActive && (
                 <div className="relative inline-block">
                   <img src={adminPhotoUrl} alt="admin capture" className="w-28 h-28 object-cover rounded-xl border" />
-                  <button onClick={() => setAdminPhotoUrl(null)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✕</button>
+                  <button onClick={() => setAdminPhotoUrl(null)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs" aria-label="Remove"><X className="w-3 h-3" /></button>
                 </div>
               )}
               {!cameraActive && !adminPhotoUrl && (
@@ -245,10 +247,16 @@ export default function AdminReturnsPage() {
               </div>
             )}
             {selected.status === 'approved' && (
+              <>
+              <label className="flex items-center gap-2 text-sm text-gray-700 mb-2">
+                <input type="checkbox" checked={restock} onChange={e => setRestock(e.target.checked)} className="rounded border-gray-300" />
+                Put the returned items back into stock
+              </label>
               <button onClick={() => handleAction('refunded')} disabled={actionLoading}
                 className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '💸'} Mark as Refunded
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : ''} Mark as Refunded
               </button>
+              </>
             )}
           </div>
         </div>

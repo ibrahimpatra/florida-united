@@ -16,7 +16,7 @@ const COLORS = [
   { label: 'Pink', value: '#db2777', bg: 'bg-pink-600' },
 ];
 
-const toLocalDatetime = (iso: string) => iso ? iso.slice(0, 16) : '';
+const toLocalDatetime = (iso: string) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d.getTime())) return ''; const z = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; };
 const fromLocalDatetime = (local: string) => local ? new Date(local).toISOString() : '';
 
 const emptyDeal = (): Partial<FlashDeal> => ({
@@ -85,9 +85,9 @@ export default function AdminFlashDealsPage() {
       const url = isNew ? '/api/flash-deals' : `/api/flash-deals/${editingDeal.id}`;
       const method = isNew ? 'POST' : 'PUT';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editingDeal) });
-      const data = await res.json();
-      if (data.success || data.id) {
-        toast.success(isNew ? 'Flash deal created! 🔥' : 'Deal updated!');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && (data.success || data.id)) {
+        toast.success(isNew ? 'Flash deal created.' : 'Deal updated.');
         setEditingDeal(null);
         fetchDeals();
       } else toast.error(data.error || 'Failed');
@@ -97,15 +97,21 @@ export default function AdminFlashDealsPage() {
 
   const deleteDeal = async (id: string, title: string) => {
     if (!confirm(`Delete flash deal "${title}"?`)) return;
-    await fetch(`/api/flash-deals/${id}`, { method: 'DELETE' });
-    setDeals(d => d.filter(x => x.id !== id));
-    toast.success('Deleted');
+    try {
+      const r = await fetch(`/api/flash-deals/${id}`, { method: 'DELETE' });
+      if (!r.ok) { toast.error('Could not delete the deal.'); return; }
+      setDeals(d => d.filter(x => x.id !== id));
+      toast.success('Deleted');
+    } catch { toast.error('Network error'); }
   };
 
   const toggleActive = async (deal: FlashDeal) => {
-    await fetch(`/api/flash-deals/${deal.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive: !deal.isActive }) });
-    setDeals(ds => ds.map(d => d.id === deal.id ? { ...d, isActive: !d.isActive } : d));
-    toast.success(deal.isActive ? 'Deal deactivated' : 'Deal activated 🔥');
+    try {
+      const r = await fetch(`/api/flash-deals/${deal.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive: !deal.isActive }) });
+      if (!r.ok) { toast.error('Could not update the deal.'); return; }
+      setDeals(ds => ds.map(d => d.id === deal.id ? { ...d, isActive: !d.isActive } : d));
+      toast.success(deal.isActive ? 'Deal deactivated' : 'Deal activated');
+    } catch { toast.error('Network error'); }
   };
 
   const now = new Date().toISOString();
@@ -122,19 +128,19 @@ export default function AdminFlashDealsPage() {
         {/* Coloured header */}
         <div className="px-5 py-4 flex items-center gap-3" style={{ background: deal.bannerColor + '15', borderLeft: `4px solid ${deal.bannerColor}` }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg flex-shrink-0" style={{ background: deal.bannerColor }}>
-            {deal.type === 'percentage' ? '%' : deal.type === 'fixed' ? '$' : deal.type === 'bogo' ? '2' : '📦'}
+            {deal.type === 'percentage' ? '%' : deal.type === 'fixed' ? 'KD' : deal.type === 'bogo' ? '2' : '#'}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-bold text-gray-900">{deal.title}</span>
               <span className="badge text-xs font-bold text-white px-2 py-0.5 rounded-full" style={{ background: deal.bannerColor }}>{deal.badgeText}</span>
-              {deal.isPinned && <span className="badge badge-yellow text-xs">📌 Pinned</span>}
-              {isActive && <span className="badge badge-green text-xs">🔥 Live</span>}
-              {isUpcoming && <span className="badge badge-blue text-xs">⏳ Upcoming</span>}
+              {deal.isPinned && <span className="badge badge-yellow text-xs">Pinned</span>}
+              {isActive && <span className="badge badge-green text-xs">Live</span>}
+              {isUpcoming && <span className="badge badge-blue text-xs">Upcoming</span>}
               {isExpired && <span className="badge badge-gray text-xs">Expired</span>}
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
-              {deal.type === 'percentage' ? `${deal.discountValue}% off` : deal.type === 'fixed' ? `$${deal.discountValue} off` : deal.type.toUpperCase()} ·&nbsp;
+              {deal.type === 'percentage' ? `${deal.discountValue}% off` : deal.type === 'fixed' ? `KWD ${deal.discountValue} off each` : deal.type.toUpperCase()} ·&nbsp;
               {deal.scope === 'all' ? 'All products' : deal.scope === 'category' ? `${deal.categoryIds?.length} categories` : `${deal.productIds?.length} products`}
             </p>
           </div>
@@ -179,13 +185,13 @@ export default function AdminFlashDealsPage() {
         <div className="space-y-6">
           {activeDeals.length > 0 && (
             <div>
-              <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/>🔥 Live Now</h2>
+              <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/>Live Now</h2>
               <div className="space-y-3">{activeDeals.map(d => <DealCard key={d.id} deal={d}/>)}</div>
             </div>
           )}
           {upcomingDeals.length > 0 && (
             <div>
-              <h2 className="font-bold text-gray-800 mb-3">⏳ Upcoming</h2>
+              <h2 className="font-bold text-gray-800 mb-3">Upcoming</h2>
               <div className="space-y-3">{upcomingDeals.map(d => <DealCard key={d.id} deal={d}/>)}</div>
             </div>
           )}
@@ -212,14 +218,17 @@ export default function AdminFlashDealsPage() {
                 <div>
                   <label className="label">Deal Title *</label>
                   <input value={editingDeal.title || ''} onChange={e => setEditingDeal(d => ({ ...d!, title: e.target.value }))} className="input-field" placeholder="Summer Flash Sale"/>
+                  <input value={(editingDeal as any).titleAr || ''} onChange={e => setEditingDeal(d => ({ ...d!, titleAr: e.target.value } as any))} dir="rtl" lang="ar" className="input-field mt-2" placeholder="العنوان بالعربية - مثال: عروض الصيف"/>
                 </div>
                 <div>
                   <label className="label">Badge Text</label>
                   <input value={editingDeal.badgeText || ''} onChange={e => setEditingDeal(d => ({ ...d!, badgeText: e.target.value }))} className="input-field" placeholder="FLASH DEAL"/>
+                  <input value={(editingDeal as any).badgeTextAr || ''} onChange={e => setEditingDeal(d => ({ ...d!, badgeTextAr: e.target.value } as any))} dir="rtl" lang="ar" className="input-field mt-2" placeholder="الشارة بالعربية - مثال: عرض خاص"/>
                 </div>
                 <div className="sm:col-span-2">
                   <label className="label">Subtitle</label>
                   <input value={editingDeal.subtitle || ''} onChange={e => setEditingDeal(d => ({ ...d!, subtitle: e.target.value }))} className="input-field" placeholder="Limited time only — don't miss out!"/>
+                  <input value={(editingDeal as any).subtitleAr || ''} onChange={e => setEditingDeal(d => ({ ...d!, subtitleAr: e.target.value } as any))} dir="rtl" lang="ar" className="input-field mt-2" placeholder="الوصف بالعربية"/>
                 </div>
               </div>
 
@@ -229,17 +238,16 @@ export default function AdminFlashDealsPage() {
                   <label className="label">Discount Type</label>
                   <select value={editingDeal.type} onChange={e => setEditingDeal(d => ({ ...d!, type: e.target.value as any }))} className="input-field">
                     <option value="percentage">Percentage (%)</option>
-                    <option value="fixed">Fixed Amount ($)</option>
+                    <option value="fixed">Fixed amount off each unit (KWD)</option>
                     <option value="bogo">Buy One Get One</option>
-                    <option value="bundle">Bundle Deal</option>
                   </select>
                 </div>
                 <div>
-                  <label className="label">Discount Value {editingDeal.type === 'percentage' ? '(%)' : '($)'}</label>
+                  <label className="label">Discount Value {editingDeal.type === 'percentage' ? '(%)' : editingDeal.type === 'bogo' ? '(not used)' : '(KWD)'}</label>
                   <input type="number" step={editingDeal.type === 'percentage' ? '1' : '0.01'} value={editingDeal.discountValue || ''} onChange={e => setEditingDeal(d => ({ ...d!, discountValue: Number(e.target.value) }))} className="input-field"/>
                 </div>
                 <div>
-                  <label className="label">Min Cart Amount ($)</label>
+                  <label className="label">Min Cart Amount (KWD)</label>
                   <input type="number" step="0.01" value={editingDeal.minCartAmount || ''} onChange={e => setEditingDeal(d => ({ ...d!, minCartAmount: e.target.value ? Number(e.target.value) : undefined }))} className="input-field" placeholder="No minimum"/>
                 </div>
               </div>
@@ -307,10 +315,10 @@ export default function AdminFlashDealsPage() {
               <div className="grid sm:grid-cols-2 gap-3">
                 {[
                   { key: 'isActive', label: 'Deal Active' },
-                  { key: 'isPinned', label: '📌 Pin to Top' },
-                  { key: 'showCountdown', label: '⏱ Show Countdown Timer' },
-                  { key: 'showOnHomepage', label: '🏠 Show on Homepage' },
-                  { key: 'showOnProductPage', label: '📦 Show on Product Pages' },
+                  { key: 'isPinned', label: 'Pin to Top' },
+                  { key: 'showCountdown', label: 'Show Countdown Timer' },
+                  { key: 'showOnHomepage', label: 'Show on Homepage' },
+                  { key: 'showOnProductPage', label: 'Show on Product Pages' },
                 ].map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={!!(editingDeal as any)[key]} onChange={e => setEditingDeal(d => ({ ...d!, [key]: e.target.checked }))} className="w-4 h-4 accent-brand-600 rounded"/>
@@ -326,7 +334,7 @@ export default function AdminFlashDealsPage() {
                     <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded-full mr-2">{editingDeal.badgeText}</span>
                     <span className="font-bold">{editingDeal.title}</span>
                     {editingDeal.subtitle && <span className="text-white/80 text-sm ml-2">— {editingDeal.subtitle}</span>}
-                    <div className="text-2xl font-black mt-1">{editingDeal.type === 'percentage' ? `${editingDeal.discountValue}% OFF` : editingDeal.type === 'fixed' ? `$${editingDeal.discountValue} OFF` : editingDeal.type?.toUpperCase()}</div>
+                    <div className="text-2xl font-black mt-1">{editingDeal.type === 'percentage' ? `${editingDeal.discountValue}% OFF` : editingDeal.type === 'fixed' ? `KWD ${editingDeal.discountValue} OFF` : editingDeal.type?.toUpperCase()}</div>
                   </div>
                 </div>
               )}
@@ -335,7 +343,7 @@ export default function AdminFlashDealsPage() {
             <div className="flex gap-3 px-6 py-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
               <button onClick={() => setEditingDeal(null)} className="btn-secondary flex-1 py-2.5 text-sm">Cancel</button>
               <button onClick={saveDeal} disabled={saving} className="btn-primary flex-1 py-2.5 text-sm">
-                {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <><Save className="w-4 h-4"/>{editingDeal.id ? 'Save Changes' : 'Create Deal 🔥'}</>}
+                {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <><Save className="w-4 h-4"/>{editingDeal.id ? 'Save Changes' : 'Create Deal '}</>}
               </button>
             </div>
           </div>

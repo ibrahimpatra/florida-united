@@ -1,7 +1,12 @@
 import type { Translations } from './en';
+import { p1Ar } from './parts/p1.ar';
+import { p2Ar } from './parts/p2.ar';
+import { p3Ar } from './parts/p3.ar';
 
-export const ar: Translations = {
+
+const baseAr = {
   nav: {
+    bundles: 'الحزم والمجموعات', addresses: 'دفتر العناوين',
     home: 'الرئيسية', shop: 'جميع المنتجات', deals: 'العروض',
     cart: 'السلة', account: 'حسابي', admin: 'الإدارة',
     signIn: 'تسجيل الدخول', signOut: 'تسجيل الخروج', register: 'إنشاء حساب',
@@ -40,19 +45,51 @@ export const ar: Translations = {
     items: 'منتجات',
   },
   checkout: {
-    title: 'إتمام الشراء', placeOrder: 'تأكيد الطلب', processing: 'جارٍ المعالجة...',
-    shippingAddress: 'عنوان التوصيل', paymentMethod: 'طريقة الدفع',
+    title: 'إتمام الطلب', placeOrder: 'تأكيد الطلب', processing: 'جارٍ المعالجة...',
+    shippingAddress: 'عنوان الشحن', paymentMethod: 'طريقة الدفع',
     orderSummary: 'ملخص الطلب', name: 'الاسم الكامل', phone: 'رقم الهاتف',
     area: 'المنطقة', block: 'القطعة', street: 'الشارع', building: 'المبنى',
     floor: 'الطابق', apartment: 'الشقة', governorate: 'المحافظة',
-    notes: 'ملاحظات التوصيل', cod: 'الدفع عند الاستلام', card: 'بطاقة ائتمان',
+    notes: 'ملاحظات التوصيل', cod: 'الدفع عند الاستلام', card: 'بطاقة ائتمان/خصم',
+    contactInfo: 'معلومات الاتصال', firstName: 'الاسم الأول', lastName: 'اسم العائلة',
+    email: 'البريد الإلكتروني', mobile: 'رقم الجوال', deliveryAddress: 'عنوان التوصيل (الكويت)',
+    savedAddresses: 'العناوين المحفوظة', newAddress: 'عنوان جديد', areaCity: 'المنطقة / المدينة',
+    selectGovernorate: 'اختر المحافظة', notesPlaceholder: 'أي تعليمات خاصة للتوصيل...',
+    saveAddress: 'احفظ هذا العنوان في دفتر العناوين',
+    tapTitle: 'بطاقة / كي نت / Apple Pay', tapNote: 'سيتم تحويلك إلى صفحة الدفع الآمن TAP.',
+    codTitle: 'الدفع عند الاستلام', codNote: 'يرجى تجهيز المبلغ المطلوب. يتم تحصيل الدفع عند التسليم.',
+    subtotal: 'المجموع الفرعي', discount: 'الخصم', shipping: 'التوصيل', total: 'الإجمالي', free: 'مجاني',
+    noVat: 'جميع الأسعار بالدينار الكويتي. بدون ضريبة.',
+    deliveryOptions: 'خيارات التوصيل', selectGovFirst: 'اختر المحافظة لعرض رسوم التوصيل',
+    addMoreForFree: 'أضف {amount} للحصول على توصيل مجاني',
+    mixedCart: 'المنتجات ذات الشحن المجاني لا تُسقط رسوم التوصيل عن باقي منتجات طلبك.',
+    quoteFailed: 'تعذر حساب رسوم التوصيل. يرجى المحاولة مرة أخرى.',
+    retry: 'إعادة المحاولة', calculating: 'جارٍ حساب رسوم التوصيل...',
+    payTap: 'الدفع عبر TAP', placeCod: 'تأكيد طلب الدفع عند الاستلام',
+    submitted: 'تم إرسال الطلب — جارٍ تحويلك الآن…',
+    orderPlaced: 'تم تقديم طلبك بنجاح!',
+    checkOrders: 'إذا كنت قد قدمت هذا الطلب بالفعل، تحقق من طلباتي قبل المحاولة مرة أخرى.',
+    signInTitle: 'سجّل الدخول لإتمام الطلب', signInBtn: 'سجّل الدخول للمتابعة',
+    emptyCart: 'سلتك فارغة', continueShopping: 'متابعة التسوق',
+    qty: 'الكمية', required: 'مطلوب', invalidPhone: 'أدخل رقمًا كويتيًا صحيحًا (8 أرقام يبدأ بـ 5 أو 6 أو 9)',
+    invalidEmail: 'بريد إلكتروني غير صحيح',
   },
   orders: {
-    title: 'طلباتي', total: 'طلبات', empty: 'لا توجد طلبات بعد',
+    title: 'طلباتي', total: 'طلب', empty: 'لا توجد طلبات بعد',
     startShopping: 'ابدأ التسوق', reorder: 'إعادة الطلب',
     requestReturn: 'طلب إرجاع', trackOrder: 'تتبع الطلب',
-    orderNumber: 'طلب رقم', placed: 'تاريخ الطلب', status: 'الحالة',
+    orderNumber: 'طلب', placed: 'تاريخ الطلب', status: 'الحالة',
     items: 'منتجات',
+    viewDetails: 'عرض التفاصيل', cancelOrder: 'إلغاء الطلب', keepOrder: 'الاحتفاظ بالطلب', yesCancel: 'نعم، إلغاء',
+    cancelTitle: 'هل تريد إلغاء هذا الطلب؟', cancelBody: 'سيتم إلغاء هذا الطلب وإعادة المنتجات إلى المخزون. لا يمكن التراجع عن ذلك.',
+    cancelledOk: 'تم إلغاء الطلب.', cancelFailed: 'تعذر إلغاء هذا الطلب.',
+    orderCancelled: 'تم إلغاء الطلب', backToOrders: 'العودة إلى الطلبات', notFound: 'الطلب غير موجود.',
+    orderItems: 'منتجات الطلب', priceBreakdown: 'تفاصيل السعر', deliveryAddress: 'عنوان التوصيل',
+    history: 'سجل الطلب', downloadInvoice: 'تحميل الفاتورة', whatsappSupport: 'الدعم عبر واتساب',
+    subtotal: 'المجموع الفرعي', discount: 'الخصم', shipping: 'التوصيل', grandTotal: 'الإجمالي', free: 'مجاني',
+    placedOn: 'تاريخ الطلب', payment: 'الدفع', refundNote: 'لقد دفعت إلكترونيًا — سيقوم فريقنا بمعالجة استرداد المبلغ.',
+    s_pending: 'قيد الانتظار', s_confirmed: 'تم التأكيد', s_processing: 'قيد التجهيز', s_shipped: 'في الطريق إليك',
+    s_delivered: 'تم التسليم', s_cancelled: 'ملغي', s_returned: 'مرتجع',
   },
   auth: {
     signIn: 'تسجيل الدخول', signUp: 'إنشاء حساب',
@@ -72,6 +109,24 @@ export const ar: Translations = {
     privacy: 'سياسة الخصوصية', terms: 'شروط الخدمة',
     about: 'من نحن', careers: 'وظائف', blog: 'المدونة',
   },
+  addr: {
+    title: 'دفتر العناوين', subtitle: 'احفظ عناوين التوصيل في الكويت لإتمام الطلب بشكل أسرع.',
+    addNew: 'إضافة عنوان جديد', edit: 'تعديل العنوان', new: 'عنوان جديد', label: 'التسمية',
+    home: 'المنزل', work: 'العمل', other: 'أخرى', save: 'حفظ التغييرات', add: 'إضافة العنوان', cancel: 'إلغاء',
+    setDefault: 'تعيين كافتراضي', defaultBadge: 'افتراضي', defaultCheckbox: 'تعيين كعنوان التوصيل الافتراضي',
+    none: 'لا توجد عناوين محفوظة بعد', noneSub: 'أضف عنوانًا لتسريع إتمام الطلب',
+    deleteConfirm: 'هل تريد حذف هذا العنوان؟', saved: 'تم حفظ العنوان!', deleted: 'تم حذف العنوان',
+    fillRequired: 'يرجى تعبئة جميع الحقول المطلوبة',
+  },
+  cart2: {
+    deliveryAtCheckout: 'يُحسب عند إتمام الطلب حسب المحافظة',
+    mixedNote: 'تُحتسب رسوم التوصيل لأن سلتك تحتوي على منتجات بدون شحن مجاني.',
+    bundle: 'حزمة',
+  },
+  bundles: {
+    title: 'الحزم والمجموعات', subtitle: 'وفّر أكثر عند شراء مجموعات متكاملة.', empty: 'لا توجد حزم متاحة حاليًا.',
+    includes: 'تتضمن', addBundle: 'أضف الحزمة إلى السلة', youSave: 'توفّر', added: 'تمت إضافة الحزمة إلى السلة!', outOfStock: 'غير متوفر',
+  },
   common: {
     loading: 'جار التحميل...', save: 'حفظ', cancel: 'إلغاء',
     delete: 'حذف', edit: 'تعديل', view: 'عرض', confirm: 'تأكيد',
@@ -84,3 +139,4 @@ export const ar: Translations = {
     poweredBy: 'فلوريدا الكويت',
   },
 };
+export const ar: Translations = { ...baseAr, ...p1Ar, ...p2Ar, ...p3Ar };

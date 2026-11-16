@@ -13,6 +13,8 @@ export const SITE_CONFIG = {
   name:       'Florida Kuwait',
   fullName:   'Florida Kuwait Company',
   tagline:    'Hardware & Electrical Supplies',
+  fullNameAr: 'شركة فلوريدا الكويت',
+  taglineAr:  'مستلزمات الأدوات والكهرباء',
   logoText:   'FK',
   foundedYear: 2005,
 
@@ -30,6 +32,7 @@ export const SITE_CONFIG = {
   addressLine1:   'Block 12, Street 5',
   addressLine2:   'Salmiya, Kuwait',
   addressFull:    'Block 12, Street 5, Salmiya, Kuwait',
+  addressFullAr:  'قطعة 12، شارع 5، السالمية، الكويت',
   googleMapsUrl:  'https://maps.google.com/?q=Salmiya+Kuwait',
 
   // ── Business Hours ─────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { adminGetProductById, adminUpdateProduct, adminDeleteProduct } from '@/lib/firestore-admin';
+import { adminGetProductById, adminUpdateProduct, adminDeleteProduct, ProductError } from '@/lib/firestore-admin';
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -22,6 +22,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     await adminUpdateProduct(params.id, await req.json());
     return NextResponse.json({ success: true });
   } catch (err) {
+    if (err instanceof ProductError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error('[PUT /api/products/[id]]', err);
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
   }

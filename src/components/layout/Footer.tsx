@@ -1,11 +1,19 @@
 'use client';
 import Link from 'next/link';
 import { SITE_CONFIG } from '@/lib/siteConfig';
-import { Phone, Mail, MapPin, Facebook, Instagram, Twitter, Youtube, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Phone, Mail, MapPin, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
+import { useStoreSettings } from '@/lib/useStoreSettings';
+import { formatPrice } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export function Footer() {
-  const { t, dir } = useLanguage();
+  const { t, L, dir, isArabic } = useLanguage();
+  const { freeShippingThreshold } = useStoreSettings();
+  const [cats, setCats] = useState<any[]>([]);
+  useEffect(() => {
+    fetch('/api/categories').then(r => (r.ok ? r.json() : [])).then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
+  }, []);
   return (
     <footer dir={dir} className="bg-gray-900 text-gray-300">
       {/* Main Footer */}
@@ -18,110 +26,65 @@ export function Footer() {
                 <span className="text-white font-bold text-lg font-display">{SITE_CONFIG.logoText}</span>
               </div>
               <div>
-                <div className="text-white font-bold text-lg font-display">{SITE_CONFIG.name}</div>
-                <div className="text-gray-400 text-xs">{SITE_CONFIG.tagline}</div>
+                <div className="text-white font-bold text-lg font-display">{isArabic ? SITE_CONFIG.fullNameAr : SITE_CONFIG.name}</div>
+                <div className="text-gray-400 text-xs">{isArabic ? SITE_CONFIG.taglineAr : SITE_CONFIG.tagline}</div>
               </div>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-6 max-w-xs">
-              {SITE_CONFIG.metaDesc}
+              {t('c1_foot.about')}
             </p>
             <div className="space-y-2.5 text-sm">
               <a href={`tel:${SITE_CONFIG.phoneTel}`} className="flex items-center gap-2.5 hover:text-white transition-colors">
                 <Phone className="w-4 h-4 text-brand-400" />
-                {SITE_CONFIG.phone}
+                <span dir="ltr">{SITE_CONFIG.phone}</span>
               </a>
               <a href={`mailto:${SITE_CONFIG.email}`} className="flex items-center gap-2.5 hover:text-white transition-colors">
                 <Mail className="w-4 h-4 text-brand-400" />
-                info@floridakuwait.com
+                <span dir="ltr">{SITE_CONFIG.email}</span>
               </a>
               <div className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-brand-400 mt-0.5 flex-shrink-0" />
-                <span>{SITE_CONFIG.addressFull}</span>
+                <span>{isArabic ? SITE_CONFIG.addressFullAr : SITE_CONFIG.addressFull}</span>
               </div>
-            </div>
-            {/* Socials */}
-            <div className="flex gap-3 mt-6">
-              {[
-                { Icon: Facebook, href: '#', label: 'Facebook' },
-                { Icon: Instagram, href: '#', label: 'Instagram' },
-                { Icon: Twitter, href: '#', label: 'Twitter' },
-                { Icon: Youtube, href: '#', label: 'YouTube' },
-              ].map(({ Icon, href, label }) => (
-                <a
-                  key={label}
-                  href={href}
-                  aria-label={label}
-                  className="w-9 h-9 bg-gray-800 hover:bg-brand-600 rounded-lg flex items-center justify-center transition-all duration-200"
-                >
-                  <Icon className="w-4 h-4" />
-                </a>
-              ))}
             </div>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">Shop</h3>
+            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">{t('c1_foot.shop')}</h3>
             <ul className="space-y-2.5 text-sm">
               {[
-                { label: 'All Products', href: '/shop' },
-                { label: 'Electrical Supplies', href: '/shop/electrical' },
-                { label: 'Hardware & Tools', href: '/shop/hardware' },
-                { label: 'Safety Equipment', href: '/shop/safety' },
-                { label: 'Lighting', href: '/shop/lighting' },
-                { label: 'Industrial', href: '/shop/industrial' },
-                { label: 'New Arrivals', href: '/shop?new=true' },
-                { label: 'Deals & Offers', href: '/deals' },
-              ].map(({ label, href }) => (
-                <li key={label}>
-                  <Link href={href} className="hover:text-white hover:translate-x-1 inline-block transition-all duration-200">
-                    {label}
-                  </Link>
-                </li>
+                { k: 'allProducts', href: '/shop' }, { k: 'newArrivals', href: '/shop?new=true' },
+                { k: 'bundles', href: '/bundles' }, { k: 'deals', href: '/deals' },
+              ].map(({ k, href }) => (
+                <li key={k}><Link href={href} className="hover:text-white inline-block transition-colors duration-200">{t(`c1_foot.${k}`)}</Link></li>
+              ))}
+              {cats.map(c => (
+                <li key={c.id}><Link href={`/shop/${c.slug}`} className="hover:text-white inline-block transition-colors duration-200">{L(c, 'name')}</Link></li>
               ))}
             </ul>
           </div>
 
           {/* Account */}
           <div>
-            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">Account</h3>
+            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">{t('c1_foot.account')}</h3>
             <ul className="space-y-2.5 text-sm">
               {[
-                { label: 'My Account', href: '/account' },
-                { label: 'My Orders', href: '/account/orders' },
-                { label: 'Track Order', href: '/order-tracking' },
-                { label: 'My Wishlist', href: '/account/wishlist' },
-                { label: 'Returns', href: '/account/orders' },
-                { label: 'Sign In', href: '/auth/login' },
-                { label: 'Register', href: '/auth/register' },
-              ].map(({ label, href }) => (
-                <li key={label}>
-                  <Link href={href} className="hover:text-white hover:translate-x-1 inline-block transition-all duration-200">
-                    {label}
-                  </Link>
-                </li>
+                { k: 'myAccount', href: '/account' }, { k: 'myOrders', href: '/account/orders' }, { k: 'track', href: '/order-tracking' },
+                { k: 'wishlist', href: '/account/wishlist' }, { k: 'signIn', href: '/auth/login' }, { k: 'register', href: '/auth/register' },
+              ].map(({ k, href }) => (
+                <li key={k}><Link href={href} className="hover:text-white inline-block transition-colors duration-200">{t(`c1_foot.${k}`)}</Link></li>
               ))}
             </ul>
           </div>
 
           {/* Info */}
           <div>
-            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">Information</h3>
+            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">{t('c1_foot.info')}</h3>
             <ul className="space-y-2.5 text-sm">
-              {[
-                { label: 'About Us', href: '/about' },
-                { label: 'Contact Us', href: '/contact' },
-                { label: 'Shipping Policy', href: '/shipping' },
-                { label: 'Return Policy', href: '/returns' },
-                { label: 'Privacy Policy', href: '/privacy' },
-                { label: 'Terms of Service', href: '/terms' },
-                { label: 'Sitemap', href: '/sitemap.xml' },
-              ].map(({ label, href }) => (
-                <li key={label}>
-                  <Link href={href} className="hover:text-white hover:translate-x-1 inline-block transition-all duration-200">
-                    {label}
-                  </Link>
-                </li>
+              {[{ k: 'about', href: '/about' }, { k: 'shipPolicy', href: '/shipping-info' }, { k: 'returnPolicy', href: '/returns-policy' },
+                { k: 'terms', href: '/terms' }, { k: 'privacy', href: '/privacy' }, { k: 'contact', href: '/contact' }].map(({ k, href }) => (
+                <li key={k}><Link href={href} className="hover:text-white inline-block transition-colors duration-200">{t(`c1_foot.${k}`)}</Link></li>
               ))}
             </ul>
           </div>
@@ -133,10 +96,10 @@ export function Footer() {
         <div className="container-custom py-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { Icon: Shield, title: 'Secure Payments', desc: 'SSL encrypted checkout' },
-              { Icon: Truck, title: 'Free Shipping', desc: `On orders over KWD ${SITE_CONFIG.freeShippingThreshold}` },
-              { Icon: RotateCcw, title: '30-Day Returns', desc: 'Hassle-free returns' },
-              { Icon: CreditCard, title: 'Multiple Payments', desc: 'Card, GPay & more' },
+              { Icon: Shield, title: t('c1_foot.secure'), desc: t('c1_foot.secureD') },
+              { Icon: Truck, title: t('c1_foot.ship'), desc: freeShippingThreshold ? t('c1_foot.shipD', { amount: formatPrice(freeShippingThreshold) }) : '' },
+              { Icon: RotateCcw, title: t('c1_foot.ret'), desc: t('c1_foot.retD') },
+              { Icon: CreditCard, title: t('c1_foot.pay'), desc: t('c1_foot.payD') },
             ].map(({ Icon, title, desc }) => (
               <div key={title} className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-gray-800 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -155,11 +118,11 @@ export function Footer() {
       {/* Bottom Bar */}
       <div className="border-t border-gray-800 py-5">
         <div className="container-custom flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-          <p>© {new Date().getFullYear()} {SITE_CONFIG.fullName}. {t('footer.rights')}.</p>
+          <p>© {new Date().getFullYear()} {isArabic ? SITE_CONFIG.fullNameAr : SITE_CONFIG.fullName}. {t('footer.rights')}.</p>
           <div className="flex items-center gap-4">
-            <span>We accept:</span>
+            <span>{t('c1_foot.accept')}:</span>
             <div className="flex gap-2">
-              {['VISA', 'MC', 'COD', 'GPAY', 'KNET'].map((p) => (
+              {[t('c1_foot.card'), t('c1_foot.cod')].map((p) => (
                 <span key={p} className="px-2 py-0.5 bg-gray-800 rounded text-gray-400 font-medium text-xs">{p}</span>
               ))}
             </div>

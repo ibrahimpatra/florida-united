@@ -1,8 +1,10 @@
 'use client';
 // Smart Return Flow - auto-eligibility check + camera photo verification
 import { useState, useRef, useCallback } from 'react';
-import { Camera, Upload, CheckCircle, XCircle, AlertCircle, RotateCcw, Loader2 } from 'lucide-react';
+import { Camera, Upload, CheckCircle, XCircle, AlertCircle, RotateCcw, Loader2, X } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
+import { statusText } from '@/lib/utils';
 import type { Order, OrderItem } from '@/types';
 
 interface Props {
@@ -14,17 +16,13 @@ interface Props {
 type Step = 'eligibility' | 'select_items' | 'reason' | 'photo' | 'submitting' | 'done' | 'ineligible';
 
 const RETURN_REASONS = [
-  'Item damaged / defective',
-  'Wrong item received',
-  'Item not as described',
-  'Changed my mind',
-  'Better price found elsewhere',
-  'Item arrived too late',
-  'Missing parts or accessories',
-  'Other',
-];
+  'Item damaged / defective', 'Wrong item received', 'Item not as described', 'Changed my mind',
+  'Better price found elsewhere', 'Item arrived too late', 'Missing parts or accessories', 'Other',
+]; // values are stored in English for the admin team; labels are translated
 
 export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
+  const { t, L } = useLanguage();
+  const nm = (i: any) => L({ name: i.productName, nameAr: i.productNameAr }, 'name');
   const [step, setStep] = useState<Step>('eligibility');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [reason, setReason] = useState('');
@@ -32,6 +30,7 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [ineligibleReason, setIneligibleReason] = useState('');
+  const [submitErr, setSubmitErr] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,17 +45,17 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
 
   const checkEligibility = () => {
     if (!isDelivered) {
-      setIneligibleReason('Returns can only be requested after delivery.');
+      setIneligibleReason(t('c2_ret.inel1'));
       setStep('ineligible');
       return;
     }
     if (returnableItems.length === 0) {
-      setIneligibleReason('None of the items in this order are returnable.');
+      setIneligibleReason(t('c2_ret.inel2'));
       setStep('ineligible');
       return;
     }
     if (daysSinceDelivery !== null && daysSinceDelivery > 14) {
-      setIneligibleReason(`Return window has expired. Returns must be requested within 14 days of delivery.`);
+      setIneligibleReason(t('c2_ret.inel3'));
       setStep('ineligible');
       return;
     }
@@ -82,7 +81,7 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
       }
       setCameraActive(true);
     } catch {
-      toast.error('Camera access denied. Please allow camera or upload a photo instead.');
+      toast.error(t('c2_ret.camDenied'));
     }
   }, []);
 
@@ -113,34 +112,26 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
 
   // --- Submit ---
   const handleSubmit = async () => {
-    if (!photoDataUrl) { toast.error('Please take or upload a photo of the item'); return; }
+    if (!photoDataUrl) { toast.error(t('c2_ret.needPhoto')); return; }
     setStep('submitting');
 
     try {
-      // Upload photo to Firebase Storage via API
       const uploadRes = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataUrl: photoDataUrl, folder: 'returns' }),
       });
-      const { url: imageUrl } = await uploadRes.json();
+      const up = await uploadRes.json().catch(() => null);
+      if (!uploadRes.ok || !up?.url) { setStep('photo'); toast.error(up?.error || t('c2_ret.uploadFail')); return; }
 
       const res = await fetch('/api/orders/returns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: order.id,
-          reason,
-          description,
-          images: [imageUrl],
-          selectedProductIds: selectedItems,
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, reason, description, images: [up.url], selectedProductIds: selectedItems }),
       });
-
-      if (!res.ok) throw new Error('Failed to submit');
+      const j = await res.json().catch(() => null);
+      if (!res.ok) { setStep('photo'); toast.error(j?.error || t('c2_ret.submitFail')); return; }
       setStep('done');
     } catch {
-      toast.error('Failed to submit return. Please try again.');
+      toast.error(t('c2_ret.submitFail'));
       setStep('photo');
     }
   };
@@ -148,36 +139,36 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   // ── RENDER ──────────────────────────────────────────────────
   if (step === 'eligibility') return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl">
-        <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+      <div className="flex items-center gap-3 p-4 bg-brand-50 rounded-xl">
+        <AlertCircle className="w-5 h-5 text-brand-600 flex-shrink-0" />
         <div>
-          <p className="font-semibold text-blue-900 text-sm">Return Policy</p>
-          <p className="text-blue-700 text-xs mt-0.5">Returns accepted within 14 days of delivery for eligible items. Photo verification required.</p>
+          <p className="font-semibold text-brand-900 text-sm">{t('c2_ret.policy')}</p>
+          <p className="text-brand-700 text-xs mt-0.5">{t('c2_ret.policyD')}</p>
         </div>
       </div>
       <div className="space-y-2 text-sm">
         <div className="flex justify-between py-2 border-b">
-          <span className="text-gray-500">Order Status</span>
+          <span className="text-gray-500">{t('c2_ret.orderStatus')}</span>
           <span className={`font-semibold ${isDelivered ? 'text-green-600' : 'text-orange-500'}`}>
-            {isDelivered ? 'Delivered ✓' : order.status.replace('_', ' ')}
+            {isDelivered ? t('c2_ret.delivered') : statusText(t, order.status)}
           </span>
         </div>
         <div className="flex justify-between py-2 border-b">
-          <span className="text-gray-500">Returnable Items</span>
-          <span className="font-semibold">{returnableItems.length} of {order.items.length}</span>
+          <span className="text-gray-500">{t('c2_ret.returnable')}</span>
+          <span className="font-semibold">{t('c2_ret.ofN', { a: returnableItems.length, b: order.items.length })}</span>
         </div>
         {daysSinceDelivery !== null && (
           <div className="flex justify-between py-2">
-            <span className="text-gray-500">Days Since Delivery</span>
+            <span className="text-gray-500">{t('c2_ret.daysSince')}</span>
             <span className={`font-semibold ${daysSinceDelivery > 14 ? 'text-red-600' : 'text-green-600'}`}>
-              {daysSinceDelivery} days
+              {t('c2_ret.daysN', { n: daysSinceDelivery })}
             </span>
           </div>
         )}
       </div>
       <div className="flex gap-3">
-        <button onClick={onCancel} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
-        <button onClick={checkEligibility} className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-700">Check Eligibility</button>
+        <button onClick={onCancel} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">{t('c2_ret.cancel')}</button>
+        <button onClick={checkEligibility} className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-700">{t('c2_ret.check')}</button>
       </div>
     </div>
   );
@@ -185,55 +176,55 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   if (step === 'ineligible') return (
     <div className="text-center space-y-4 py-4">
       <XCircle className="w-14 h-14 text-red-500 mx-auto" />
-      <h3 className="font-bold text-gray-900">Return Not Eligible</h3>
+      <h3 className="font-bold text-gray-900">{t('c2_ret.notEligible')}</h3>
       <p className="text-gray-600 text-sm">{ineligibleReason}</p>
-      <button onClick={onCancel} className="btn-primary w-full">Close</button>
+      <button onClick={onCancel} className="btn-primary w-full">{t('c2_ret.close')}</button>
     </div>
   );
 
   if (step === 'select_items') return (
     <div className="space-y-4">
-      <h3 className="font-bold text-gray-900">Select Items to Return</h3>
+      <h3 className="font-bold text-gray-900">{t('c2_ret.selectItems')}</h3>
       <div className="space-y-2">
         {returnableItems.map(item => (
           <label key={item.productId} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${selectedItems.includes(item.productId) ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
             <input type="checkbox" className="w-4 h-4 accent-brand-600"
               checked={selectedItems.includes(item.productId)}
               onChange={() => toggleItem(item.productId)} />
-            {item.image && <img src={item.image} alt={item.productName} className="w-10 h-10 object-cover rounded-lg" />}
+            {item.image && <img src={item.image} alt={nm(item)} className="w-10 h-10 object-cover rounded-lg" />}
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-gray-900 truncate">{item.productName}</p>
-              <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
+              <p className="font-semibold text-sm text-gray-900 truncate">{nm(item)}</p>
+              <p className="text-xs text-gray-500">{t('c2_ret.qty', { n: item.quantity })}</p>
             </div>
           </label>
         ))}
       </div>
       <div className="flex gap-3">
-        <button onClick={() => setStep('eligibility')} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">Back</button>
+        <button onClick={() => setStep('eligibility')} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">{t('c2_ret.back')}</button>
         <button onClick={() => setStep('reason')} disabled={selectedItems.length === 0}
-          className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">Next</button>
+          className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">{t('c2_ret.next')}</button>
       </div>
     </div>
   );
 
   if (step === 'reason') return (
     <div className="space-y-4">
-      <h3 className="font-bold text-gray-900">Reason for Return</h3>
+      <h3 className="font-bold text-gray-900">{t('c2_ret.reasonTitle')}</h3>
       <div className="space-y-2">
-        {RETURN_REASONS.map(r => (
+        {RETURN_REASONS.map((r, ri) => (
           <label key={r} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${reason === r ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
             <input type="radio" name="reason" className="w-4 h-4 accent-brand-600" value={r} checked={reason === r} onChange={() => setReason(r)} />
-            <span className="text-sm font-medium text-gray-800">{r}</span>
+            <span className="text-sm font-medium text-gray-800">{t(`c2_ret.r${ri + 1}`)}</span>
           </label>
         ))}
       </div>
       <textarea value={description} onChange={e => setDescription(e.target.value)}
-        placeholder="Additional details (optional)..."
+        placeholder={t('c2_ret.details')}
         className="w-full p-3 border border-gray-200 rounded-xl text-sm resize-none h-20 focus:outline-none focus:border-brand-500" />
       <div className="flex gap-3">
-        <button onClick={() => setStep('select_items')} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">Back</button>
+        <button onClick={() => setStep('select_items')} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">{t('c2_ret.back')}</button>
         <button onClick={() => setStep('photo')} disabled={!reason}
-          className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">Next</button>
+          className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">{t('c2_ret.next')}</button>
       </div>
     </div>
   );
@@ -241,29 +232,29 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   if (step === 'photo') return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-bold text-gray-900">Photo Verification Required</h3>
-        <p className="text-sm text-gray-500 mt-1">Take a clear photo of the item(s) you're returning. This speeds up approval.</p>
+        <h3 className="font-bold text-gray-900">{t('c2_ret.photoTitle')}</h3>
+        <p className="text-sm text-gray-500 mt-1">{t('c2_ret.photoSub')}</p>
       </div>
 
       {cameraActive && (
         <div className="relative rounded-xl overflow-hidden bg-black">
           <video ref={videoRef} className="w-full rounded-xl" autoPlay playsInline muted />
-          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-            <button onClick={capturePhoto} className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform">
+          <div className="absolute bottom-4 inset-x-0 flex justify-center gap-4">
+            <button onClick={capturePhoto} aria-label={t('c2_ret.capture')} className="w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform">
               <Camera className="w-7 h-7 text-gray-800" />
             </button>
-            <button onClick={stopCamera} className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">✕</button>
+            <button onClick={stopCamera} aria-label={t('c2_ret.cancel')} className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white"><X className="w-4 h-4" /></button>
           </div>
         </div>
       )}
 
       {photoDataUrl && !cameraActive && (
         <div className="relative">
-          <img src={photoDataUrl} alt="Return photo" className="w-full rounded-xl object-cover max-h-64" />
-          <button onClick={() => setPhotoDataUrl(null)}
-            className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold hover:bg-red-600">✕</button>
-          <div className="absolute bottom-2 left-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-            <CheckCircle className="w-3 h-3" /> Photo ready
+          <img src={photoDataUrl} alt={t('c2_ret.photoAlt')} className="w-full rounded-xl object-cover max-h-64" />
+          <button onClick={() => setPhotoDataUrl(null)} aria-label={t('c2_ret.removePhoto')}
+            className="absolute top-2 end-2 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-red-600"><X className="w-4 h-4" /></button>
+          <div className="absolute bottom-2 start-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" /> {t('c2_ret.photoReady')}
           </div>
         </div>
       )}
@@ -273,24 +264,24 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
           <button onClick={startCamera}
             className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-brand-400 hover:bg-brand-50 transition-colors">
             <Camera className="w-8 h-8 text-gray-500" />
-            <span className="text-sm font-semibold text-gray-700">Open Camera</span>
-            <span className="text-xs text-gray-400">Take photo now</span>
+            <span className="text-sm font-semibold text-gray-700">{t('c2_ret.openCam')}</span>
+            <span className="text-xs text-gray-400">{t('c2_ret.takeNow')}</span>
           </button>
           <button onClick={() => fileInputRef.current?.click()}
             className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-brand-400 hover:bg-brand-50 transition-colors">
             <Upload className="w-8 h-8 text-gray-500" />
-            <span className="text-sm font-semibold text-gray-700">Upload Photo</span>
-            <span className="text-xs text-gray-400">From gallery</span>
+            <span className="text-sm font-semibold text-gray-700">{t('c2_ret.upload')}</span>
+            <span className="text-xs text-gray-400">{t('c2_ret.gallery')}</span>
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
         </div>
       )}
 
       <div className="flex gap-3">
-        <button onClick={() => setStep('reason')} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">Back</button>
+        <button onClick={() => setStep('reason')} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">{t('c2_ret.back')}</button>
         <button onClick={handleSubmit} disabled={!photoDataUrl}
           className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
-          <RotateCcw className="w-4 h-4" /> Submit Return
+          <RotateCcw className="w-4 h-4" /> {t('c2_ret.submit')}
         </button>
       </div>
     </div>
@@ -299,16 +290,16 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   if (step === 'submitting') return (
     <div className="text-center py-10 space-y-4">
       <Loader2 className="w-12 h-12 text-brand-600 animate-spin mx-auto" />
-      <p className="font-semibold text-gray-700">Submitting your return request...</p>
+      <p className="font-semibold text-gray-700">{t('c2_ret.submitting')}</p>
     </div>
   );
 
   if (step === 'done') return (
     <div className="text-center space-y-4 py-4">
       <CheckCircle className="w-14 h-14 text-green-500 mx-auto" />
-      <h3 className="font-bold text-gray-900 text-lg">Return Request Submitted!</h3>
-      <p className="text-gray-600 text-sm">Your return has been submitted with photo verification. Our team will review within 24 hours. If approved, we'll arrange pickup.</p>
-      <button onClick={onSuccess} className="btn-primary w-full">Done</button>
+      <h3 className="font-bold text-gray-900 text-lg">{t('c2_ret.doneTitle')}</h3>
+      <p className="text-gray-600 text-sm">{t('c2_ret.doneBody')}</p>
+      <button onClick={onSuccess} className="btn-primary w-full">{t('c2_ret.done')}</button>
     </div>
   );
 

@@ -1,115 +1,75 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { Truck, MapPin, Check, Clock, Zap, Banknote } from 'lucide-react';
+import { Truck, Check, Clock, Loader2, AlertTriangle } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
-import type { ShippingCalculationResult, ShippingOption } from '@/lib/shipping';
+import { useLanguage } from '@/contexts/LanguageContext';
+import type { ShippingOption } from '@/lib/shipping';
 
-interface Props {
-  orderAmount: number;
-  orderWeightKg?: number;
-  governorate?: string;
-  lat?: number;
-  lng?: number;
-  onShippingSelected: (option: ShippingOption | null) => void;
-  selectedOptionId?: string;
-  /** Pass true when all cart items have freeShipping=true — forces 0 cost */
-  allItemsFreeShipping?: boolean;
+export interface Quote {
+  options: ShippingOption[];
+  defaultOption?: ShippingOption;
+  amountToFreeShipping?: number;
+  allItemsFreeShipping: boolean;
+  codFee: number;
+  codAvailable: boolean;
+  subtotal?: number;
+  discount?: number;
+  couponError?: string;
 }
 
-export function ShippingSelector({ orderAmount, orderWeightKg, governorate, lat, lng, onShippingSelected, selectedOptionId, allItemsFreeShipping }: Props) {
-  const [result, setResult] = useState<ShippingCalculationResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<string>(selectedOptionId || '');
+/** Purely presentational — the checkout page fetches the quote so there is ONE source of truth. */
+export function ShippingSelector({ quote, loading, error, hasGovernorate, selectedRateId, onSelect, onRetry, hasMixedFreeItems }: {
+  quote: Quote | null; loading: boolean; error: string | null; hasGovernorate: boolean;
+  selectedRateId?: string; onSelect: (o: ShippingOption) => void; onRetry: () => void; hasMixedFreeItems: boolean;
+}) {
+  const { t, L } = useLanguage();
 
-  const calculate = useCallback(async () => {
-    if (!governorate && !lat) return;
-    setLoading(true);
-    try {
-      const res = await fetch('/api/shipping/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ governorate, lat, lng, orderAmount, orderWeightKg, allItemsFreeShipping }),
-      });
-      const data = await res.json();
-      setResult(data);
-      if (data.defaultOption && !selected) {
-        setSelected(data.defaultOption.rateId);
-        onShippingSelected(data.defaultOption);
-      }
-    } catch {}
-    setLoading(false);
-  }, [governorate, lat, lng, orderAmount, allItemsFreeShipping]);
-
-  useEffect(() => { calculate(); }, [calculate]);
-
-  const handleSelect = (opt: ShippingOption) => {
-    setSelected(opt.rateId);
-    onShippingSelected(opt);
-  };
-
-  if (loading) return (
-    <div className="space-y-2">
-      {[1,2].map(i => <div key={i} className="skeleton h-14 w-full rounded-xl" />)}
-    </div>
-  );
-
-  if (!result?.options?.length) return (
+  if (!hasGovernorate) return (
     <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-500 flex items-center gap-2">
-      <Truck className="w-4 h-4" /><span>Select your governorate to see delivery options</span>
+      <Truck className="w-4 h-4 flex-shrink-0" /><span>{t('checkout.selectGovFirst')}</span>
     </div>
   );
+  if (loading && !quote) return (
+    <div className="flex items-center gap-2 text-sm text-gray-500 p-3"><Loader2 className="w-4 h-4 animate-spin" />{t('checkout.calculating')}</div>
+  );
+  if (error) return (
+    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 flex items-center justify-between gap-3">
+      <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 flex-shrink-0" />{error}</span>
+      <button type="button" onClick={onRetry} className="font-bold underline flex-shrink-0">{t('checkout.retry')}</button>
+    </div>
+  );
+  if (!quote?.options.length) return null;
 
   return (
-    <div className="space-y-3">
-      {result.amountToFreeShipping !== undefined && result.amountToFreeShipping > 0 && (
+    <div className="space-y-2">
+      {quote.amountToFreeShipping !== undefined && quote.amountToFreeShipping > 0 && (
         <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-sm text-green-700 flex items-center gap-2">
-          <Truck className="w-4 h-4" />
-          Add <strong className="mx-1">{formatPrice(result.amountToFreeShipping)}</strong> more for FREE delivery!
+          <Truck className="w-4 h-4 flex-shrink-0" />
+          {t('checkout.addMoreForFree').replace('{amount}', formatPrice(quote.amountToFreeShipping))}
         </div>
       )}
-
-      <div className="space-y-2">
-        {result.options.map(opt => (
-          <button key={opt.rateId} type="button" onClick={() => handleSelect(opt)}
-            className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left ${selected === opt.rateId ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${selected === opt.rateId ? 'bg-brand-500' : 'bg-gray-100'}`}>
-              {selected === opt.rateId ? <Check className="w-4 h-4 text-white" /> : <Truck className="w-4 h-4 text-gray-500" />}
+      {hasMixedFreeItems && !quote.allItemsFreeShipping && (
+        <p className="text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">{t('checkout.mixedCart')}</p>
+      )}
+      {quote.options.map(opt => {
+        const on = selectedRateId === opt.rateId;
+        return (
+          <button key={opt.rateId} type="button" onClick={() => onSelect(opt)}
+            className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-start ${on ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${on ? 'bg-brand-500' : 'bg-gray-100'}`}>
+              {on ? <Check className="w-4 h-4 text-white" /> : <Truck className="w-4 h-4 text-gray-500" />}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-900">{opt.name}</span>
-                {opt.badge && (
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${opt.isFree ? 'bg-green-100 text-green-700' : 'bg-brand-100 text-brand-700'}`}>
-                    {opt.badge}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Clock className="w-3 h-3 text-gray-400" />
-                <span className="text-xs text-gray-500">{opt.estimatedDays} business day{opt.estimatedDays !== '1' ? 's' : ''}</span>
-                {opt.carrier && <span className="text-xs text-gray-400">· {opt.carrier}</span>}
+              <div className="text-sm font-semibold text-gray-900 truncate">{L(opt as any, 'name')}</div>
+              <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
+                <Clock className="w-3 h-3" />{opt.estimatedDays}{opt.carrier ? ` · ${opt.carrier}` : ''}
               </div>
             </div>
             <span className={`text-sm font-black flex-shrink-0 ${opt.isFree ? 'text-green-600' : 'text-gray-900'}`}>
-              {opt.isFree ? 'FREE' : formatPrice(opt.price)}
+              {opt.isFree ? t('checkout.free') : formatPrice(opt.price)}
             </span>
           </button>
-        ))}
-
-        {result.localPickupAvailable && (
-          <button type="button" onClick={() => handleSelect({ rateId: 'local-pickup', zoneId: 'local', zoneName: 'Local', name: 'Store Pickup', estimatedDays: '0', price: 0, isFree: true, badge: 'FREE', method: 'local_pickup' })}
-            className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all ${selected === 'local-pickup' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selected === 'local-pickup' ? 'bg-brand-500' : 'bg-gray-100'}`}>
-              {selected === 'local-pickup' ? <Check className="w-4 h-4 text-white" /> : <MapPin className="w-4 h-4 text-gray-500" />}
-            </div>
-            <div className="flex-1">
-              <span className="text-sm font-semibold text-gray-900">Store Pickup</span>
-              {result.localPickupAddress && <p className="text-xs text-gray-400 mt-0.5">{result.localPickupAddress}</p>}
-            </div>
-            <span className="text-sm font-black text-green-600">FREE</span>
-          </button>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }

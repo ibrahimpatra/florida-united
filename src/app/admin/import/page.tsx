@@ -5,26 +5,27 @@ import { toast } from 'react-hot-toast';
 
 // ── CSV template columns ─────────────────────────────────────
 const TEMPLATE_HEADERS = [
-  'name','sku','price','comparePrice','costPrice',
-  'stock','lowStockAlert','categoryId','categoryName',
-  'brand','description','shortDescription',
-  'image','tags','weight',
+  'name','nameAr','sku','price','comparePrice','costPrice',
+  'stock','lowStockAlert','category','subcategory',
+  'brand','description','descriptionAr','shortDescription','shortDescriptionAr',
+  'image','tags','weight','freeShipping',
   'isFeatured','isNewArrival','isOnSale','isActive','isReturnable','returnDays',
-  'barcode','metaTitle','metaDesc',
+  'barcode',
 ];
 
 const TEMPLATE_EXAMPLE = [
-  'LED Flood Light 50W','LED-FL-50W','8.500','12.000','5.000',
-  '100','10','cat-lighting','Lighting',
-  'Philips','High-efficiency 50W LED flood light for outdoor use','50W LED Flood Light',
-  'https://example.com/image.jpg','led,flood,lighting,outdoor','0.8',
+  'LED Flood Light 50W','كشاف ليد خارجي 50 واط','LED-FL-50W','8.500','12.000','5.000',
+  '100','10','Lighting','Outdoor',
+  'Philips','High-efficiency 50W LED flood light for outdoor use','كشاف ليد عالي الكفاءة 50 واط للاستخدام الخارجي','50W LED Flood Light','كشاف ليد 50 واط',
+  'https://example.com/image.jpg','led,flood,lighting,outdoor','0.8','false',
   'false','true','false','true','true','14',
-  '','LED Flood Light 50W - Philips','Outdoor LED flood light',
+  '',
 ];
 
 function downloadTemplate() {
-  const rows = [TEMPLATE_HEADERS.join(','), TEMPLATE_EXAMPLE.join(',')];
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const q = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const rows = [TEMPLATE_HEADERS.join(','), TEMPLATE_EXAMPLE.map(q).join(',')];
+  const blob = new Blob(['\uFEFF' + rows.map(r => r).join('\n')], { type: 'text/csv;charset=utf-8' }); // BOM so Excel shows Arabic correctly
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = 'florida-kuwait-product-import-template.csv';
@@ -33,25 +34,30 @@ function downloadTemplate() {
 
 // ── Simple CSV parser (handles quoted fields) ─────────────────
 function parseCSV(text: string): string[][] {
+  // RFC-4180 style: quoted fields may contain commas, line breaks and "" escaped quotes. Strips an Excel BOM.
+  const src = text.replace(/^\uFEFF/, '');
   const rows: string[][] = [];
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const cols: string[] = [];
-    let cur = '', inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQ = !inQ; }
-      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-      else { cur += ch; }
-    }
-    cols.push(cur.trim());
-    rows.push(cols);
+  let row: string[] = [], cur = '', inQ = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQ) {
+      if (ch === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ',') { row.push(cur.trim()); cur = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i++;
+      row.push(cur.trim()); cur = '';
+      if (row.some(c => c)) rows.push(row);
+      row = [];
+    } else cur += ch;
   }
+  row.push(cur.trim());
+  if (row.some(c => c)) rows.push(row);
   return rows;
 }
 
-type ImportResult = { success: boolean; created: number; skipped: number; errors: string[] };
+type ImportResult = { success: boolean; created: number; skipped: number; errors: string[]; moreErrors?: number };
 type PreviewState  = 'idle' | 'previewing' | 'importing' | 'done';
 
 export default function AdminImportPage() {
@@ -89,7 +95,7 @@ export default function AdminImportPage() {
 
   const handleImport = async () => {
     if (rows.length < 2) return;
-    if (!confirm(`Import ${rows.length - 1} products? This will add them to Firestore immediately.`)) return;
+    if (!confirm(`Import up to ${rows.length - 1} products? They are added to the store immediately. Rows with problems are skipped and listed afterwards.`)) return;
 
     setState('importing');
     try {
@@ -98,11 +104,11 @@ export default function AdminImportPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows }),
       });
-      const data: ImportResult = await res.json();
-      if (data.success) {
+      const data: ImportResult = await res.json().catch(() => ({ success: false } as any));
+      if (res.ok && data.success) {
         setResult(data);
         setState('done');
-        toast.success(`✅ Imported ${data.created} products successfully!`);
+        toast.success(`Imported ${data.created} products${data.skipped ? `, ${data.skipped} skipped` : ''}`);
       } else {
         toast.error((data as any).error || 'Import failed');
         setState('previewing');
@@ -135,7 +141,7 @@ export default function AdminImportPage() {
       <div className="card p-5 mb-6 border-l-4 border-brand-500">
         <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-500"/>Required CSV Columns</h3>
         <div className="flex flex-wrap gap-2">
-          {['name','sku','price','stock','categoryId'].map(c=>(
+          {['name','sku','price','stock','category'].map(c=>(
             <span key={c} className="px-2 py-1 bg-red-50 text-red-700 rounded-lg text-xs font-mono font-bold">{c}</span>
           ))}
         </div>
@@ -144,7 +150,10 @@ export default function AdminImportPage() {
           <p>• <strong>price</strong>: in KWD (e.g. 8.500 = KWD 8.500)</p>
           <p>• <strong>tags</strong>: comma-separated (e.g. led,outdoor,50w)</p>
           <p>• <strong>isFeatured / isNewArrival / isOnSale</strong>: true or false</p>
-          <p>• <strong>image</strong>: full URL to product image</p>
+          <p>• <strong>category</strong> / <strong>subcategory</strong>: use the category names exactly as they appear under Categories (create them first)</p>
+          <p>• <strong>nameAr, descriptionAr, shortDescriptionAr</strong>: Arabic text (save the file as CSV UTF-8)</p>
+          <p>• <strong>image</strong>: full URL to product image (several URLs separated by |)</p>
+          <p>• Rows with a duplicate SKU, bad price or unknown category are skipped and listed after the import</p>
         </div>
       </div>
 
@@ -205,14 +214,15 @@ export default function AdminImportPage() {
                   <p className="text-xs text-amber-600 font-semibold">Skipped</p>
                 </div>
                 <div className="text-center p-3 bg-red-50 rounded-xl">
-                  <p className="text-2xl font-black text-red-700">{result.errors.length}</p>
+                  <p className="text-2xl font-black text-red-700">{result.skipped}</p>
                   <p className="text-xs text-red-600 font-semibold">Errors</p>
                 </div>
               </div>
               {result.errors.length > 0 && (
                 <div className="bg-red-50 rounded-xl p-3">
-                  <p className="text-xs font-bold text-red-700 mb-1">Errors (showing first 20):</p>
+                  <p className="text-xs font-bold text-red-700 mb-1">Problems (first 50 shown):</p>
                   {result.errors.map((e,i)=><p key={i} className="text-xs text-red-600">{e}</p>)}
+                  {!!result.moreErrors && <p className="text-xs text-gray-500">...and {result.moreErrors} more</p>}
                 </div>
               )}
             </div>

@@ -1,9 +1,12 @@
 'use client';
 import Link from 'next/link';
-import { Heart, ShoppingCart, Star, Eye, Share2 } from 'lucide-react';
+import { Heart, ShoppingCart, Star, Share2, Package, AlertTriangle } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useState } from 'react';
 import { useCartStore } from '@/store/cartStore';
 import { useWishlistStore } from '@/store/wishlistStore';
+import { useDeals } from '@/lib/useDeals';
+import { bestDealFor } from '@/lib/pricing';
 import { formatPrice, calculateDiscount, buildShareUrl } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import type { Product } from '@/types';
@@ -14,12 +17,15 @@ interface Props {
 }
 
 export function ProductCard({ product, showQuickView = true }: Props) {
+  const { t, L, isArabic } = useLanguage();
   const [adding, setAdding] = useState(false);
   const [imgError, setImgError] = useState(false);
   const { addItem } = useCartStore();
   const { isInWishlist, toggleItem } = useWishlistStore();
 
   const inWishlist = isInWishlist(product.id);
+  const deals = useDeals();
+  const dealHit = bestDealFor(deals, product.id, product.categoryId, product.price);
   const discount = product.comparePrice ? calculateDiscount(product.comparePrice, product.price) : 0;
   const isOutOfStock = product.stock === 0;
   const isLowStock = product.stock > 0 && product.stock <= (product.lowStockAlert ?? 5);
@@ -31,7 +37,9 @@ export function ProductCard({ product, showQuickView = true }: Props) {
     addItem({
       id: product.id,
       productId: product.id,
+      categoryId: product.categoryId,
       name: product.name,
+      nameAr: product.nameAr,
       slug: product.slug,
       price: product.price,
       comparePrice: product.comparePrice,
@@ -41,24 +49,24 @@ export function ProductCard({ product, showQuickView = true }: Props) {
       isReturnable: product.isReturnable,
       freeShipping: product.freeShipping,
     });
-    toast.success(`Added to cart!`, { icon: '🛒' });
+    toast.success(t('c1_card.added'));
     setTimeout(() => setAdding(false), 600);
   }
 
   function handleWishlist(e: React.MouseEvent) {
     e.preventDefault();
     const added = toggleItem(product.id);
-    toast(added ? 'Added to wishlist' : 'Removed from wishlist', { icon: added ? '❤️' : '💔' });
+    toast.success(added ? t('c1_card.wlAdded') : t('c1_card.wlRemoved'));
   }
 
   function handleShare(e: React.MouseEvent) {
     e.preventDefault();
     const url = buildShareUrl(product.slug);
     if (navigator.share) {
-      navigator.share({ title: product.name, url });
+      navigator.share({ title: L(product, 'name'), url }).catch(() => {});
     } else {
       navigator.clipboard.writeText(url);
-      toast.success('Link copied!');
+      toast.success(t('c1_card.copied'));
     }
   }
 
@@ -70,55 +78,55 @@ export function ProductCard({ product, showQuickView = true }: Props) {
           {!imgError && product.images?.[0] ? (
             <img
               src={product.images[0]}
-              alt={product.name}
+              alt={L(product, 'name')}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
               onError={() => setImgError(true)}
               loading="lazy"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gray-100">
-              <span className="text-5xl">📦</span>
+              <Package className="w-12 h-12 text-gray-300" />
             </div>
           )}
 
           {/* Badges */}
-          <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+          <div className="absolute top-3 start-3 flex flex-col gap-1.5">
             {discount > 0 && (
-              <span className="badge-red badge text-xs font-bold">-{discount}%</span>
+              <span className="badge-red badge text-xs font-bold">{isArabic ? `${discount}%-` : `-${discount}%`}</span>
             )}
             {product.isNewArrival && !discount && (
-              <span className="badge bg-brand-500 text-white text-xs">NEW</span>
+              <span className="badge bg-brand-500 text-white text-xs">{t('c1_card.new')}</span>
             )}
             {isOutOfStock && (
-              <span className="badge bg-gray-700 text-white text-xs">Out of Stock</span>
+              <span className="badge bg-gray-700 text-white text-xs">{t('c1_card.oos')}</span>
             )}
             {isLowStock && !isOutOfStock && (
-              <span className="badge bg-orange-500 text-white text-xs">Low Stock</span>
+              <span className="badge bg-orange-500 text-white text-xs">{t('c1_card.low')}</span>
             )}
           </div>
 
           {/* Action Buttons */}
-          <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0">
+          <div className="absolute top-3 end-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-200">
             <button
               onClick={handleWishlist}
               className={`w-8 h-8 rounded-lg shadow-md flex items-center justify-center transition-all duration-200 ${
                 inWishlist ? 'bg-red-500 text-white' : 'bg-white text-gray-600 hover:bg-red-50 hover:text-red-500'
               }`}
-              aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+              aria-label={inWishlist ? t('c1_card.wlRemove') : t('c1_card.wlAdd')}
             >
               <Heart className="w-4 h-4" fill={inWishlist ? 'currentColor' : 'none'} />
             </button>
             <button
               onClick={handleShare}
               className="w-8 h-8 rounded-lg shadow-md bg-white text-gray-600 hover:bg-brand-50 hover:text-brand-700 flex items-center justify-center transition-all duration-200"
-              aria-label="Share product"
+              aria-label={t('c1_card.share')}
             >
               <Share2 className="w-4 h-4" />
             </button>
           </div>
 
           {/* Quick Add Overlay */}
-          <div className="absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+          <div className="absolute bottom-0 inset-x-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
             <button
               onClick={handleAddToCart}
               disabled={isOutOfStock || adding}
@@ -133,7 +141,7 @@ export function ProductCard({ product, showQuickView = true }: Props) {
               ) : (
                 <ShoppingCart className="w-4 h-4" />
               )}
-              {isOutOfStock ? 'Out of Stock' : adding ? 'Adding...' : 'Quick Add'}
+              {isOutOfStock ? t('c1_card.oos') : adding ? t('c1_card.adding') : t('c1_card.quick')}
             </button>
           </div>
         </div>
@@ -144,7 +152,7 @@ export function ProductCard({ product, showQuickView = true }: Props) {
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-1">{product.brand}</p>
           )}
           <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 group-hover:text-brand-700 transition-colors leading-snug mb-2">
-            {product.name}
+            {L(product, 'name')}
           </h3>
 
           {/* Rating */}
@@ -164,18 +172,20 @@ export function ProductCard({ product, showQuickView = true }: Props) {
 
           {/* Price */}
           <div className="flex items-center gap-2">
-            <span className="text-base font-bold text-brand-700">{formatPrice(product.price)}</span>
-            {product.comparePrice && (
+            <span className="text-base font-bold text-brand-700">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : product.price)}</span>
+            {dealHit && dealHit.deal.type !== 'bogo' && <span className="text-sm text-gray-400 line-through">{formatPrice(product.price)}</span>}
+            {dealHit && dealHit.deal.type === 'bogo' && <span className="text-xs font-bold text-red-600">{t('c2_deal.bogo')}</span>}
+            {!dealHit && product.comparePrice && (
               <span className="text-sm text-gray-400 line-through">{formatPrice(product.comparePrice)}</span>
             )}
           </div>
 
           {/* SKU */}
-          <p className="text-xs text-gray-400 mt-1">SKU: {product.sku}</p>
+          <p className="text-xs text-gray-400 mt-1">{t('c1_card.sku')}: <span dir="ltr">{product.sku}</span></p>
 
           {/* Stock indicator */}
           {isLowStock && (
-            <p className="text-xs text-orange-600 font-semibold mt-1">⚠ Only {product.stock} left!</p>
+            <p className="text-xs text-orange-600 font-semibold mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{t('c1_card.onlyLeft', { n: product.stock })}</p>
           )}
         </div>
       </Link>
@@ -196,7 +206,7 @@ export function ProductCard({ product, showQuickView = true }: Props) {
           ) : (
             <ShoppingCart className="w-3.5 h-3.5" />
           )}
-          {isOutOfStock ? 'Out of Stock' : adding ? 'Added!' : 'Add to Cart'}
+          {isOutOfStock ? t('c1_card.oos') : adding ? t('c1_card.addedBtn') : t('c1_card.addCart')}
         </button>
       </div>
     </article>

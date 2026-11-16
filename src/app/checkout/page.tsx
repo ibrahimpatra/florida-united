@@ -1,33 +1,73 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { formatPrice } from '@/lib/utils';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { ShippingSelector } from '@/components/shipping/ShippingSelector';
+import { ShippingSelector, type Quote } from '@/components/shipping/ShippingSelector';
 import { KuwaitCheckoutForm } from '@/components/checkout/KuwaitCheckoutForm';
 import { Lock, ShoppingBag } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { ShippingOption } from '@/lib/shipping';
 
 export default function CheckoutPage() {
-  const { data: session } = useSession();
-  const { items, getSubtotal, discountAmount, couponCode } = useCartStore();
-  const [shippingOption, setShippingOption] = useState<ShippingOption | null>(null);
+  const { data: session, status } = useSession();
+  const { items, discountAmount, couponCode } = useCartStore();
+  const { t, L } = useLanguage();
   const [governorate, setGovernorate] = useState('');
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [rateId, setRateId] = useState<string | undefined>();
+  const [serverSubtotal, setServerSubtotal] = useState<number | null>(null);
+  const reqId = useRef(0);
 
-  const subtotal = getSubtotal();
-  const shippingCost = shippingOption?.price ?? 1.500; // default KWD 1.500
-  // If every item in the cart has freeShipping=true, force free delivery
-  const allItemsFreeShipping = items.length > 0 && items.every(i => i.freeShipping);
+  // Stable key: refetch only when ids/quantities/governorate change.
+  const itemsKey = useMemo(() => items.map(i => `${i.productId}:${i.variantId || ''}:${i.quantity}`).join('|') + '|' + (couponCode || ''), [items, couponCode]);
+
+  const fetchQuote = useCallback(async () => {
+    if (!governorate || !items.length) { setQuote(null); setQuoteError(null); return; }
+    const my = ++reqId.current;
+    setQuoteLoading(true); setQuoteError(null);
+    try {
+      const res = await fetch('/api/shipping/calculate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ governorate, couponCode: couponCode || undefined, items: items.map(i => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId, variantName: i.variantName })) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (my !== reqId.current) return;
+      if (!res.ok || !data?.options) throw new Error(data?.error || t('checkout.quoteFailed'));
+      setQuote(data); setServerSubtotal(data.subtotal ?? null);
+      // keep the customer's choice if still offered, else take the cheapest
+      setRateId(prev => data.options.some((o: ShippingOption) => o.rateId === prev) ? prev : data.defaultOption?.rateId);
+    } catch (e: any) {
+      if (my !== reqId.current) return;
+      setQuote(null); setRateId(undefined); setQuoteError(e?.message || t('checkout.quoteFailed'));
+    }
+    if (my === reqId.current) setQuoteLoading(false);
+  }, [governorate, itemsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { fetchQuote(); }, [fetchQuote]);
+
+  const clientSubtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const subtotal = serverSubtotal ?? clientSubtotal;
+  const chosen = quote?.options.find(o => o.rateId === rateId) || quote?.defaultOption || null;
+  const shippingCost = chosen?.price ?? 0;
+  // Once the server has quoted, its coupon figure is the truth (it is what placeOrder will charge).
+  const discount = quote ? (quote.discount ?? 0) : discountAmount;
+  const total = Math.round(Math.max(0, subtotal - discount + shippingCost) * 1000) / 1000;
+  const hasMixedFreeItems = items.some(i => i.freeShipping) && items.some(i => !i.freeShipping);
+
+  if (status === 'loading') return <><Header /><div className="container-custom py-20 text-center text-gray-400">{t('c2_chk.loading')}</div><Footer /></>;
 
   if (!session) return (
     <><Header />
     <div className="container-custom py-20 text-center">
       <Lock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-      <h2 className="text-xl font-bold text-gray-800 mb-2">Sign in to checkout</h2>
-      <Link href="/auth/login?callbackUrl=/checkout" className="btn-primary mt-2">Sign In to Continue</Link>
+      <h2 className="text-xl font-bold text-gray-800 mb-2">{t('checkout.signInTitle')}</h2>
+      <Link href="/auth/login?callbackUrl=/checkout" className="btn-primary mt-2">{t('checkout.signInBtn')}</Link>
     </div><Footer /></>
   );
 
@@ -35,86 +75,65 @@ export default function CheckoutPage() {
     <><Header />
     <div className="container-custom py-20 text-center">
       <ShoppingBag className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-      <h2 className="text-xl font-bold text-gray-800 mb-2">Your cart is empty</h2>
-      <Link href="/shop" className="btn-primary mt-2">Continue Shopping</Link>
+      <h2 className="text-xl font-bold text-gray-800 mb-2">{t('checkout.emptyCart')}</h2>
+      <Link href="/shop" className="btn-primary mt-2">{t('checkout.continueShopping')}</Link>
     </div><Footer /></>
   );
 
   return (
     <><Header />
-    <div className="container-custom py-10 max-w-6xl">
-      <h1 className="text-2xl font-black text-gray-900 mb-8">Checkout</h1>
-      <div className="grid lg:grid-cols-2 gap-10">
-        {/* Left: Form */}
+    <div className="container-custom py-6 md:py-10 max-w-6xl">
+      <h1 className="text-2xl font-black text-gray-900 mb-6 md:mb-8">{t('checkout.title')}</h1>
+      <div className="grid lg:grid-cols-2 gap-8 lg:gap-10">
         <div>
-          {/* Shipping selector */}
-          <div className="mb-6">
-            <h3 className="text-base font-bold text-gray-900 mb-3">📍 Select Governorate for Shipping Rates</h3>
-            <select
-              value={governorate}
-              onChange={e => setGovernorate(e.target.value)}
-              className="input-field">
-              <option value="">-- Select your governorate --</option>
-              {['Capital (العاصمة)','Hawalli (حولي)','Farwaniya (الفروانية)','Ahmadi (الأحمدي)','Jahra (الجهراء)','Mubarak Al-Kabeer (مبارك الكبير)'].map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-            {governorate && (
-              <div className="mt-3">
-                <ShippingSelector
-                  orderAmount={subtotal}
-                  governorate={governorate}
-                  allItemsFreeShipping={allItemsFreeShipping}
-                  onShippingSelected={setShippingOption}
-                  selectedOptionId={shippingOption?.rateId}
-                />
-              </div>
-            )}
-          </div>
-
           <KuwaitCheckoutForm
             items={items}
-            subtotal={subtotal}
-            discount={discountAmount}
-            shippingOption={shippingOption}
+            governorate={governorate}
+            onGovernorateChange={setGovernorate}
+            rateId={chosen?.rateId}
+            quoteReady={!!chosen && !quoteLoading}
+            codFee={quote?.codFee ?? 0}
+            total={total}
             couponCode={couponCode ?? undefined}
             userEmail={session.user.email || ''}
+            shippingSlot={
+              <ShippingSelector quote={quote} loading={quoteLoading} error={quoteError} hasGovernorate={!!governorate}
+                selectedRateId={rateId} onSelect={o => setRateId(o.rateId)} onRetry={fetchQuote} hasMixedFreeItems={hasMixedFreeItems} />
+            }
           />
         </div>
 
-        {/* Right: Cart Summary */}
-        <div className="lg:sticky lg:top-24 space-y-4 h-fit">
+        <div className="lg:sticky lg:top-24 space-y-4 h-fit order-first lg:order-none">
           <div className="bg-gray-50 rounded-2xl p-5">
-            <h3 className="font-bold text-gray-900 mb-4">Order Summary ({items.length} items)</h3>
+            <h3 className="font-bold text-gray-900 mb-4">{t('checkout.orderSummary')} ({items.length})</h3>
             <div className="space-y-3 mb-4 max-h-72 overflow-y-auto">
               {items.map(item => (
-                <div key={item.id} className="flex gap-3 items-center">
+                <div key={item.id + (item.variantId || '')} className="flex gap-3 items-center">
                   <div className="w-12 h-12 bg-white rounded-xl overflow-hidden flex-shrink-0 border border-gray-100">
-                    {item.image
-                      ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center text-xl">📦</div>}
+                    {item.image ? <img src={item.image} alt={L(item as any, 'name')} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><ShoppingBag className="w-5 h-5 text-gray-300" /></div>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
-                    {item.variantName && <p className="text-xs text-gray-400">{item.variantName}</p>}
-                    <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{L(item as any, 'name')}</p>
+                    {item.variantName && <p className="text-xs text-gray-400">{L(item as any, 'variantName')}</p>}
+                    <p className="text-xs text-gray-500">{t('checkout.qty')}: {item.quantity}</p>
                   </div>
                   <span className="text-sm font-bold text-gray-900 flex-shrink-0">{formatPrice(item.price * item.quantity)}</span>
                 </div>
               ))}
             </div>
             <div className="border-t pt-3 space-y-2 text-sm">
-              <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{formatPrice(subtotal)}</span></div>
-              {discountAmount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{formatPrice(discountAmount)}</span></div>}
+              <div className="flex justify-between text-gray-600"><span>{t('checkout.subtotal')}</span><span>{formatPrice(subtotal)}</span></div>
+              {discount > 0 && <div className="flex justify-between text-green-600"><span>{t('checkout.discount')}{couponCode ? ` (${couponCode})` : ''}</span><span>-{formatPrice(discount)}</span></div>}
+              {quote?.couponError && <p className="text-xs text-red-600">{quote.couponError}</p>}
               <div className="flex justify-between text-gray-600">
-                <span>Shipping</span>
-                <span>{shippingOption ? (shippingOption.isFree ? <span className="text-green-600 font-semibold">FREE</span> : formatPrice(shippingOption.price)) : '—'}</span>
+                <span>{t('checkout.shipping')}</span>
+                <span>{chosen ? (chosen.isFree ? <span className="text-green-600 font-semibold">{t('checkout.free')}</span> : formatPrice(chosen.price)) : '-'}</span>
               </div>
               <div className="flex justify-between font-black text-gray-900 text-base border-t pt-2">
-                <span>Total</span>
-                <span className="text-brand-700">{formatPrice(subtotal - discountAmount + shippingCost)}</span>
+                <span>{t('checkout.total')}</span><span className="text-brand-700">{chosen ? formatPrice(total) : '-'}</span>
               </div>
-              <p className="text-xs text-gray-400 text-center">All prices in Kuwaiti Dinar (KWD). No VAT.</p>
+              <p className="text-xs text-gray-400 text-center">{t('checkout.noVat')}</p>
             </div>
           </div>
         </div>

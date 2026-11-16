@@ -4,6 +4,7 @@ import { Footer } from '@/components/layout/Footer';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { ShopClient } from '@/components/product/ShopClient';
 import { adminGetCategories } from '@/lib/firestore-admin';
+import { CategoryHero } from '@/components/layout/PageHero';
 import { notFound } from 'next/navigation';
 
 interface Props { params: { category: string } }
@@ -34,18 +35,8 @@ export default async function CategoryPage({ params }: Props) {
   return (
     <><AnnouncementBar/><Header/>
     <main>
-      <div className="page-hero">
-        <div className="container-custom">
-          <nav className="text-sm text-gray-500 mb-3" aria-label="Breadcrumb">
-            <a href="/" className="hover:text-brand-600">Home</a> <span className="mx-2">/</span>
-            <a href="/shop" className="hover:text-brand-600">Shop</a> <span className="mx-2">/</span>
-            <span className="text-gray-800 font-medium">{catName}</span>
-          </nav>
-          <h1 className="text-3xl font-bold text-gray-900 font-display">{catName}</h1>
-          {cat?.description && <p className="text-gray-500 mt-1">{cat.description}</p>}
-        </div>
-      </div>
-      <ShopClient initialFilters={{ categoryId: cat?.id || params.category, categorySlug: params.category }} />
+      <CategoryHero cat={cat ? JSON.parse(JSON.stringify(cat)) : null} fallbackName={catName} />
+      <ShopClient key={params.category} initialFilters={{ categoryId: cat?.id || params.category, categorySlug: params.category }} />
     </main>
     <Footer/></>
   );

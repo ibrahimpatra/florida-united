@@ -12,12 +12,13 @@ export default function AdminCustomersPage() {
   const [search, setSearch]       = useState('');
   const [page, setPage]           = useState(1);
   const [error, setError]         = useState('');
+  const [q, setQ]                 = useState('');
 
-  const load = useCallback(async (p: number) => {
+  const load = useCallback(async (p: number, term = '') => {
     setLoading(true);
     setError('');
     try {
-      const res  = await fetch(`/api/admin/users?page=${p}`);
+      const res  = await fetch(`/api/admin/users?page=${p}${term ? `&search=${encodeURIComponent(term)}` : ''}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
       setCustomers(data.items || []);
@@ -29,15 +30,10 @@ export default function AdminCustomersPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(page); }, [page, load]);
+  useEffect(() => { load(page, q); }, [page, q, load]);
+  useEffect(() => { const t = setTimeout(() => { setQ(search.trim()); setPage(1); }, 350); return () => clearTimeout(t); }, [search]);
 
-  const filtered = search
-    ? customers.filter(c =>
-        c.name?.toLowerCase().includes(search.toLowerCase()) ||
-        c.email?.toLowerCase().includes(search.toLowerCase()) ||
-        c.phone?.includes(search)
-      )
-    : customers;
+  const filtered = customers; // searching is done on the server across all customers
 
   const totalPages = Math.ceil(total / 20);
 
@@ -67,12 +63,12 @@ export default function AdminCustomersPage() {
 
       {error && (
         <div className="card p-4 mb-4 bg-red-50 border border-red-200 text-red-700 text-sm">
-          ⚠ {error}
+          {error}
         </div>
       )}
 
-      <div className="card overflow-hidden">
-        <table className="table">
+      <div className="card overflow-x-auto">
+        <table className="table min-w-[640px]">
           <thead>
             <tr>
               <th>Customer</th><th>Email</th><th>Phone</th>

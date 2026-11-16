@@ -7,15 +7,21 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Format price in KWD (Kuwaiti Dinar)
+/** True only in the browser while the Arabic UI is active (admin/server/PDF are always English). */
+const arabicUi = () => typeof document !== 'undefined' && document.documentElement.lang === 'ar';
+
 export function formatPrice(amount: number, currency = 'KWD'): string {
+  const n = Number(amount) || 0;
+  if (arabicUi() && currency === 'KWD') return `${n.toFixed(3)} د.ك`;
   return new Intl.NumberFormat('en-KW', {
     style: 'currency',
     currency,
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
-  }).format(amount);
+  }).format(n);
 }
 
+/** Percentage off: calculateDiscount(originalPrice, salePrice) */
 export function calculateDiscount(originalPrice: number, salePrice: number): number {
   if (!originalPrice || originalPrice <= salePrice) return 0;
   return Math.round(((originalPrice - salePrice) / originalPrice) * 100);
@@ -23,14 +29,14 @@ export function calculateDiscount(originalPrice: number, salePrice: number): num
 
 export function formatDate(dateString: string, options?: Intl.DateTimeFormatOptions): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-KW', options || {
+  return date.toLocaleDateString(arabicUi() ? 'ar-KW-u-nu-latn' : 'en-KW', options || {
     year: 'numeric', month: 'short', day: 'numeric',
   });
 }
 
 export function formatDateTime(dateString: string): string {
   const date = new Date(dateString);
-  return date.toLocaleString('en-KW', {
+  return date.toLocaleString(arabicUi() ? 'ar-KW-u-nu-latn' : 'en-KW', {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
@@ -109,16 +115,39 @@ export function getStatusColor(status: string): string {
 }
 
 export const ORDER_STATUS_STEPS = [
-  { key: 'pending',          label: 'Order Placed',      icon: '🛒' },
-  { key: 'confirmed',        label: 'Confirmed',         icon: '✅' },
-  { key: 'processing',       label: 'Processing',        icon: '⚙️' },
-  { key: 'shipped',          label: 'Shipped',           icon: '📦' },
-  { key: 'out_for_delivery', label: 'Out for Delivery',  icon: '🚚' },
-  { key: 'delivered',        label: 'Delivered',         icon: '🎉' },
+  { key: 'pending',          label: 'Order Placed',      icon: '' },
+  { key: 'confirmed',        label: 'Confirmed',         icon: '' },
+  { key: 'processing',       label: 'Processing',        icon: '' },
+  { key: 'shipped',          label: 'Shipped',           icon: '' },
+  { key: 'out_for_delivery', label: 'Out for Delivery',  icon: '' },
+  { key: 'delivered',        label: 'Delivered',         icon: '' },
 ] as const;
 
 export function getOrderProgress(status: string): number {
   const idx = ORDER_STATUS_STEPS.findIndex(s => s.key === status);
   if (idx === -1) return 0;
   return Math.round((idx / (ORDER_STATUS_STEPS.length - 1)) * 100);
+}
+/** Translated order-status label; falls back to the English label for unknown statuses. */
+export function statusText(t: (k: string) => string, status: string): string {
+  const k = `orders.s_${status}`;
+  const v = t(k);
+  return v === k ? getStatusLabel(status) : v;
+}
+
+/** Display name for a Kuwait governorate (stored values stay in English). */
+export const GOVERNORATE_AR: Record<string, string> = {
+  'Al Asimah (Capital)': 'العاصمة', Hawalli: 'حولي', Farwaniya: 'الفروانية',
+  Ahmadi: 'الأحمدي', Jahra: 'الجهراء', 'Mubarak Al-Kabeer': 'مبارك الكبير',
+};
+export const govLabel = (g: string | undefined, isArabic: boolean) => (g ? (isArabic ? GOVERNORATE_AR[g] || g : g) : '');
+
+/** One place that knows how a saved shipping address is laid out (new Kuwait-style and legacy orders). */
+export function formatAddress(sa: any): { name: string; line1: string; line2: string; phone: string } {
+  const a = sa || {};
+  const name = String(a.name || `${a.firstName || ''} ${a.lastName || ''}`).trim();
+  const line1 = [a.block && `Block ${a.block}`, a.street || a.address1, a.building && `Building ${a.building}`, a.floor && `Floor ${a.floor}`, a.apartment && `Apt ${a.apartment}`, a.area]
+    .filter(Boolean).join(', ');
+  const line2 = [a.city, a.governorate, a.country || 'Kuwait'].filter(Boolean).join(', ');
+  return { name, line1, line2, phone: String(a.phone || '') };
 }

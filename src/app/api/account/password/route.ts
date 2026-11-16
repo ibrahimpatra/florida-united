@@ -7,6 +7,7 @@ export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error:'Unauthorized' }, { status:401 });
   const { currentPassword, newPassword } = await req.json();
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return NextResponse.json({ error:'Password must be at least 8 characters' }, { status:400 });
   const db = getAdminDb();
   const userDoc = await db.collection('users').doc(session.user.id).get();
   if (!userDoc.exists) return NextResponse.json({ error:'User not found' }, { status:404 });

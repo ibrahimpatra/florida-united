@@ -68,7 +68,7 @@ async function sendWhatsApp(to: string, message: string): Promise<boolean> {
       return false;
     }
 
-    console.log(`[WhatsApp] ✅ Sent to ${normPhone}`);
+    console.log(`[WhatsApp] Sent to ${normPhone}`);
     return true;
   } catch (err) {
     console.error('[WhatsApp] Network error:', err);
@@ -88,22 +88,22 @@ export async function sendWhatsAppOrderConfirmation(order: Order): Promise<void>
   const more = order.items.length > 5 ? `\n  • ...and ${order.items.length - 5} more item(s)` : '';
 
   const msg = [
-    `🛒 *Order Confirmed!* — Florida Kuwait`,
+    `*Order Confirmed!* — Florida Kuwait`,
     ``,
     `Hello ${order.userName.split(' ')[0]}! Your order has been received.`,
     ``,
-    `📦 *Order:* #${order.orderNumber}`,
-    `💰 *Total:* KWD ${order.total.toFixed(3)}`,
+    `*Order:* #${order.orderNumber}`,
+    `*Total:* KWD ${order.total.toFixed(3)}`,
     ``,
     `*Items:*`,
     itemLines + more,
     ``,
-    `📍 *Delivering to:* ${order.shippingAddress.city}, Kuwait`,
+    `*Delivering to:* ${order.shippingAddress.city}, Kuwait`,
     ``,
     `You'll receive updates as your order is processed.`,
     `Track your order: ${process.env.NEXT_PUBLIC_APP_URL}/order-tracking?q=${order.orderNumber}`,
     ``,
-    `Questions? Reply to this message or call us 📞 +965 2222 5050`,
+    `Questions? Reply to this message or call us +965 2222 5050`,
   ].join('\n');
 
   await sendWhatsApp(phone, msg);
@@ -114,34 +114,34 @@ export async function sendWhatsAppStatusUpdate(order: Order, newStatus: string):
   const phone = order.userPhone || order.shippingAddress?.phone;
   if (!phone) return;
 
-  const STATUS_MESSAGES: Record<string, { emoji: string; line: string }> = {
-    confirmed:   { emoji: '✅', line: 'Your order has been confirmed and is being prepared.' },
-    processing:  { emoji: '⚙️', line: 'We\'re now processing and packing your order.' },
-    shipped:     { emoji: '🚚', line: 'Your order is on its way!' },
-    delivered:   { emoji: '🎉', line: 'Your order has been delivered. Enjoy!' },
-    cancelled:   { emoji: '❌', line: 'Your order has been cancelled.' },
-    refunded:    { emoji: '💸', line: 'Your refund has been processed.' },
-    return_approved: { emoji: '📦', line: 'Your return request has been approved.' },
+  const STATUS_MESSAGES: Record<string, { emoji?: string; line: string }> = {
+    confirmed:   { line: 'Your order has been confirmed and is being prepared.' },
+    processing:  { line: 'We\'re now processing and packing your order.' },
+    shipped:     { line: 'Your order is on its way!' },
+    delivered:   { line: 'Your order has been delivered. Enjoy!' },
+    cancelled:   { line: 'Your order has been cancelled.' },
+    refunded:    { line: 'Your refund has been processed.' },
+    return_approved: { line: 'Your return request has been approved.' },
   };
 
   const statusInfo = STATUS_MESSAGES[newStatus];
   if (!statusInfo) return; // Don't send for unknown statuses
 
   const trackingLine = order.trackingNumber
-    ? `\n🔍 *Tracking:* ${order.trackingNumber} via ${order.shippingCarrier}`
+    ? `\n*Tracking:* ${order.trackingNumber} via ${order.shippingCarrier}`
     : '';
 
   const msg = [
-    `${statusInfo.emoji} *Order Update* — Florida Kuwait`,
+    `*Order Update* — Florida Kuwait`,
     ``,
     `Hi ${order.userName.split(' ')[0]}!`,
     statusInfo.line,
     ``,
-    `📦 *Order:* #${order.orderNumber}` + trackingLine,
+    `*Order:* #${order.orderNumber}` + trackingLine,
     ``,
     `Track your order: ${process.env.NEXT_PUBLIC_APP_URL}/order-tracking?q=${order.orderNumber}`,
     ``,
-    `Questions? Reply here or call 📞 +965 2222 5050`,
+    `Questions? Reply here or call +965 2222 5050`,
   ].join('\n');
 
   await sendWhatsApp(phone, msg);
