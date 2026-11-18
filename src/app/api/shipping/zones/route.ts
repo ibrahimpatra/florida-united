@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -6,11 +7,11 @@ import { normalizeZone, findGovernorateConflict, ValidationError } from '@/lib/z
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+async function __GET() {
   try { return NextResponse.json(await adminGetShippingZones(), { headers: { 'Cache-Control': 'no-store' } }); }
   catch (e) { console.error('[GET shipping/zones]', e); return NextResponse.json({ error: 'Failed to load zones' }, { status: 500 }); }
 }
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -25,3 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create zone' }, { status: 500 });
   }
 }
+
+export const GET = withLog('GET', '/api/shipping/zones', __GET);
+export const POST = withLog('POST', '/api/shipping/zones', __POST);

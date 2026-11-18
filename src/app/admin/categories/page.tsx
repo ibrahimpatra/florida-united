@@ -1,4 +1,6 @@
 'use client';
+import { TranslateButton } from '@/components/admin/TranslateButton';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Home, Navigation } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -96,7 +98,7 @@ export default function AdminCategoriesPage() {
   );
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Categories</h1>
@@ -131,6 +133,12 @@ export default function AdminCategoriesPage() {
                 placeholder="e.g. Electrical Supplies"
               />
             </div>
+            <div className="flex">
+              <TranslateButton context="a product category of a hardware store" fields={[
+                { en: form.name, ar: form.nameAr, set: v => setForm(f => ({ ...f, nameAr: v })) },
+                { en: form.description, ar: form.descriptionAr, set: v => setForm(f => ({ ...f, descriptionAr: v })) },
+              ]} />
+            </div>
             <div>
               <label className="label">Arabic Name <span dir="rtl" className="text-gray-400 font-normal">(الاسم بالعربية)</span></label>
               <input value={form.nameAr} onChange={e => setForm(f => ({ ...f, nameAr: e.target.value }))}
@@ -158,7 +166,7 @@ export default function AdminCategoriesPage() {
             </div>
             <div>
               <label className="label">Sort Order <span className="text-gray-400 font-normal text-xs">(lower = first)</span></label>
-              <input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) }))} className="input-field"/>
+              <NumberInput type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) }))} className="input-field"/>
             </div>
 
             {/* Description */}
@@ -194,7 +202,7 @@ export default function AdminCategoriesPage() {
                 Product Count
                 <span className="text-gray-400 font-normal text-xs ml-1">(displayed on homepage, e.g. 8500 → "8,500+ items")</span>
               </label>
-              <input type="number" value={form.productCount} onChange={e => setForm(f => ({ ...f, productCount: Number(e.target.value) }))} className="input-field" placeholder="0"/>
+              <NumberInput type="number" value={form.productCount} onChange={e => setForm(f => ({ ...f, productCount: Number(e.target.value) }))} className="input-field" placeholder="0"/>
             </div>
 
             {/* Meta */}

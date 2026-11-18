@@ -1,9 +1,10 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { adminGetAllFlashDeals, adminGetActiveFlashDeals, adminCreateFlashDeal } from '@/lib/shipping-admin';
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   try {
     const admin = new URL(req.url).searchParams.get('admin') === 'true';
     const session = await getServerSession(authOptions);
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
   } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -25,3 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, id });
   } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
+
+export const GET = withLog('GET', '/api/flash-deals', __GET);
+export const POST = withLog('POST', '/api/flash-deals', __POST);

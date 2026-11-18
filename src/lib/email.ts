@@ -1,7 +1,11 @@
 // src/lib/email.ts
 import { formatAddress } from './utils';
 import nodemailer from 'nodemailer';
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { DEFAULT_BRAND, type Brand } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
+
+// Admin > Settings can rename the company; every exported sender refreshes this first.
+let SITE_CONFIG: Brand = DEFAULT_BRAND;
 import type { Order } from '@/types';
 
 // Format money in KWD (3 decimal places — Kuwait standard)
@@ -13,6 +17,7 @@ const emailPass = process.env.EMAIL_PASSWORD || process.env.SMTP_PASS;
 const emailHost = process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
 const emailPort = parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || '587');
 
+import { log } from './logger';
 const transporter = nodemailer.createTransport({
   host: emailHost,
   port: emailPort,
@@ -22,8 +27,15 @@ const transporter = nodemailer.createTransport({
     : undefined, // Skip auth if not configured — prevents crash on startup
 });
 
+/** Every email goes through here so a failure is always logged with who and why. */
+async function sendMailLogged(opts: any) {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) { log.warn('email', 'not sent - EMAIL_USER / EMAIL_PASSWORD are not set', { to: opts?.to, subject: opts?.subject }); return; }
+  try { return await transporter.sendMail(opts); }
+  catch (e: any) { log.error('email', 'send FAILED', { to: opts?.to, subject: opts?.subject, error: e?.message, code: e?.code }); throw e; }
+}
+
 const BRAND_COLOR = '#1a56db';
-const SITE_URL = SITE_CONFIG.siteUrl;
+const SITE_URL = DEFAULT_BRAND.siteUrl;
 
 function baseTemplate(content: string, preheader = '') {
   return `
@@ -32,7 +44,7 @@ function baseTemplate(content: string, preheader = '') {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Florida Kuwait Company</title>
+  <title>${SITE_CONFIG.fullName}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fb; color: #1f2937; }
@@ -95,6 +107,7 @@ function baseTemplate(content: string, preheader = '') {
 const esc = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export async function sendOrderConfirmation(order: Order) {
+  SITE_CONFIG = await getBrand();
   const addr = formatAddress(order.shippingAddress);
   const isCard = order.paymentMethod === 'card';
   const o: any = order;
@@ -163,7 +176,7 @@ export async function sendOrderConfirmation(order: Order) {
     <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:8px;">You'll receive shipping updates as your order progresses.</p>
   `;
 
-  await transporter.sendMail({
+  await sendMailLogged({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailOrders}>`,
     to: order.userEmail,
     subject: `${isCard ? 'Payment received' : 'Order received'} #${order.orderNumber} — ${SITE_CONFIG.fullName}`,
@@ -173,6 +186,7 @@ export async function sendOrderConfirmation(order: Order) {
 
 // ── ORDER STATUS UPDATE EMAIL ─────────────────────────────────
 export async function sendOrderStatusUpdate(order: Order, newStatus: string, note?: string) {
+  SITE_CONFIG = await getBrand();
   const statusMessages: Record<string, { title: string; body: string; emoji?: string }> = {
     processing: { title: 'Order Being Processed', body: 'We\'re preparing your items for shipment.' },
     shipped: { title: 'Your Order Has Shipped!', body: `Your order is on its way!${order.trackingNumber ? ` Track with: <strong>${order.trackingNumber}</strong> via ${order.shippingCarrier}` : ''}` },
@@ -214,7 +228,7 @@ export async function sendOrderStatusUpdate(order: Order, newStatus: string, not
     </div>
   `;
 
-  await transporter.sendMail({
+  await sendMailLogged({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailOrders}>`,
     to: order.userEmail,
     subject: `${msg.title} — Order #${order.orderNumber}`,
@@ -224,6 +238,7 @@ export async function sendOrderStatusUpdate(order: Order, newStatus: string, not
 
 // ── WELCOME / REGISTRATION EMAIL ─────────────────────────────
 export async function sendWelcomeEmail(email: string, name: string) {
+  SITE_CONFIG = await getBrand();
   const content = `
     <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Welcome to ${SITE_CONFIG.name}! </h2>
     <p style="color:#6b7280;margin-bottom:24px;">Hi ${name}, your account has been created successfully.</p>
@@ -257,16 +272,17 @@ export async function sendWelcomeEmail(email: string, name: string) {
     </div>
   `;
 
-  await transporter.sendMail({
+  await sendMailLogged({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailNoReply}>`,
     to: email,
-    subject: `Welcome to Florida Kuwait Company, ${name}! `,
+    subject: `Welcome to ${SITE_CONFIG.fullName}, ${name}! `,
     html: baseTemplate(content, 'Welcome! Your account is ready.'),
   });
 }
 
 // ── PASSWORD RESET EMAIL ──────────────────────────────────────
 export async function sendPasswordResetEmail(email: string, resetLink: string) {
+  SITE_CONFIG = await getBrand();
   const content = `
     <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Reset Your Password </h2>
     <p style="color:#6b7280;margin-bottom:24px;">We received a request to reset your password for your ${SITE_CONFIG.name} account.</p>
@@ -284,10 +300,10 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
     <p style="font-size:12px;color:#9ca3af;margin-top:16px;">Or copy this link: <a href="${resetLink}" style="color:${BRAND_COLOR};word-break:break-all;">${resetLink}</a></p>
   `;
 
-  await transporter.sendMail({
+  await sendMailLogged({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailNoReply}>`,
     to: email,
-    subject: 'Reset Your Password — Florida Kuwait Company',
+    subject: `Reset Your Password — ${SITE_CONFIG.fullName}`,
     html: baseTemplate(content, 'Your password reset link'),
   });
 }
@@ -296,6 +312,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
 export async function sendReturnRequestEmail(
   email: string, name: string, orderNumber: string, returnId: string, reason: string
 ) {
+  SITE_CONFIG = await getBrand();
   const content = `
     <h2 style="color:#1f2937;font-size:22px;margin-bottom:4px;">Return Request Received </h2>
     <p style="color:#6b7280;margin-bottom:24px;">Hi ${name}, we've received your return request.</p>
@@ -320,7 +337,7 @@ export async function sendReturnRequestEmail(
     </div>
   `;
 
-  await transporter.sendMail({
+  await sendMailLogged({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.fullName}" <${SITE_CONFIG.emailReturns}>`,
     to: email,
     subject: `Return Request Received — Order #${orderNumber}`,
@@ -330,6 +347,7 @@ export async function sendReturnRequestEmail(
 
 // ── ADMIN NEW ORDER EMAIL ─────────────────────────────────────
 export async function sendAdminNewOrderNotification(order: Order) {
+  SITE_CONFIG = await getBrand();
   const adminEmail = process.env.ADMIN_EMAIL || SITE_CONFIG.emailAdmin;
   const content = `
     <h2 style="color:#1f2937;">New Order Received!</h2>
@@ -347,7 +365,7 @@ export async function sendAdminNewOrderNotification(order: Order) {
     </div>
   `;
 
-  await transporter.sendMail({
+  await sendMailLogged({
     from: process.env.EMAIL_FROM || `"${SITE_CONFIG.name}" <${SITE_CONFIG.emailOrders}>`,
     to: adminEmail,
     subject: `New Order #${order.orderNumber} — ${fmtKWD(order.total)}`,
@@ -356,8 +374,9 @@ export async function sendAdminNewOrderNotification(order: Order) {
 }
 
 export async function sendContactEmail(name: string, email: string, subject: string, message: string) {
+  SITE_CONFIG = await getBrand();
   const adminEmail = process.env.ADMIN_EMAIL || SITE_CONFIG.emailAdmin;
-  await transporter.sendMail({
+  await sendMailLogged({
     from: process.env.EMAIL_FROM!,
     to: adminEmail,
     replyTo: email,
@@ -374,6 +393,7 @@ export async function sendOrderConfirmationEmail(
   items: Order['items'],
   total: number
 ): Promise<void> {
+  SITE_CONFIG = await getBrand();
   // Build a minimal order object and delegate to sendOrderConfirmation
   const mockOrder = {
     userEmail: email,
@@ -387,5 +407,6 @@ export async function sendOrderConfirmationEmail(
 }
 
 export async function sendReturnStatusEmail(email: string, name: string, orderNumber: string, status: string, note?: string): Promise<void> {
+  SITE_CONFIG = await getBrand();
   // Alias for return status notifications
 }

@@ -1,9 +1,10 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { sendWelcomeEmail } from '@/lib/email';
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     const { name, email, password, phone } = await req.json();
 
@@ -80,6 +81,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Password is too weak' }, { status: 400 });
     }
 
-    return NextResponse.json({ error: 'Registration failed. Please try again.' }, { status: 500 });
+    const code = err?.errorInfo?.code || err?.code;
+    if (code === 'auth/invalid-phone-number') return NextResponse.json({ error: 'Phone number is not valid. Use 8 digits, e.g. 55512345.' }, { status: 400 });
+    if (code === 'auth/phone-number-already-exists') return NextResponse.json({ error: 'This phone number is already registered.' }, { status: 409 });
+
+    // Setup problems (wrong keys, Firestore / Authentication not enabled) are shown to you in development only.
+    let hint = '';
+    const msg = String(err?.message || '');
+    if (/credentials are missing/i.test(msg)) hint = 'Firebase Admin keys are missing in .env.local (FIREBASE_ADMIN_PROJECT_ID / CLIENT_EMAIL / PRIVATE_KEY).';
+    else if (/PEM|private key|DECODER|invalid_grant|unauthenticated|UNAUTHENTICATED/i.test(msg) || code === 16) hint = 'FIREBASE_ADMIN_PRIVATE_KEY or CLIENT_EMAIL is wrong. Re-copy them from the service account JSON.';
+    else if (code === 'auth/configuration-not-found' || /CONFIGURATION_NOT_FOUND/.test(msg)) hint = 'Firebase Authentication is not enabled. Firebase Console > Build > Authentication > Get started.';
+    else if (code === 5 || /NOT_FOUND/.test(msg)) hint = 'Firestore database does not exist yet. Firebase Console > Build > Firestore Database > Create database.';
+    else if (code === 7 || /PERMISSION_DENIED/.test(msg)) hint = 'The service account is not allowed to use Firestore/Auth for this project (wrong project ID or key from another project).';
+    return NextResponse.json({ error: 'Registration failed. Please try again.', ...(process.env.NODE_ENV !== 'production' ? { hint: hint || msg.slice(0, 300) } : {}) }, { status: 500 });
   }
 }
+
+export const POST = withLog('POST', '/api/auth/register', __POST);

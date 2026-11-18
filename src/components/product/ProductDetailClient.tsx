@@ -99,7 +99,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
               {product.images.map((img, i) => (
                 <button key={i} onClick={() => setMainImg(i)}
                   className={`w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border-2 transition-colors ${i === mainImg ? 'border-brand-500' : 'border-transparent hover:border-gray-300'}`}>
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <img src={img} alt={`${name} - ${i + 1}`} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
@@ -121,8 +121,8 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
           )}
 
           {/* Price — KWD */}
-          <div className="flex items-baseline gap-3 mb-5">
-            <span className="text-3xl font-black text-brand-700">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : unitPrice)}</span>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-5">
+            <span className="text-2xl sm:text-3xl font-black text-brand-700 whitespace-nowrap">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : unitPrice)}</span>
             {dealHit && dealHit.deal.type !== 'bogo' && <span className="text-lg text-gray-400 line-through">{formatPrice(unitPrice)}</span>}
             {dealHit && <span className="badge-red badge font-bold">{dealHit.deal.type === 'bogo' ? t('c2_deal.bogo') : L(dealHit.deal as any, 'title')}</span>}
             {!unit && !dealHit && product.comparePrice && <span className="text-lg text-gray-400 line-through">{formatPrice(product.comparePrice)}</span>}

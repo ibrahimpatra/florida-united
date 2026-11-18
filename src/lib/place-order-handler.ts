@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { log } from '@/lib/logger';
 import { authOptions } from '@/lib/auth';
-import { placeOrder, OrderError } from '@/lib/orders-server';
+import { placeOrder, OrderError, sweepStaleCardOrders } from '@/lib/orders-server';
 import { sendOrderConfirmation, sendAdminNewOrderNotification } from '@/lib/email';
 import { sendWhatsAppOrderConfirmation } from '@/lib/whatsapp';
 import type { Order } from '@/types';
@@ -12,9 +13,10 @@ import type { Order } from '@/types';
  */
 export function notifyOrderPlaced(o: Order) {
   const to = (o as any).contactEmail || o.userEmail;
-  sendOrderConfirmation({ ...o, userEmail: to }).catch(console.error);
-  sendAdminNewOrderNotification(o).catch(console.error);
-  sendWhatsAppOrderConfirmation(o).catch(console.error);
+  const ctx = { order: (o as any).orderNumber };
+  sendOrderConfirmation({ ...o, userEmail: to }).catch(e => log.error('email', 'order confirmation to customer FAILED (check EMAIL_* settings)', { ...ctx, to, error: e?.message }));
+  sendAdminNewOrderNotification(o).catch(e => log.error('email', 'new-order alert to admin FAILED', { ...ctx, error: e?.message }));
+  sendWhatsAppOrderConfirmation(o).catch(e => log.error('whatsapp', 'order WhatsApp FAILED', { ...ctx, error: e?.message }));
 }
 
 /** Shared by POST /api/orders and POST /api/orders/cod. ALWAYS answers JSON. */
@@ -23,6 +25,8 @@ export async function placeOrderHandler(req: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id)
       return NextResponse.json({ error: 'Please sign in to place an order.', code: 'UNAUTHORIZED' }, { status: 401 });
+
+    await sweepStaleCardOrders(); // frees stock held by abandoned card checkouts (see orders-server)
 
     let body: any;
     try { body = await req.json(); }
@@ -49,8 +53,8 @@ export async function placeOrderHandler(req: NextRequest) {
       total: result.total, duplicate: !!result.duplicate,
     });
   } catch (e) {
-    if (e instanceof OrderError) return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
-    console.error('[placeOrder]', e);
+    if (e instanceof OrderError) { log.warn('order', `order rejected: ${e.code} - ${e.message}`); return NextResponse.json({ error: e.message, code: e.code }, { status: e.status }); }
+    log.error('order', 'placeOrder crashed - nothing was saved', { error: (e as any)?.message, stack: String((e as any)?.stack || '').split('\n').slice(0, 5) });
     return NextResponse.json(
       { error: 'We could not place your order. Nothing was saved or charged — please try again in a moment.', code: 'SERVER' },
       { status: 500 });

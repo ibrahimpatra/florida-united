@@ -42,9 +42,8 @@ function bigText(deal: FlashDeal, t: (k: string, v?: any) => string) {
 }
 const Icon = (d: FlashDeal) => (d.type === 'percentage' ? Percent : d.type === 'bogo' ? Gift : Tag);
 
-function target(deal: FlashDeal) {
-  return deal.scope === 'products' && deal.productIds?.length === 1 ? `/shop/products/${deal.productIds[0]}` : '/deals';
-}
+// /deals lists the products each live deal covers (product pages are addressed by slug, not by the ids stored on a deal)
+function target(_deal: FlashDeal) { return '/deals'; }
 
 /**
  * Home-page offer banners. Fully automatic: every live flash deal that is marked "show on homepage" appears here,
@@ -62,12 +61,11 @@ export function FlashDealsSection() {
   const scopeLine = hero.minCartAmount ? t('c2_deal.minCart', { amount: formatPrice(hero.minCartAmount) }) : hero.scope === 'all' ? t('c2_deal.allStore') : '';
 
   return (
-    <section className="section" aria-label={t('c1_home.flash')}>
+    <section className="pt-4 pb-2 sm:pt-6" aria-label={t('c1_home.flash')}>
       <div className="container-custom space-y-4">
         {/* Hero offer */}
         <Link href={target(hero)} className="group relative block overflow-hidden rounded-3xl text-white" style={{ backgroundColor: hero.bannerColor || '#b91c1c' }}>
           {/* diagonal hatching + a darker slab on the number side: printed-poster feel instead of a flat gradient */}
-          <div className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: 'repeating-linear-gradient(135deg, #fff 0 2px, transparent 2px 14px)' }} />
           <div className="absolute inset-y-0 end-0 w-1/2 bg-black/15 [clip-path:polygon(22%_0,100%_0,100%_100%,0_100%)] rtl:[clip-path:polygon(0_0,78%_0,100%_100%,0_100%)]" />
           <div className="relative grid md:grid-cols-[1.3fr_1fr] gap-6 items-center p-6 sm:p-10">
             <div>
@@ -98,7 +96,6 @@ export function FlashDealsSection() {
               const b = bigText(d, t);
               return (
                 <Link key={d.id} href={target(d)} className="group relative overflow-hidden rounded-2xl p-5 text-white" style={{ backgroundColor: d.bannerColor || '#1d4ed8' }}>
-                  <div className="absolute inset-0 opacity-[0.1]" style={{ backgroundImage: 'repeating-linear-gradient(135deg, #fff 0 2px, transparent 2px 12px)' }} />
                   <div className="relative flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <span className="text-[11px] font-bold uppercase tracking-wider opacity-80">{L(d as any, 'badgeText')}</span>

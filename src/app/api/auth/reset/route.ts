@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -7,7 +8,7 @@ import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 export const dynamic = 'force-dynamic';
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     const { token, password } = await req.json();
     if (typeof token !== 'string' || token.length < 32) return NextResponse.json({ error: 'INVALID' }, { status: 400 });
@@ -28,3 +29,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) { console.error('[reset]', e); return NextResponse.json({ error: 'FAIL' }, { status: 500 }); }
 }
+
+export const POST = withLog('POST', '/api/auth/reset', __POST);

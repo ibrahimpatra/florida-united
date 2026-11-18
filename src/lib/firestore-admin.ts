@@ -170,6 +170,12 @@ export function categoryFamily(cats: Category[], rootId: string): Set<string> {
   return ids;
 }
 
+/** Fields only the store owner may see. Applied to everything sent to shoppers (API responses and page props). */
+export function publicProduct<T extends Record<string, any>>(p: T): T {
+  const { costPrice, ...rest } = p as any;
+  return rest as T;
+}
+
 export async function adminGetProducts(
   filters: ProductFilters & { admin?: boolean; stockStatus?: 'in' | 'out' | 'low' } = {}
 ): Promise<PaginatedResponse<Product>> {
@@ -226,7 +232,8 @@ export async function adminGetProducts(
 
   const total = items.length;
   const offset = (page - 1) * pageSize;
-  return { items: items.slice(offset, offset + pageSize), total, page, pageSize, hasMore: offset + pageSize < total };
+  const pageItems = items.slice(offset, offset + pageSize);
+  return { items: filters.admin ? pageItems : pageItems.map(publicProduct), total, page, pageSize, hasMore: offset + pageSize < total };
 }
 
 export async function adminGetProductById(id: string): Promise<Product | null> {
@@ -337,9 +344,43 @@ export async function adminUpdateProduct(id: string, data: Partial<Product>): Pr
   invalidateProductCache();
 }
 
-export async function adminDeleteProduct(id: string): Promise<void> {
-  await getAdminDb().collection('products').doc(id).delete();
+/** True when any order (new or old) contains this product. Orders keep their own copy of name/price, but history must stay linked. */
+export async function productHasOrderHistory(id: string): Promise<boolean> {
+  const db = getAdminDb();
+  const byField = await db.collection('orders').where('productIds', 'array-contains', id).limit(1).get();
+  if (!byField.empty) return true;
+  // orders placed before the productIds field existed: bounded scan of recent orders
+  const old = await db.collection('orders').limit(2000).get();
+  return old.docs.some(d => ((d.data() as any).items || []).some((i: any) => i.productId === id || (i.bundleItems || []).some((b: any) => b.productId === id)));
+}
+
+/**
+ * Deleting a product that was ever ordered would break order history, reports and returns, so it is ARCHIVED instead:
+ * hidden from the shop and from carts, kept for history, restorable by switching it back on. A product that was never
+ * ordered is really deleted (and removed from any deal that listed it). A product inside a bundle cannot go at all.
+ */
+export async function adminDeleteProduct(id: string): Promise<{ deleted?: true; archived?: true; message: string }> {
+  const db = getAdminDb();
+  const ref = db.collection('products').doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new ProductError(404, 'Product not found.');
+
+  const bundles = await db.collection('bundles').get();
+  const inBundle = bundles.docs.filter(b => ((b.data() as any).items || []).some((i: any) => i.productId === id));
+  if (inBundle.length) throw new ProductError(409, `This product is part of the bundle "${(inBundle[0].data() as any).name}". Remove it from the bundle first.`);
+
+  if (await productHasOrderHistory(id)) {
+    await ref.update({ isActive: false, isArchived: true, archivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    invalidateProductCache();
+    return { archived: true, message: 'This product has order history, so it was archived instead of deleted. It is hidden from the shop and can be restored any time.' };
+  }
+  const deals = await db.collection('flashDeals').where('productIds', 'array-contains', id).get();
+  const batch = db.batch();
+  deals.docs.forEach(d => batch.update(d.ref, { productIds: FieldValue.arrayRemove(id) }));
+  batch.delete(ref);
+  await batch.commit();
   invalidateProductCache();
+  return { deleted: true, message: 'Product deleted.' };
 }
 
 // ── ORDERS ───────────────────────────────────────────────────
@@ -713,8 +754,16 @@ export async function adminUpdateCoupon(id: string, data: any): Promise<void> {
   await getAdminDb().collection('coupons').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
 }
 
-export async function adminDeleteCoupon(id: string): Promise<void> {
-  await getAdminDb().collection('coupons').doc(id).delete();
+/** A coupon that customers already used keeps its usage record: it is switched off instead of deleted. */
+export async function adminDeleteCoupon(id: string): Promise<{ archived?: true; message: string }> {
+  const ref = getAdminDb().collection('coupons').doc(id);
+  const snap = await ref.get();
+  if (snap.exists && Number((snap.data() as any).usedCount || 0) > 0) {
+    await ref.update({ isActive: false });
+    return { archived: true, message: 'This coupon was already used in orders, so it was switched off instead of deleted.' };
+  }
+  await ref.delete();
+  return { message: 'Coupon deleted.' };
 }
 
 // ── REVIEWS ───────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -9,7 +10,7 @@ async function guard() {
   return session && session.user.role === 'admin';
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+async function __PUT(req: NextRequest, { params }: { params: { id: string } }) {
   if (!(await guard())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const zone = normalizeZone(await req.json());
@@ -23,8 +24,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Failed to update zone (does it still exist?)' }, { status: 500 });
   }
 }
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+async function __DELETE(_: NextRequest, { params }: { params: { id: string } }) {
   if (!(await guard())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try { await adminDeleteShippingZone(params.id); return NextResponse.json({ success: true }); }
   catch (e) { console.error('[DELETE shipping/zones/:id]', e); return NextResponse.json({ error: 'Failed to delete zone' }, { status: 500 }); }
 }
+
+export const PUT = withLog('PUT', '/api/shipping/zones/[id]', __PUT);
+export const DELETE = withLog('DELETE', '/api/shipping/zones/[id]', __DELETE);

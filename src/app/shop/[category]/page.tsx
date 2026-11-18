@@ -1,3 +1,5 @@
+import { altLinks, siteUrl } from '@/lib/seo';
+import { JsonLd, breadcrumb } from '@/components/seo/JsonLd';
 import type { Metadata } from 'next';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -15,9 +17,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     cat = cats.find(c => c.slug === params.category) || null; } catch {}
   if (!cat) return { title: 'Category Not Found' };
   return {
-    title: cat.metaTitle || `${cat.name} — Florida Kuwait Company`,
-    description: cat.metaDesc || `Shop ${cat.name} at Florida Kuwait Company. Best prices on hardware and electrical supplies in Florida.`,
-    alternates: { canonical: `/shop/${cat.slug}` },
+    title: cat.metaTitle || cat.name,
+    description: cat.metaDesc || `Shop ${cat.name}. Best prices on hardware and electrical supplies in Kuwait.`,
+    alternates: altLinks(`/shop/${cat.slug}`),
   };
 }
 
@@ -38,6 +40,7 @@ export default async function CategoryPage({ params }: Props) {
       <CategoryHero cat={cat ? JSON.parse(JSON.stringify(cat)) : null} fallbackName={catName} />
       <ShopClient key={params.category} initialFilters={{ categoryId: cat?.id || params.category, categorySlug: params.category }} />
     </main>
-    <Footer/></>
+    <Footer/>
+    <JsonLd data={breadcrumb(siteUrl(), [{ name: 'Home', path: '/' }, { name: 'Shop', path: '/shop' }, { name: catName, path: `/shop/${params.category}` }])} /></>
   );
 }

@@ -1,7 +1,8 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminGetProductById, adminGetProducts } from '@/lib/firestore-admin';
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   const productId = new URL(req.url).searchParams.get('productId');
   try {
     if (productId) {
@@ -14,3 +15,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(featured.items);
   } catch (e) { return NextResponse.json([]); }
 }
+
+export const GET = withLog('GET', '/api/recommendations', __GET);

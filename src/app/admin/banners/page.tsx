@@ -1,4 +1,6 @@
 'use client';
+import { TranslateButton } from '@/components/admin/TranslateButton';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Pencil, X, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -71,6 +73,11 @@ export default function AdminBannersPage() {
             <h3 className="font-bold text-gray-800">{form.id ? 'Edit Banner' : 'New Banner'}</h3>
             <button onClick={() => setForm(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
           </div>
+          <div className="mb-3"><TranslateButton context="a promotional banner of a hardware store" fields={[
+            { en: form.title, ar: form.titleAr, set: v => f('titleAr', v) },
+            { en: form.subtitle, ar: form.subtitleAr, set: v => f('subtitleAr', v) },
+            { en: form.buttonText, ar: form.buttonTextAr, set: v => f('buttonTextAr', v) },
+          ]} /></div>
           <div className="grid sm:grid-cols-2 gap-4">
             <div><label className="label">Title *</label><input value={form.title} onChange={e => f('title', e.target.value)} className="input-field" placeholder="Summer Sale" /></div>
             <div><label className="label">Arabic Title <span dir="rtl" className="text-gray-400 font-normal">(العنوان بالعربية)</span></label><input value={form.titleAr || ''} onChange={e => f('titleAr', e.target.value)} dir="rtl" lang="ar" className="input-field" placeholder="تخفيضات الصيف" /></div>
@@ -78,7 +85,7 @@ export default function AdminBannersPage() {
             <div><label className="label">Arabic Subtitle <span dir="rtl" className="text-gray-400 font-normal">(الوصف بالعربية)</span></label><input value={form.subtitleAr || ''} onChange={e => f('subtitleAr', e.target.value)} dir="rtl" lang="ar" className="input-field" placeholder="خصم يصل إلى 40% على منتجات مختارة" /></div>
             <div className="sm:col-span-2"><label className="label">Image URL *</label><input value={form.image} onChange={e => f('image', e.target.value)} className="input-field" placeholder="https://..." /></div>
             <div><label className="label">Link</label><input value={form.link || ''} onChange={e => f('link', e.target.value)} className="input-field" placeholder="/shop/electrical" /></div>
-            <div><label className="label">Sort Order</label><input type="number" value={form.sortOrder} onChange={e => f('sortOrder', Number(e.target.value))} className="input-field" /></div>
+            <div><label className="label">Sort Order</label><NumberInput type="number" value={form.sortOrder} onChange={e => f('sortOrder', Number(e.target.value))} className="input-field" /></div>
             <div><label className="label">Button Text</label><input value={form.buttonText || ''} onChange={e => f('buttonText', e.target.value)} className="input-field" /></div>
             <div><label className="label">Arabic Button Text <span dir="rtl" className="text-gray-400 font-normal">(نص الزر)</span></label><input value={form.buttonTextAr || ''} onChange={e => f('buttonTextAr', e.target.value)} dir="rtl" lang="ar" className="input-field" /></div>
             <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={form.isActive} onChange={e => f('isActive', e.target.checked)} className="w-4 h-4 accent-brand-600" />Active</label>

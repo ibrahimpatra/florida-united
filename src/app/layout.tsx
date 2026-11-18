@@ -2,28 +2,36 @@ import type { Metadata, Viewport } from 'next';
 import '../styles/globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { AgentChat } from '@/components/agent/AgentChat';
+import { ClientIssueLogger } from '@/components/layout/ClientIssueLogger';
+import { siteUrl } from '@/lib/seo';
+import { getBrand } from '@/lib/brand-server';
+import { themeCss } from '@/lib/brand';
+import { BrandProvider } from '@/contexts/BrandContext';
 import { Toaster } from 'react-hot-toast';
 
-export const metadata: Metadata = {
-  title: { default: 'Florida Kuwait', template: '%s | Florida Kuwait' },
-  description: "Kuwait's premier hardware store — tools, electrical, plumbing, and building supplies.",
-  keywords: ['hardware store', 'Kuwait', 'tools', 'electrical', 'building supplies'],
-  openGraph: {
-    type: 'website',
-    locale: 'en_KW',
-    url: process.env.NEXT_PUBLIC_APP_URL,
-    siteName: 'Florida Kuwait',
-  },
-  robots: { index: true, follow: true },
-};
+export const revalidate = 60;
 
-export const viewport: Viewport = {
-  themeColor: '#2563EB',
-  width: 'device-width',
-  initialScale: 1,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const b = await getBrand();
+  return {
+    metadataBase: new URL(siteUrl()),
+    title: { default: b.name, template: `%s | ${b.name}` },
+    description: b.tagline ? `${b.tagline}. ${b.name} — tools, electrical, plumbing, and building supplies.` : "Tools, electrical, plumbing, and building supplies.",
+    keywords: ['hardware store', 'Kuwait', 'tools', 'electrical', 'building supplies'],
+    icons: b.faviconUrl ? { icon: b.faviconUrl, apple: b.faviconUrl } : undefined,
+    openGraph: { type: 'website', locale: 'en_KW', url: process.env.NEXT_PUBLIC_APP_URL, siteName: b.name },
+    robots: { index: true, follow: true },
+  };
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export async function generateViewport(): Promise<Viewport> {
+  const b = await getBrand();
+  return { themeColor: b.brandColor, width: 'device-width', initialScale: 1 };
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const brand = await getBrand();
+  const css = themeCss(brand.brandColor, brand.accentColor);
   return (
     <html lang="en">
       <head>
@@ -33,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Archivo:wdth,wght@100,700;112,800&display=swap"
           rel="stylesheet"
         />
+        {css && <style dangerouslySetInnerHTML={{ __html: css }} />}
         <style dangerouslySetInnerHTML={{ __html: `
           /* RTL layout when Arabic active */
           html.arabic-active body { direction: rtl; }
@@ -59,7 +68,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         `}} />
       </head>
       <body>
+        <BrandProvider value={brand}>
         <Providers>
+          <ClientIssueLogger />
           {children}
           <AgentChat />
           <Toaster
@@ -67,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             toastOptions={{ duration: 3000, style: { borderRadius: '12px', fontWeight: 600 } }}
           />
         </Providers>
+        </BrandProvider>
       </body>
     </html>
   );

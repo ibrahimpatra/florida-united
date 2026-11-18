@@ -1,10 +1,13 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { adminGetProducts, adminCreateProduct, ProductError } from '@/lib/firestore-admin';
+import { adminGetActiveFlashDeals } from '@/lib/shipping-admin';
+import { dealIsLive, dealCoversProduct } from '@/lib/pricing';
 import type { ProductFilters } from '@/types';
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     // admin=true exposes inactive/draft products → only honour it for a real admin session.
@@ -31,7 +34,15 @@ export async function GET(req: NextRequest) {
       pageSize:     parseInt(searchParams.get('limit') || '24'),
       admin:        isAdmin,
     };
-    const result = await adminGetProducts(filters as any);
+    let result: any;
+    if (searchParams.get('sale') === 'true' && !isAdmin) {
+      // "On sale" = marked on sale OR covered by a deal that is running right now
+      const deals = (await adminGetActiveFlashDeals().catch(() => [])).filter((d: any) => dealIsLive(d));
+      const page = filters.page || 1, size = filters.pageSize || 24;
+      const all: any = await adminGetProducts({ ...filters, isOnSale: undefined, page: 1, pageSize: 5000 } as any);
+      const hit = all.items.filter((p: any) => p.isOnSale || deals.some((d: any) => dealCoversProduct(d, p.id, p.categoryId)));
+      result = { items: hit.slice((page - 1) * size, page * size), total: hit.length, page, pageSize: size, hasMore: page * size < hit.length };
+    } else result = await adminGetProducts(filters as any);
     return NextResponse.json(result, {
       headers: { 'Cache-Control': isAdmin ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=60' },
     });
@@ -41,7 +52,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -55,3 +66,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
   }
 }
+
+export const GET = withLog('GET', '/api/products', __GET);
+export const POST = withLog('POST', '/api/products', __POST);

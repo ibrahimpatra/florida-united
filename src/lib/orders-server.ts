@@ -16,7 +16,8 @@ import { FieldValue } from 'firebase-admin/firestore';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getAdminDb } from './firebase-admin';
 import { SITE_CONFIG } from './siteConfig';
-import { cardEnabled, expireStripeSession } from './stripe';
+import { expireStripeSession } from './stripe';
+import { onlineProvider } from './payments';
 import {
   applyFlashDeals, PricedLine, ZoneLike, ShippingSettings, canonicalGovernorate, computeShipping,
   computeCoupon, computeTotal, makeOrderNumber, round3,
@@ -202,7 +203,8 @@ export async function placeOrder(input: PlaceOrderInput) {
   const db = getAdminDb();
   const address = cleanAddress(input.shippingAddress);
   const method = input.paymentMethod === 'card' ? 'card' : 'cod';
-  if (method === 'card' && !cardEnabled()) throw new OrderError(400, 'Card payment is not available right now.', 'CARD_OFF');
+  const provider = method === 'card' ? await onlineProvider(db) : null;
+  if (method === 'card' && !provider) throw new OrderError(400, 'Online payment is not available right now. Please choose cash on delivery.', 'CARD_OFF');
 
   const lockId = input.idempotencyKey
     ? `${input.userId}_${String(input.idempotencyKey).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 100)}` : null;
@@ -304,7 +306,8 @@ export async function placeOrder(input: PlaceOrderInput) {
           orderNumber, userId: input.userId, userEmail: input.userEmail, userName: input.userName,
           ...(contactEmail ? { contactEmail } : {}),
           userPhone: address.phone, shippingAddress: address, items,
-          status: 'pending', paymentStatus: 'pending', paymentMethod: method, currency: 'KWD',
+          productIds: [...new Set(items.map((i: any) => i.productId).concat(items.flatMap((i: any) => (i.bundleItems || []).map((b: any) => b.productId))).filter(Boolean))], // lets us tell if a product has order history
+          status: 'pending', paymentStatus: 'pending', paymentMethod: method, ...(provider ? { paymentProvider: provider.id } : {}), currency: 'KWD',
           subtotal, discount, ...(dealDiscount > 0 ? { dealDiscount, dealIds: usedDealIds } : {}), shippingCost, shippingMethod: chosen.name, tax: 0, total,
           couponCode: code || null, couponId: couponRef?.id || null, notes: String(input.notes || '').slice(0, 500) || null,
           statsDay: day, idempotencyKey: input.idempotencyKey || null,
@@ -445,7 +448,7 @@ export async function cancelOrder(args: { orderId: string; actor: { id: string; 
 
 // ── Card payments ────────────────────────────────────────────
 /** Idempotent: safe to call from the webhook AND the success-page confirm. */
-export async function markOrderPaid(orderId: string, info: { sessionId?: string; paymentIntent?: string; usdAmount?: number; usdRate?: number }) {
+export async function markOrderPaid(orderId: string, info: { provider?: string; paymentRef?: string; sessionId?: string; paymentIntent?: string; usdAmount?: number; usdRate?: number }) {
   const db = getAdminDb();
   return db.runTransaction(async tx => {
     const ref = db.collection('orders').doc(orderId);
@@ -457,13 +460,14 @@ export async function markOrderPaid(orderId: string, info: { sessionId?: string;
     const history = Array.isArray(o.statusHistory) ? [...o.statusHistory] : [];
     const upd: Record<string, any> = {
       paymentStatus: 'paid', paidAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      ...(info.paymentRef ? { paymentRef: info.paymentRef } : {}),
       ...(info.sessionId ? { stripeSessionId: info.sessionId } : {}),
       ...(info.paymentIntent ? { stripePaymentIntent: info.paymentIntent } : {}),
       ...(info.usdAmount ? { usdAmount: info.usdAmount } : {}), ...(info.usdRate ? { usdRate: info.usdRate } : {}),
     };
     if (o.status === 'pending') {
       upd.status = 'confirmed';
-      history.push({ status: 'confirmed', note: 'Payment received via Stripe', createdAt: nowIso });
+      history.push({ status: 'confirmed', note: `Payment received via ${({ stripe: 'Stripe', tap: 'Tap', myfatoorah: 'MyFatoorah' } as any)[info.provider || o.paymentProvider || 'stripe'] || 'card'}`, createdAt: nowIso });
     } else if (o.status === 'cancelled') {
       // money arrived for an order that was already cancelled (expired session / race) -> needs a refund
       upd.needsRefund = true;
@@ -499,17 +503,40 @@ export async function restockItems(db: Firestore, items: any[]) {
 export async function expireUnpaidCardOrders(hours = 2): Promise<{ cancelled: number }> {
   const db = getAdminDb();
   const cutoff = Date.now() - hours * 3_600_000;
-  const snap = await db.collection('orders').where('paymentStatus', '==', 'pending').get();
+  const snap = await db.collection('orders').where('paymentMethod', '==', 'card').where('paymentStatus', '==', 'pending').get();
   let cancelled = 0;
   for (const d of snap.docs) {
     const o: any = d.data();
     const created = o.createdAt?.toDate ? o.createdAt.toDate().getTime() : new Date(o.createdAt).getTime();
     if (o.paymentMethod !== 'card' || o.status !== 'pending' || !Number.isFinite(created) || created > cutoff) continue;
     try {
+      // The customer may have paid without coming back (closed the tab): ask the provider before cancelling.
+      try {
+        const { settleOrderPayment } = await import('./payments/settle');
+        const sr = await settleOrderPayment(d.id);
+        if (sr.paid) {
+          if (!sr.already && sr.order) { const { notifyOrderPlaced } = await import('./place-order-handler'); notifyOrderPlaced(sr.order); }
+          continue;
+        }
+      } catch (e: any) { console.error('[sweep verify]', d.id, e?.message); continue; } // cannot verify -> do not cancel a possibly paid order
       if (o.stripeSessionId) await expireStripeSession(o.stripeSessionId);
       await cancelOrder({ orderId: d.id, actor: { id: 'system', role: 'admin' }, note: 'Card payment not completed in time' });
       cancelled++;
     } catch (e) { console.error('[expire card order]', d.id, e); }
   }
   return { cancelled };
+}
+
+/**
+ * Vercel's free (Hobby) plan only allows ONE cron run per day, so abandoned card orders are also released
+ * opportunistically: whenever someone places an order, at most once every 10 minutes per server instance.
+ */
+let lastSweep = 0;
+export async function sweepStaleCardOrders(): Promise<void> {
+  if (Date.now() - lastSweep < 10 * 60_000) return;
+  lastSweep = Date.now();
+  try {
+    const r = await expireUnpaidCardOrders(2);
+    if (r.cancelled) console.warn(`[sweep] released stock of ${r.cancelled} unpaid card order(s)`);
+  } catch (e: any) { console.error('[sweep] failed', e?.message); }
 }

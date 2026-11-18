@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -8,7 +9,7 @@ import { computeShipping, type PricedLine } from '@/lib/pricing';
 export const dynamic = 'force-dynamic';
 
 /** Admin-only "what would checkout charge?" using the SAME pure function as real orders. */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -26,3 +27,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Test failed' }, { status: 500 });
   }
 }
+
+export const POST = withLog('POST', '/api/shipping/test', __POST);

@@ -1,10 +1,10 @@
+import { CAIRO_REGULAR_B64, CAIRO_BOLD_B64 } from './pdf-fonts';
 /**
  * Minimal bidirectional text drawing for pdfkit (which has no bidi support).
  * Arabic letters are shaped by fontkit, but pdfkit lays text out left-to-right, so a
  * line mixing Arabic with digits/Latin comes out scrambled. This splits a string into
  * Arabic runs and non-Arabic runs and places them right-to-left (Arabic base direction).
  */
-import path from 'path';
 
 export const FONT_AR = 'FK-Cairo';
 export const FONT_AR_BOLD = 'FK-Cairo-Bold';
@@ -12,9 +12,8 @@ const AR = /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/;
 export const hasAr = (s: string) => AR.test(s || '');
 
 export function registerFonts(doc: any) {
-  const dir = path.join(process.cwd(), 'assets', 'fonts');
-  doc.registerFont(FONT_AR, path.join(dir, 'Cairo-Regular.ttf'));
-  doc.registerFont(FONT_AR_BOLD, path.join(dir, 'Cairo-Bold.ttf'));
+  doc.registerFont(FONT_AR, Buffer.from(CAIRO_REGULAR_B64, 'base64'));
+  doc.registerFont(FONT_AR_BOLD, Buffer.from(CAIRO_BOLD_B64, 'base64'));
 }
 
 type Run = { text: string; rtl: boolean };

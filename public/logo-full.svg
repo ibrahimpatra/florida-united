@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 64" role="img" aria-label="Florida United Kuwait">
+  <rect width="64" height="64" rx="14" fill="#234b63"/>
+  <path d="M17 14h26v8H26v8h14v8H26v12h-9z" fill="#fff"/>
+  <path d="M46 28 36 44h7l-3 10 12-18h-7l3-8z" fill="#f5b800"/>
+  <text x="80" y="34" font-family="Inter,Arial,Helvetica,sans-serif" font-size="24" font-weight="800" fill="#234b63">Florida United</text>
+  <text x="80" y="55" font-family="Inter,Arial,Helvetica,sans-serif" font-size="17" font-weight="600" letter-spacing="3" fill="#6b7f8c">KUWAIT</text>
+</svg>

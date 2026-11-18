@@ -1,3 +1,5 @@
+import { getBrand } from '@/lib/brand-server';
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -11,7 +13,7 @@ export const dynamic = 'force-dynamic';
  * Starts (or restarts) card payment for a saved order. The amount is ALWAYS computed here from the
  * order stored in Firestore - nothing about money is read from the browser.
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Please sign in.' }, { status: 401 });
   if (!cardEnabled()) return NextResponse.json({ error: 'Card payment is not available right now.' }, { status: 503 });
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
         quantity: 1,
         price_data: {
           currency: 'usd', unit_amount: cents,
-          product_data: { name: `Order ${o.orderNumber}`, description: `Florida Kuwait Company - KWD ${Number(o.total).toFixed(3)} at 1 KWD = ${rate} USD` },
+          product_data: { name: `Order ${o.orderNumber}`, description: `${(await getBrand()).fullName} - KWD ${Number(o.total).toFixed(3)} at 1 KWD = ${rate} USD` },
         },
       }],
       customer_email: o.userEmail || session.user.email || undefined,
@@ -68,3 +70,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'We could not start the card payment. Please try again.' }, { status: 502 });
   }
 }
+
+export const POST = withLog('POST', '/api/stripe/checkout', __POST);

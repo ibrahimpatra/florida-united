@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { SITE_CONFIG } from './siteConfig';
 
-export interface PublicSettings { freeShippingThreshold: number | null; defaultShippingCost: number; codEnabled: boolean; codFee: number; usdRate: number; cardEnabled: boolean }
+export interface PublicSettings { freeShippingThreshold: number | null; defaultShippingCost: number; codEnabled: boolean; codFee: number; usdRate: number; cardEnabled: boolean; onlineProvider?: string | null; onlineProviderName?: string | null; onlineCurrency?: string | null }
 const DEFAULTS: PublicSettings = { freeShippingThreshold: SITE_CONFIG.freeShippingThreshold, defaultShippingCost: SITE_CONFIG.defaultShippingCost, codEnabled: true, codFee: 0, usdRate: 3.25, cardEnabled: false };
 let cache: PublicSettings | null = null;
 let inflight: Promise<PublicSettings> | null = null;

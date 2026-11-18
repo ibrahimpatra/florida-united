@@ -5,10 +5,12 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { toast } from 'react-hot-toast';
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { useBrand } from '@/contexts/BrandContext';
+import { BrandMark } from '@/components/layout/BrandMark';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function ContactPage() {
+  const SITE_CONFIG = useBrand();
   const { t, isArabic } = useLanguage();
   const [form, setForm] = useState({ name:'', email:'', subject:'', message:'' });
   const [sending, setSending] = useState(false);

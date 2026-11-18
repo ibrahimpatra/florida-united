@@ -4,6 +4,27 @@
 @tailwind utilities;
 
 :root {
+  --brand-50: 238 243 246;
+  --brand-100: 217 228 234;
+  --brand-200: 181 201 212;
+  --brand-300: 134 165 181;
+  --brand-400: 84 127 149;
+  --brand-500: 47 93 120;
+  --brand-600: 35 75 99;
+  --brand-700: 27 59 79;
+  --brand-800: 21 47 63;
+  --brand-900: 15 35 48;
+  --brand-950: 10 24 34;
+  --accent-50: 255 251 230;
+  --accent-100: 255 243 184;
+  --accent-200: 255 233 122;
+  --accent-300: 255 220 61;
+  --accent-400: 251 203 10;
+  --accent-500: 245 184 0;
+  --accent-600: 217 154 0;
+  --accent-700: 168 116 0;
+  --accent-800: 124 86 0;
+  --accent-900: 90 63 0;
   --font-body: 'IBM Plex Sans', system-ui, sans-serif;
   --font-display: 'Archivo', 'IBM Plex Sans', system-ui, sans-serif;
   --ink: #0f2330;
@@ -125,7 +146,7 @@
            transition-[box-shadow,transform,border-color] duration-200;
   }
 
-  /* Lifts 2px and gains a hazard-yellow underline; no soft drop shadows anywhere. */
+  /* Lifts slightly on hover. */
   .card-hover {
     @apply card hover:shadow-hover hover:-translate-y-0.5 hover:border-brand-300;
   }
@@ -189,12 +210,9 @@
 
   /* Page Hero */
   .page-hero {
-    @apply bg-white border-b border-gray-200 py-10 relative;
+    @apply bg-brand-50/60 border-b border-gray-200 py-8 relative;
   }
-  .page-hero::after, .hazard-edge::after {
-    content: ''; position: absolute; inset-inline: 0; bottom: -1px; height: 6px;
-    background: repeating-linear-gradient(135deg, var(--hazard) 0 10px, var(--ink) 10px 20px);
-  }
+  /* Kept as a harmless hook: older markup still carries this class, but there is no decoration any more. */
   .hazard-edge { position: relative; }
 
   /* Divider */

@@ -1,301 +1,171 @@
-# Florida United Company — Full E-Commerce Platform
+# Florida United Kuwait: online store
 
-A complete, production-ready e-commerce platform built with **Next.js 14**, **Firebase**, **Stripe**, and **Tailwind CSS**.
+Next.js 14 store for hardware and electrical supplies. Bilingual (English and Arabic, right-to-left), prices in KWD, Firestore database, cash on delivery and optional online card payment, AI shopping assistant, admin panel.
+
+This is the only README. Everything you need to run, set up and deploy is below.
 
 ---
 
-## 🚀 Quick Start
+## 1. Run it on your computer (or Codespaces)
 
-### 1. Install Dependencies
 ```bash
 npm install
+cp .env.example .env.local      # then fill in the values from section 2
+npm run dev                     # http://localhost:3000
+npm test                        # 74 automated checks, no database needed
+npm run build                   # production build
 ```
 
-### 2. Firebase Setup
-1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Create a new project → Enable **Firestore**, **Authentication**, **Storage**
-3. Authentication: Enable **Email/Password** and **Google** providers
-4. Firestore: Create database in production mode
-5. Storage: Create default bucket
-6. Go to Project Settings → Service Accounts → **Generate new private key**
+Make yourself an admin: register on the site, open Firestore (Firebase console), collection `users`, your document, set `role` to `admin`. Sign out and in again. Then open `/admin/dashboard`.
 
-### 3. Environment Variables
-Copy `.env.example` to `.env.local` and fill in your values:
-
-```bash
-cp .env.example .env.local
-```
-
-**Required variables:**
-```env
-# Firebase (Client - from Project Settings > Your Apps)
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-NEXT_PUBLIC_FIREBASE_APP_ID=
-
-# Firebase Admin (from Service Account JSON)
-FIREBASE_PROJECT_ID=
-FIREBASE_CLIENT_EMAIL=
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-
-# NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-secret-min-32-chars
-
-# Stripe
-STRIPE_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-
-# Email (Gmail App Password recommended)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your@gmail.com
-SMTP_PASS=your-app-password
-EMAIL_FROM="Florida United <noreply@yourdomain.com>"
-
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-# Google OAuth (optional)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-```
-
-### 4. Firestore Security Rules
-In Firebase Console → Firestore → Rules:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Users can read/write own data
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    // Public read for products/categories
-    match /products/{document=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    match /categories/{document=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    // Orders: users see own, admin sees all
-    match /orders/{orderId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-    }
-    // All other collections require auth
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
-
-### 5. Firebase Storage Rules
-```
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null && request.resource.size < 5 * 1024 * 1024;
-    }
-  }
-}
-```
-
-### 6. Create Admin User
-After registering your account, update your user role in Firestore:
-- Go to Firestore Console → `users` collection → find your document → set `role: "admin"`
-
-### 7. Run Development Server
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
+Optional sample data: `npm run db:seed` (categories and products) and `npm run db:seed:uoms` (units like pcs, kg, m).
 
 ---
 
-## 📁 Project Structure
+## 2. Settings (environment variables)
 
-```
-src/
-├── app/
-│   ├── api/               # API routes (Firebase backend)
-│   │   ├── auth/          # NextAuth + register
-│   │   ├── products/      # Products CRUD
-│   │   ├── categories/    # Categories CRUD
-│   │   ├── orders/        # Orders + returns
-│   │   ├── stripe/        # Checkout + webhook
-│   │   ├── coupons/       # Coupon validate + CRUD
-│   │   ├── upload/        # Image upload to Firebase Storage
-│   │   ├── whatsapp/      # WhatsApp share
-│   │   ├── contact/       # Contact form email
-│   │   ├── banners/       # Banners CRUD
-│   │   └── admin/         # Admin stats + users
-│   ├── admin/             # Admin panel (protected)
-│   │   ├── dashboard/     # Stats, charts, recent orders
-│   │   ├── products/      # Products management
-│   │   ├── categories/    # Categories management
-│   │   ├── orders/        # Orders management
-│   │   ├── customers/     # Customers list
-│   │   ├── returns/       # Return requests
-│   │   ├── coupons/       # Coupon management
-│   │   ├── banners/       # Banner management
-│   │   └── settings/      # Site settings
-│   ├── account/           # Customer account (protected)
-│   │   ├── orders/        # Order history + returns
-│   │   ├── wishlist/      # Saved products
-│   │   └── settings/      # Profile, password, notifications
-│   ├── auth/              # Login, Register
-│   ├── shop/              # Product listing + detail
-│   ├── cart/              # Shopping cart
-│   ├── checkout/          # Stripe checkout + success
-│   ├── order-tracking/    # Public order tracker
-│   ├── search/            # Search results
-│   ├── deals/             # Sale products
-│   └── contact/           # Contact form
-├── components/
-│   ├── layout/            # Header, Footer, SearchModal, MiniCart, AnnouncementBar
-│   ├── home/              # Hero, CategoryGrid, FeaturedProducts, Offers, etc.
-│   ├── product/           # ProductCard, ProductDetailClient, ShopClient
-│   ├── cart/              # MiniCart, CartPageClient
-│   ├── admin/             # AdminSidebar, ProductForm
-│   └── account/           # AccountClient
-├── lib/
-│   ├── firebase.ts        # Firebase client SDK
-│   ├── firebase-admin.ts  # Firebase Admin SDK
-│   ├── firestore.ts       # All Firestore operations
-│   ├── auth.ts            # NextAuth configuration
-│   ├── email.ts           # All email templates + sending
-│   └── utils.ts           # Helpers, formatters
-├── store/
-│   ├── cartStore.ts       # Zustand cart (persisted)
-│   └── wishlistStore.ts   # Zustand wishlist (persisted)
-└── types/index.ts         # All TypeScript types
-```
+Put these in `.env.local` on your computer, and in **Vercel > Project > Settings > Environment Variables** when deployed. After changing them on Vercel, redeploy.
+
+| Name | Needed? | What it is |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | yes | Your real address, e.g. `https://yourdomain.com`. Used for links, sitemap, emails, payment returns |
+| `NEXTAUTH_URL` | yes | Same address as above |
+| `NEXTAUTH_SECRET` | yes | Any long random text (`openssl rand -base64 32`) |
+| `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, `FIREBASE_ADMIN_PRIVATE_KEY` | yes | From the service account JSON (section 3). The private key must keep its `\n` line breaks and the `-----BEGIN PRIVATE KEY-----` line |
+| `NEXT_PUBLIC_FIREBASE_*` (6 values) | yes | Firebase console > Project settings > Your apps |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` | optional | Order emails and password reset. Gmail needs an app password |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | recommended | Image storage (section 4). Without them uploads go to Firebase Storage |
+| `GEMINI_API_KEY` | optional | AI assistant and the Arabic Translate button. Key from aistudio.google.com |
+| `GEMINI_MODEL` | optional | A model to try first. Others are tried automatically (section 6) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | optional | Card payments with Stripe (charged in USD) |
+| `TAP_SECRET_KEY` | optional | Card payments with Tap (charged in KWD) |
+| `MYFATOORAH_API_KEY`, `MYFATOORAH_BASE_URL` | optional | Card payments with MyFatoorah. Base URL only for the test server: `https://apitest.myfatoorah.com` |
+| `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `NEXT_PUBLIC_WHATSAPP_NUMBER` | optional | WhatsApp order messages and the chat link |
+| `CRON_SECRET` | recommended | Protects the cleanup job for unpaid card orders. Vercel sends it automatically |
+| `LOG_LEVEL` | optional | `warn` (default), `info`, `debug`, `silent` (section 9) |
+
+Card payment shows at checkout **only** when the chosen provider has its key. No key, no card option, so customers never see a broken payment button.
 
 ---
 
-## ✅ Features
+## 3. Firebase (database)
 
-### 🛍 Store
-- Homepage with hero carousel, category grid, featured products, offers countdown timer
-- Product listing with filters (category, price, brand, stock, sale, new), sort, pagination
-- Product detail with image gallery, variants, add to cart, wishlist, WhatsApp share
-- Product-level SEO (JSON-LD structured data, meta tags, Open Graph)
-- Related products
-- Search modal with live results
-
-### 🛒 Cart & Checkout
-- Persistent cart (Zustand + localStorage)
-- Mini cart slide-over
-- Coupon code validation
-- Stripe Checkout (card, Google Pay, Apple Pay)
-- Order creation on successful payment (webhook)
-- Order confirmation email with receipt
-
-### 👤 Account
-- Sign up (email + Google OAuth)
-- Login with credentials or Google
-- Account dashboard with order stats
-- Order history with status badges
-- Return request modal (returnable items only)
-- WhatsApp support from order page
-- Wishlist management
-- Profile settings
-- Password change
-- Notification preferences
-
-### 📦 Orders
-- Auto order number generation
-- Status tracking (10 statuses)
-- Status history timeline
-- Shipping tracking number + carrier
-- Email notification on every status change
-- Public order tracker (no login required)
-
-### 🔄 Returns
-- Customer submits return request
-- Admin approves/rejects with note
-- Admin marks items refundable/non-refundable
-- Refund amount assignment
-- Email notifications
-
-### 🔧 Admin Panel
-- Dashboard with revenue charts (Recharts), order stats, recent orders
-- Product management (create, edit, delete, toggle active, featured, sale)
-- Category management (hierarchical, parent/child)
-- Order management with inline status update + tracking
-- Customer list
-- Return requests management
-- Coupon management (percentage & fixed)
-- Banner management
-- Site settings
-
-### 📧 Emails (Nodemailer)
-- Welcome email on registration
-- Order confirmation with receipt
-- Status update emails (shipped, delivered, etc.)
-- Return request submitted
-- Password reset
-- Admin new order notification
-- Contact form to admin
-
-### 🔍 SEO
-- Next.js App Router metadata API
-- Dynamic Open Graph per product
-- JSON-LD structured data (Organization, Product, WebSite, SearchAction)
-- XML sitemap auto-generation
-- robots.txt
-- Web app manifest (PWA-ready)
-- Semantic HTML throughout
-
-### 📲 WhatsApp
-- Share product link with image, name, price via WhatsApp
-- Order support via WhatsApp from account
+1. Firebase console > create a project > Build > **Firestore Database** > create (production mode).
+2. Project settings > **Service accounts** > Generate new private key. Copy `project_id`, `client_email`, `private_key` into the three `FIREBASE_ADMIN_*` settings.
+3. Firestore > Rules > paste the contents of `firestore.rules` (it blocks all direct browser access; the app uses the server key) > Publish. If you use Firebase Storage as the image fallback, paste `storage.rules` in Storage > Rules.
 
 ---
 
-## 🌐 Deployment (Vercel)
+## 4. Cloud images with Cloudflare R2
 
-```bash
-# 1. Push to GitHub
-git init && git add . && git commit -m "Initial commit"
+Why: product photos must live outside the app. On Vercel the app's own files are read-only after deploy, so uploads cannot be saved in the `public` folder. R2 gives 10 GB free per month, no charge for downloads, and the image address can be on your own domain (good for Google Images).
 
-# 2. Deploy to Vercel
-vercel --prod
+**Step by step**
 
-# 3. Set environment variables in Vercel dashboard
+1. Create a free account at cloudflare.com. Dashboard > **R2 Object Storage** > subscribe to the free plan (a payment card is asked for, nothing is charged within the free limits).
+2. **Create bucket**: name it for example `florida-images`. Location: automatic.
+3. **Make images public** (choose one):
+   - Quick start: bucket > Settings > Public access > allow the **r2.dev subdomain**. Copy the address like `https://pub-abc123.r2.dev`.
+   - Recommended for SEO: bucket > Settings > **Custom domains** > add `img.yourdomain.com` (your domain must be on Cloudflare DNS). Use `https://img.yourdomain.com`.
+4. R2 overview page > **Manage API tokens** > Create API token > permission **Object Read & Write** > limit it to your bucket > Create. Copy the **Access Key ID** and **Secret Access Key** (shown once). The **Account ID** is on the R2 overview page.
+5. Add the five settings (locally and on Vercel), then redeploy:
+   ```
+   R2_ACCOUNT_ID=your-account-id
+   R2_ACCESS_KEY_ID=...
+   R2_SECRET_ACCESS_KEY=...
+   R2_BUCKET=florida-images
+   R2_PUBLIC_URL=https://img.yourdomain.com
+   ```
+6. Test: Admin > Products > edit a product > upload an image. It should appear, and the link should start with your `R2_PUBLIC_URL`.
 
-# 4. Set up Stripe webhook
-# Endpoint: https://yourdomain.com/api/stripe/webhook
-# Events: checkout.session.completed, payment_intent.payment_failed
-```
+**What the app does with each upload:** converts it to WebP, limits it to 1600 px wide, and names it after the product, for example `products/led-flood-light-50w-k3j9x2.webp`. Product pages list the images for Google and carry alt text. Images already uploaded keep working after you switch.
+
+Startup warns "R2 image storage... not set" until the five settings exist.
 
 ---
 
-## 🔑 Google Search Console
+## 5. Payments
 
-After deployment:
-1. Add property in [Google Search Console](https://search.google.com/search-console)
-2. Add verification token to `NEXT_PUBLIC_GSC_TOKEN` in `.env`
-3. Submit sitemap: `https://yourdomain.com/sitemap.xml`
-4. Request indexing for key pages
+Admin > Settings > **Online card payment** picks the provider: Automatic (first with keys), Stripe, Tap, MyFatoorah or Off. The same screen shows which providers have keys on the server.
+
+- **Stripe**: Dashboard > Developers > API keys. Add a webhook to `https://YOUR-DOMAIN/api/stripe/webhook` with events `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `charge.refunded`. Charged in USD at the rate in Settings.
+- **Tap** and **MyFatoorah**: add the key. Charged in KWD. The app never trusts the browser redirect: it asks the provider server to server before marking an order paid. These two are written to the providers' documentation but have not been run against their live servers, so test each in test mode first.
+- Card orders left unpaid for 2 hours are cancelled and their stock released. Vercel Hobby runs the cleanup once a day (`vercel.json`), and it also runs whenever a new order is placed.
+- Refunds: Stripe refunds are automatic on cancel. For Tap and MyFatoorah the order is flagged "needs refund" and you refund in their dashboard.
 
 ---
 
-## 📞 Support
+## 6. AI assistant and Arabic translation (Gemini)
 
-**Florida United Company**
-- 📧 info@floridaunited.com
-- 📞 1-800-FLU-HARD
-- 🌐 floridaunited.com
+Needs `GEMINI_API_KEY`. The shopper assistant answers product and delivery questions and can look up orders. For admins it can also change order status, add tracking, adjust stock, check customers and returns.
+
+If a model is busy ("high demand", 429 or 503), retired, or the network fails, the next model is tried automatically (`gemini-3.6-flash`, `gemini-3.8-flash`, `gemini-3.5-flash-lite`) and the busy one is skipped for a minute. Only a bad API key stops it. Shoppers see a friendly message; **admins also see the technical reason** marked `[admin only]`, in the assistant, at checkout and on invoices. Google retires model names over time. If every model fails with "does not exist", set `GEMINI_MODEL` to a current name from aistudio.google.com.
+
+The **Translate to Arabic** button on admin forms sends the English text to Gemini and fills the Arabic fields.
+
+---
+
+## 7. Running the store (Admin)
+
+| Page | What for |
+|---|---|
+| Dashboard | Sales, orders, low stock |
+| Products | Add and edit. Prices, stock, extra selling units (box, carton), images, Arabic text. A product with order history is **archived**, never deleted |
+| **Import** | Upload an Excel (.xlsx) or CSV for all products. Download the template, fill it, upload, read the preview (new, update, problem per row), then import. Existing SKU updates only the columns you fill; new categories and units are created for you |
+| Orders | Change status, tracking, refunds. Unpaid card orders cannot be shipped |
+| Categories, Units, Bundles | Catalogue structure. A category with products or a unit in use cannot be deleted |
+| Flash Deals | Percent, amount or buy-one-get-one, for all, categories (subcategories included) or chosen products. Shows under the home page hero banner and on `/deals` |
+| Coupons | Codes with limits. A used coupon is switched off, not deleted |
+| **Popups** | Create popups: headline, message, image, coupon code, button. Choose when (after seconds, on scroll, on leaving), who (everyone, visitors, signed-in), how often, which pages, dates, shape and colour. Start from a ready template such as "20% off first order". Shows views and clicks. Create the coupon under Coupons first |
+| Banners | Home page hero slides |
+| Shipping Zones | Delivery cost by governorate, free-delivery threshold |
+| **Issues** | Every server problem from anywhere in the app (login, register, orders, coupons, deals, bundles, search, uploads...), saved with the reason, how many times, and who. Works even for login and register failures. Dismiss or clear |
+| Settings | Company name, logo, favicon, colours, contact details, online payment provider, USD rate |
+
+**Admin-only error detail (whole app):** shoppers always get a short friendly message. When you are signed in as admin, every failed API call also shows a red `[admin only] METHOD /api/... status: reason` message on screen, the error page shows the technical text, and the same reason is saved under Issues. This is automatic for every API route.
+
+**Brand and theme** (Settings): the company name, logo and colours change the browser tab, header, footer, emails, invoices, WhatsApp text and the assistant, within about a minute of saving. Export theme saves name, logo and colours to a file; Import theme loads it for another client.
+
+Checkout shows a "free delivery progress" bar, a coupon box with the discount line, and "You may also need" suggestions. The cart suggests related products.
+
+---
+
+## 8. Deploy on Vercel
+
+1. Push the project to GitHub, import it on vercel.com.
+2. Add the settings from section 2. `NEXT_PUBLIC_APP_URL` and `NEXTAUTH_URL` must be your final address.
+3. Deploy. `vercel.json` already contains the daily cleanup job (Hobby plan allows one run a day).
+4. After the first deploy: submit `https://YOUR-DOMAIN/sitemap.xml` in Google Search Console. Both English and Arabic (`/ar/...`) pages are listed.
+
+---
+
+## 9. Seeing problems (logging)
+
+By default only warnings and errors are printed: missing settings at startup, any API response with status 400 or above, crashes, failed emails, failed payments, bad logins. Passwords, keys and card data are masked. Set `LOG_LEVEL=info` for one line per request, `debug` to include request bodies. On Vercel: Project > Logs (or Observability) and filter by "error". In the browser console filter by `[app]`.
+
+---
+
+## 10. SEO
+
+Every public page has its own title, description and canonical link. English and Arabic versions (`/ar/...`) point to each other with `hreflang`. The sitemap lists both and only active products. Product pages carry price and stock data; the home page carries organisation and search-box data; product and category pages carry breadcrumbs. A default share image and app icons are included. Order tracking, cart, checkout and account pages are kept out of search results.
+
+---
+
+## 11. Troubleshooting
+
+| You see | Do this |
+|---|---|
+| Sign-up or login returns 500 | Firebase settings missing or the private key lost its `\n` breaks. Check startup log |
+| `/admin` shows 404 | Your user's `role` is not exactly `admin`. Sign out and in after changing it |
+| Card option missing at checkout | No provider key set, or Settings > Online card payment is Off |
+| Upload fails | Check the five `R2_*` values, the token has Object Read & Write, and `R2_PUBLIC_URL` is public |
+| Assistant says it is busy | All models were busy. Wait a minute. Admins see the exact reason |
+| Invoice fails | Admins see the reason in the message; the server log has details |
+| Vercel cron error on deploy | Keep the daily schedule in `vercel.json`; Hobby cannot run it more often |
+| Changed an environment value on Vercel | Redeploy |
+
+---
+
+## 12. Project layout
+
+`src/app` pages and API routes (`/ar/...` are the Arabic twins) · `src/components` screens · `src/lib` business logic (orders, payments, brand, popups, import, SEO, Gemini) · `tests` automated checks with an in-memory database · `public` logo and icons · `firestore.rules`, `storage.rules`, `vercel.json`.

@@ -7,7 +7,10 @@ import { formatPrice } from '@/lib/utils';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { ShippingSelector, type Quote } from '@/components/shipping/ShippingSelector';
+import { CouponBox } from '@/components/checkout/CouponBox';
 import { KuwaitCheckoutForm } from '@/components/checkout/KuwaitCheckoutForm';
+import { CheckoutSuggestions } from '@/components/checkout/CheckoutSuggestions';
+import { FreeShippingNudge } from '@/components/cart/FreeShippingNudge';
 import { Lock, ShoppingBag } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { ShippingOption } from '@/lib/shipping';
@@ -57,6 +60,7 @@ export default function CheckoutPage() {
   const shippingCost = chosen?.price ?? 0;
   // Once the server has quoted, its coupon figure is the truth (it is what placeOrder will charge).
   const discount = quote ? (quote.discount ?? 0) : discountAmount;
+  const dealSaving = quote ? Number((quote as any).dealSaving || 0) : 0;
   const total = Math.round(Math.max(0, subtotal - discount + shippingCost) * 1000) / 1000;
   const hasMixedFreeItems = items.some(i => i.freeShipping) && items.some(i => !i.freeShipping);
 
@@ -118,13 +122,23 @@ export default function CheckoutPage() {
                     {item.variantName && <p className="text-xs text-gray-400">{L(item as any, 'variantName')}</p>}
                     <p className="text-xs text-gray-500">{t('checkout.qty')}: {item.quantity}</p>
                   </div>
-                  <span className="text-sm font-bold text-gray-900 flex-shrink-0">{formatPrice(item.price * item.quantity)}</span>
+                  {(() => {
+                    const ql = (quote as any)?.lines?.find((l: any) => l.productId === item.productId && (l.variantId || '') === (item.variantId || ''));
+                    const now = ql ? ql.total : item.price * item.quantity;
+                    const was = ql && ql.listPrice > ql.price ? ql.listPrice * item.quantity : 0;
+                    return <span className="text-sm font-bold text-gray-900 flex-shrink-0 text-end">{was > 0 && <span className="block text-xs font-normal text-gray-400 line-through">{formatPrice(was)}</span>}{formatPrice(now)}</span>;
+                  })()}
                 </div>
               ))}
             </div>
+            <div className="mb-3"><FreeShippingNudge chargeable={items.filter(i => !i.freeShipping).reduce((a, i) => a + i.price * i.quantity, 0)} hidden={items.length > 0 && items.every(i => i.freeShipping)} /></div>
+            <CheckoutSuggestions />
+            <div className="mb-4 mt-4"><CouponBox subtotal={subtotal} appliedAmount={discount} /></div>
             <div className="border-t pt-3 space-y-2 text-sm">
+              {dealSaving > 0 && <div className="flex justify-between text-gray-600"><span>{t('c3_ck.listSubtotal')}</span><span>{formatPrice(subtotal + dealSaving)}</span></div>}
+              {dealSaving > 0 && <div className="flex justify-between text-green-600"><span>{t('c3_ck.offerSaving')}</span><span>-{formatPrice(dealSaving)}</span></div>}
               <div className="flex justify-between text-gray-600"><span>{t('checkout.subtotal')}</span><span>{formatPrice(subtotal)}</span></div>
-              {discount > 0 && <div className="flex justify-between text-green-600"><span>{t('checkout.discount')}{couponCode ? ` (${couponCode})` : ''}</span><span>-{formatPrice(discount)}</span></div>}
+              {discount > 0 && <div className="flex justify-between text-green-600"><span>{t('c3_ck.couponLine', { code: couponCode || '' })}</span><span>-{formatPrice(discount)}</span></div>}
               {quote?.couponError && <p className="text-xs text-red-600">{quote.couponError}</p>}
               <div className="flex justify-between text-gray-600">
                 <span>{t('checkout.shipping')}</span>
@@ -133,6 +147,7 @@ export default function CheckoutPage() {
               <div className="flex justify-between font-black text-gray-900 text-base border-t pt-2">
                 <span>{t('checkout.total')}</span><span className="text-brand-700">{chosen ? formatPrice(total) : '-'}</span>
               </div>
+              {dealSaving + discount > 0 && <p className="text-xs font-semibold text-green-700 bg-green-50 rounded-lg px-3 py-2 text-center">{t('c3_ck.saved', { amount: formatPrice(dealSaving + discount) })}</p>}
               <p className="text-xs text-gray-400 text-center">{t('checkout.noVat')}</p>
             </div>
           </div>

@@ -9,6 +9,7 @@ function applyWrite(cur: any, patch: any, merge: boolean) {
     const kk = kind(v);
     if (kk === 'NumericIncrementTransform') out[k] = (Number(out[k]) || 0) + (v as any).operand;
     else if (kk === 'ServerTimestampTransform') out[k] = new Date().toISOString();
+    else if (kk === 'ArrayRemoveTransform') out[k] = (out[k] || []).filter((e: any) => !(v as any).elements.includes(e));
     else if (kk === 'ArrayUnionTransform') out[k] = [...(out[k] || []), ...(v as any).elements.filter((e: any) => !(out[k] || []).includes(e))];
     else out[k] = clone(v);
   }
@@ -24,7 +25,7 @@ export class FakeDb {
   doc(path: string) { const [c, id] = path.split('/'); return new FakeRef(this, c, id); }
   async getAll(...refs: FakeRef[]) { return refs.map(r => r.snap()); }
   batch() { const ops: (() => void)[] = []; const b: any = {
-    update: (r: FakeRef, d: any) => { ops.push(() => r._update(d)); return b; }, set: (r: FakeRef, d: any, o?: any) => { ops.push(() => r._set(d, o)); return b; },
+    delete: (r: FakeRef) => { ops.push(() => r._delete()); return b; }, update: (r: FakeRef, d: any) => { ops.push(() => r._update(d)); return b; }, set: (r: FakeRef, d: any, o?: any) => { ops.push(() => r._set(d, o)); return b; },
     commit: async () => ops.forEach(f => f()) }; return b; }
   async runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
     const writes: (() => void)[] = []; let wrote = false;
@@ -53,11 +54,11 @@ class FakeRef {
   _delete() { (this.db as any).col(this.col).delete(this.id); }
 }
 class FakeQuery {
-  constructor(protected db: FakeDb, protected c: string, protected filters: [string, any][] = [], protected n = Infinity) {}
-  where(f: string, op: string, v: any) { if (op !== '==') throw new Error('fake: only =='); return new FakeQuery(this.db, this.c, [...this.filters, [f, v]], this.n); }
+  constructor(protected db: FakeDb, protected c: string, protected filters: [string, any, string][] = [], protected n = Infinity) {}
+  where(f: string, op: string, v: any) { if (op !== '==' && op !== 'array-contains') throw new Error('fake: only == and array-contains'); return new FakeQuery(this.db, this.c, [...this.filters, [f, v, op]], this.n); }
   limit(n: number) { return new FakeQuery(this.db, this.c, this.filters, n); }
   async get() {
-    const docs = [...(this.db as any).col(this.c).entries()].filter(([, d]) => this.filters.every(([f, v]) => d[f] === v)).slice(0, this.n)
+    const docs = [...(this.db as any).col(this.c).entries()].filter(([, d]) => this.filters.every(([f, v, op]) => op === 'array-contains' ? Array.isArray(d[f]) && d[f].includes(v) : d[f] === v)).slice(0, this.n)
       .map(([id]) => new FakeSnap(new FakeRef(this.db, this.c, id), this.db.read(this.c, id)));
     return { docs, empty: docs.length === 0, size: docs.length };
   }

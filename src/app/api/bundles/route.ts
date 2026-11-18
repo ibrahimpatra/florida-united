@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -6,7 +7,7 @@ import { adminGetBundles, adminCreateBundle, getStorefrontBundles } from '@/lib/
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   try {
     const activeOnly = req.nextUrl.searchParams.get('active') === 'true';
     const bundles = activeOnly ? await getStorefrontBundles() : await adminGetBundles(false);
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -31,3 +32,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create bundle' }, { status: 500 });
   }
 }
+
+export const GET = withLog('GET', '/api/bundles', __GET);
+export const POST = withLog('POST', '/api/bundles', __POST);

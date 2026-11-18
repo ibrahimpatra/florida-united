@@ -1,4 +1,6 @@
 'use client';
+import { TranslateButton } from '@/components/admin/TranslateButton';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Package, Search, ToggleLeft, ToggleRight, Gift } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -170,6 +172,12 @@ export default function AdminBundlesPage() {
                 <input value={form.name} onChange={e => f('name', e.target.value)}
                   className="input-field" placeholder="e.g. Electrical Starter Kit" />
               </div>
+              <div className="flex">
+                <TranslateButton context="a product bundle of a hardware store" fields={[
+                  { en: form.name, ar: form.nameAr, set: v => f('nameAr', v) },
+                  { en: form.description, ar: form.descriptionAr, set: v => f('descriptionAr', v) },
+                ]} />
+              </div>
               <div>
                 <label className="label">Arabic Name <span dir="rtl" className="text-gray-400 font-normal">(الاسم بالعربية)</span></label>
                 <input value={form.nameAr || ''} onChange={e => f('nameAr', e.target.value)} dir="rtl" lang="ar"
@@ -194,12 +202,12 @@ export default function AdminBundlesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Bundle Price (KD) *</label>
-                  <input type="number" step="0.001" value={form.bundlePrice}
+                  <NumberInput type="number" step="0.001" value={form.bundlePrice}
                     onChange={e => f('bundlePrice', Number(e.target.value))} className="input-field" />
                 </div>
                 <div>
                   <label className="label">Compare Price (KD)</label>
-                  <input type="number" step="0.001" value={form.comparePrice || ''}
+                  <NumberInput type="number" step="0.001" value={form.comparePrice || ''}
                     onChange={e => f('comparePrice', Number(e.target.value))} className="input-field"
                     placeholder={itemsTotal ? itemsTotal.toFixed(3) : ''} />
                 </div>
@@ -263,11 +271,11 @@ export default function AdminBundlesPage() {
                       <p className="text-sm font-semibold text-gray-800 truncate">{item.productName}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-gray-500">Qty:</span>
-                        <input type="number" min="1" value={item.quantity}
+                        <NumberInput type="number" min="1" value={item.quantity}
                           onChange={e => updateItem(idx, 'quantity', Number(e.target.value))}
                           className="w-16 border border-gray-200 rounded-lg px-2 py-0.5 text-xs text-center" />
                         <span className="text-xs text-gray-500">@ KD</span>
-                        <input type="number" step="0.001" value={item.price}
+                        <NumberInput type="number" step="0.001" value={item.price}
                           onChange={e => updateItem(idx, 'price', Number(e.target.value))}
                           className="w-20 border border-gray-200 rounded-lg px-2 py-0.5 text-xs text-center" />
                       </div>

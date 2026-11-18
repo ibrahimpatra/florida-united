@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, randomBytes } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -11,7 +12,7 @@ const sha = (s: string) => createHash('sha256').update(s).digest('hex');
  * Always answers "ok", whether or not the email exists, so this cannot be used to find out who has an account.
  * Only the SHA-256 of the token is stored; the real token only ever exists in the email.
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const ok = NextResponse.json({ ok: true });
   try {
     const { email } = await req.json();
@@ -36,3 +37,5 @@ export async function POST(req: NextRequest) {
   } catch (e) { console.error('[forgot]', e); }
   return ok;
 }
+
+export const POST = withLog('POST', '/api/auth/forgot', __POST);

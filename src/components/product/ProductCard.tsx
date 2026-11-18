@@ -171,12 +171,12 @@ export function ProductCard({ product, showQuickView = true }: Props) {
           )}
 
           {/* Price */}
-          <div className="flex items-center gap-2">
-            <span className="text-base font-bold text-brand-700">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : product.price)}</span>
-            {dealHit && dealHit.deal.type !== 'bogo' && <span className="text-sm text-gray-400 line-through">{formatPrice(product.price)}</span>}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+            <span className="text-base font-bold text-brand-700 whitespace-nowrap">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : product.price)}</span>
+            {dealHit && dealHit.deal.type !== 'bogo' && <span className="text-xs sm:text-sm text-gray-400 line-through whitespace-nowrap">{formatPrice(product.price)}</span>}
             {dealHit && dealHit.deal.type === 'bogo' && <span className="text-xs font-bold text-red-600">{t('c2_deal.bogo')}</span>}
             {!dealHit && product.comparePrice && (
-              <span className="text-sm text-gray-400 line-through">{formatPrice(product.comparePrice)}</span>
+              <span className="text-xs sm:text-sm text-gray-400 line-through whitespace-nowrap">{formatPrice(product.comparePrice)}</span>
             )}
           </div>
 

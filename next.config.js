@@ -1,12 +1,16 @@
 /** @type {import('next').NextConfig} */
+// Host of the Cloudflare R2 public bucket address (R2_PUBLIC_URL), so next/image may load it.
+let r2Host = null;
+try { if (process.env.R2_PUBLIC_URL) r2Host = new URL(process.env.R2_PUBLIC_URL).hostname; } catch (e) {}
 const nextConfig = {
   // Suppress font stylesheet fetch warnings during build (fonts load at runtime)
   optimizeFonts: false,
   // Tell Next.js to bundle firebase-admin and grpc modules server-side only
   // This eliminates the protobufjs/grpc webpack warning
   experimental: {
+    instrumentationHook: true, // src/instrumentation.ts checks the environment once at server start
     // the invoice PDF reads its Arabic font from disk at runtime
-    outputFileTracingIncludes: { '/api/orders/[id]/invoice': ['./assets/fonts/**/*'] },
+    outputFileTracingIncludes: { '/api/orders/[id]/invoice': ['./node_modules/pdfkit/js/data/**/*'] }, // pdfkit's built-in Helvetica metrics
     serverComponentsExternalPackages: [
       'pdfkit',
       'firebase-admin',
@@ -14,6 +18,7 @@ const nextConfig = {
       '@grpc/grpc-js',
       '@grpc/proto-loader',
       'google-gax',
+      'sharp',
     ],
   },
 
@@ -24,6 +29,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'via.placeholder.com' },
       { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
       { protocol: 'https', hostname: 'storage.googleapis.com' },
+      { protocol: 'https', hostname: '**.r2.dev' },
+      ...(r2Host ? [{ protocol: 'https', hostname: r2Host }] : []),
     ],
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],

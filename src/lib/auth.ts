@@ -1,5 +1,6 @@
 // src/lib/auth.ts
 import { NextAuthOptions } from 'next-auth';
+import { log } from '@/lib/logger';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
@@ -38,22 +39,23 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        try {
+        if (!credentials?.email || !credentials?.password) { log.warn('auth', 'login rejected: email or password missing'); return null; }
 
         const db = getAdminDb();
         const usersRef = db.collection('users');
         const snap = await usersRef.where('email', '==', credentials.email).limit(1).get();
 
-        if (snap.empty) return null;
+        if (snap.empty) { log.warn('auth', 'login failed: no account with this email', { email: credentials.email }); return null; }
 
         const userDoc = snap.docs[0];
         const userData = userDoc.data();
 
-        if (!userData.password) return null;
-        if (!userData.isActive) throw new Error('Account is deactivated');
+        if (!userData.password) { log.warn('auth', 'login failed: account has no password (Google sign-in account?)', { email: credentials.email }); return null; }
+        if (!userData.isActive) { log.warn('auth', 'login blocked: account is deactivated', { email: credentials.email }); throw new Error('Account is deactivated'); }
 
         const isValid = await bcrypt.compare(credentials.password, userData.password);
-        if (!isValid) return null;
+        if (!isValid) { log.warn('auth', 'login failed: wrong password', { email: credentials.email }); return null; }
 
         return {
           id: userDoc.id,
@@ -62,6 +64,13 @@ export const authOptions: NextAuthOptions = {
           image: userData.photoURL || null,
           role: userData.role || 'customer',
         };
+        } catch (e: any) {
+          if (e?.message === 'Account is deactivated') throw e;
+          // A server fault (database down, bad keys), not a wrong password. Saved to Admin > Issues.
+          log.error('auth', 'login crashed', { error: e?.message });
+          void import('./issues').then(m => m.recordIssue({ route: 'login', method: 'POST', status: 500, message: String(e?.message || e) }));
+          throw new Error('Login is temporarily unavailable. Please try again.');
+        }
       },
     }),
     GoogleProvider({
@@ -103,7 +112,8 @@ export const authOptions: NextAuthOptions = {
           const db = getAdminDb();
           const snap = await db.collection('users').doc(token.id as string).get();
           token.role = snap.exists ? snap.data()?.role || 'customer' : 'customer';
-        } catch {
+        } catch (e: any) {
+          log.error('auth', 'could not read the user role from Firestore, defaulting to customer', { error: e?.message });
           token.role = 'customer';
         }
       }

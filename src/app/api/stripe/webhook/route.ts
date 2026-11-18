@@ -1,4 +1,6 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
+import { log } from '@/lib/logger';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { getAdminDb } from '@/lib/firebase-admin';
@@ -7,15 +9,15 @@ import { notifyOrderPlaced } from '@/lib/place-order-handler';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   const sig = req.headers.get('stripe-signature');
-  if (!secret || !sig) return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 });
+  if (!secret || !sig) { log.error('stripe', 'webhook called but STRIPE_WEBHOOK_SECRET or the stripe-signature header is missing', { hasSecret: !!secret, hasSignature: !!sig }); return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 }); }
 
   // The signature is checked against the RAW body. Anything that fails is rejected - never trust the payload otherwise.
   let event: Stripe.Event;
   try { event = getStripe().webhooks.constructEvent(await req.text(), sig, secret); }
-  catch { return NextResponse.json({ error: 'Invalid signature' }, { status: 400 }); }
+  catch (e: any) { log.error('stripe', 'webhook signature check FAILED - wrong STRIPE_WEBHOOK_SECRET (test vs live) or a forged call', { error: e?.message }); return NextResponse.json({ error: 'Invalid signature' }, { status: 400 }); }
 
   try {
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
@@ -45,7 +47,9 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ received: true });
   } catch (e) {
-    console.error('[stripe webhook]', e);
+    log.error('stripe', `webhook handler crashed on ${event.type}`, { error: (e as any)?.message });
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 }); // Stripe will retry
   }
 }
+
+export const POST = withLog('POST', '/api/stripe/webhook', __POST);

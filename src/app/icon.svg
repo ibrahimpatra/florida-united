@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Florida United Kuwait">
+  <rect width="64" height="64" rx="14" fill="#234b63"/>
+  <!-- F: a bold hardware-style letter built from two bars and a stem -->
+  <path d="M17 14h26v8H26v8h14v8H26v12h-9z" fill="#ffffff"/>
+  <!-- bolt: the electrical half of the business -->
+  <path d="M46 28 36 44h7l-3 10 12-18h-7l3-8z" fill="#f5b800"/>
+</svg>

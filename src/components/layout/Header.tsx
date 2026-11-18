@@ -10,7 +10,8 @@ import {
   MapPin, Truck, Package2
 } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { useBrand } from '@/contexts/BrandContext';
+import { BrandMark } from '@/components/layout/BrandMark';
 import { useWishlistStore } from '@/store/wishlistStore';
 import { SearchModal } from '@/components/layout/SearchModal';
 import { MiniCart } from '@/components/cart/MiniCart';
@@ -21,11 +22,12 @@ import { formatPrice } from '@/lib/utils';
 import type { Category } from '@/types';
 
 export function Header() {
+  const SITE_CONFIG = useBrand();
   const { data: session } = useSession();
   const { t, L, dir, isArabic } = useLanguage();
   const { freeShippingThreshold } = useStoreSettings();
   const tagline = isArabic ? SITE_CONFIG.taglineAr : SITE_CONFIG.tagline;
-  const brandName = isArabic ? SITE_CONFIG.fullNameAr : 'Florida Kuwait';
+  const brandName = isArabic ? SITE_CONFIG.fullNameAr : SITE_CONFIG.name;
   const { items: cartItems } = useCartStore();
   const { items: wishlistItems } = useWishlistStore();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -100,7 +102,7 @@ export function Header() {
                   {t('c1_nav.freeShipOver', { amount: formatPrice(freeShippingThreshold) })}
                 </span>
               ) : null}
-              <LanguageToggle />
+              <LanguageToggle onDark />
             </div>
           </div>
         </div>
@@ -121,7 +123,7 @@ export function Header() {
             {/* Logo */}
             <Link href="/" className="flex-shrink-0 flex items-center gap-2 md:gap-3" aria-label={t('c1_nav.homeAria', { name: brandName })}>
               <div className="w-10 h-10 md:w-12 md:h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-lg font-display">{SITE_CONFIG.logoText}</span>
+                <span className="text-white font-bold text-lg font-display"><BrandMark /></span>
               </div>
               <div className="hidden xs:block">
                 <div className="text-brand-700 font-bold text-base md:text-lg leading-tight font-display">
@@ -331,7 +333,7 @@ export function Header() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <span className="text-white font-bold text-lg">{SITE_CONFIG.logoText}</span>
+                      <span className="text-white font-bold text-lg"><BrandMark /></span>
                     </div>
                     <div>
                       <div className="text-white font-bold text-sm">{brandName}</div>

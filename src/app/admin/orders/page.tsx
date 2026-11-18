@@ -26,7 +26,7 @@ export default function AdminOrdersPage() {
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page) });
+      const params = new URLSearchParams({ page: String(page), scope: 'all' });
       if (status !== 'all') params.set('status', status);
       if (q) params.set('q', q);
       const res = await fetch(`/api/orders?${params}`, { cache: 'no-store' });
@@ -59,7 +59,7 @@ export default function AdminOrdersPage() {
   const totalPages = Math.ceil(total / 20);
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Orders</h1>
