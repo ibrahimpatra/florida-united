@@ -1,4 +1,5 @@
 'use client';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, X, Pencil, Eye, EyeOff } from 'lucide-react';
 import { formatDate, formatPrice } from '@/lib/utils';
@@ -58,8 +59,10 @@ export default function AdminCouponsPage() {
     if (!confirm(`Delete coupon ${code}?`)) return;
     try {
       const r = await fetch(`/api/coupons/${id}`, { method: 'DELETE' });
-      if (!r.ok) { toast.error('Could not delete the coupon.'); return; }
-      setCoupons(cs => cs.filter(c => c.id !== id)); toast.success('Deleted');
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(j.error || 'Could not delete the coupon.'); return; }
+      if (j.archived) { setCoupons(cs => cs.map(c => c.id === id ? { ...c, isActive: false } : c)); toast(j.message, { icon: 'i', duration: 6000 }); }
+      else { setCoupons(cs => cs.filter(c => c.id !== id)); toast.success('Deleted'); }
     } catch { toast.error('Network error'); }
   };
 
@@ -79,10 +82,10 @@ export default function AdminCouponsPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div><label className="label">Code *</label><input value={form.code} onChange={e => f('code', e.target.value.toUpperCase())} className="input-field font-mono uppercase" placeholder="SUMMER20" /></div>
             <div><label className="label">Type</label><select value={form.type} onChange={e => f('type', e.target.value)} className="input-field"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed amount (KWD)</option></select></div>
-            <div><label className="label">Value * {form.type === 'percentage' ? '(%)' : '(KWD)'}</label><input type="number" min="0" step="0.001" value={form.value} onChange={e => f('value', e.target.value)} className="input-field" placeholder={form.type === 'percentage' ? '20' : '2.000'} /></div>
-            <div><label className="label">Minimum Order (KWD)</label><input type="number" min="0" step="0.001" value={form.minOrderAmount} onChange={e => f('minOrderAmount', e.target.value)} className="input-field" placeholder="None" /></div>
-            <div><label className="label">Max Discount (KWD)</label><input type="number" min="0" step="0.001" value={form.maxDiscount} onChange={e => f('maxDiscount', e.target.value)} className="input-field" placeholder="No cap" /></div>
-            <div><label className="label">Usage Limit</label><input type="number" min="0" step="1" value={form.usageLimit} onChange={e => f('usageLimit', e.target.value)} className="input-field" placeholder="Unlimited" /></div>
+            <div><label className="label">Value * {form.type === 'percentage' ? '(%)' : '(KWD)'}</label><NumberInput type="number" min="0" step="0.001" value={form.value} onChange={e => f('value', e.target.value)} className="input-field" placeholder={form.type === 'percentage' ? '20' : '2.000'} /></div>
+            <div><label className="label">Minimum Order (KWD)</label><NumberInput type="number" min="0" step="0.001" value={form.minOrderAmount} onChange={e => f('minOrderAmount', e.target.value)} className="input-field" placeholder="None" /></div>
+            <div><label className="label">Max Discount (KWD)</label><NumberInput type="number" min="0" step="0.001" value={form.maxDiscount} onChange={e => f('maxDiscount', e.target.value)} className="input-field" placeholder="No cap" /></div>
+            <div><label className="label">Usage Limit</label><NumberInput type="number" min="0" step="1" value={form.usageLimit} onChange={e => f('usageLimit', e.target.value)} className="input-field" placeholder="Unlimited" /></div>
             <div><label className="label">Valid Through</label><input type="date" value={form.expiresAt} onChange={e => f('expiresAt', e.target.value)} className="input-field" /></div>
             <label className="flex items-center gap-2 pt-6 text-sm font-medium text-gray-700"><input type="checkbox" checked={form.isActive} onChange={e => f('isActive', e.target.checked)} className="w-4 h-4 accent-brand-600" />Active</label>
           </div>

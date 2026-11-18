@@ -1,9 +1,10 @@
 'use client';
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { useBrand } from '@/contexts/BrandContext';
+import { BrandMark } from '@/components/layout/BrandMark';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Package, ShoppingCart, Users, Tag, Percent, Image,
+  AlertTriangle, Megaphone, LayoutDashboard, Package, ShoppingCart, Users, Tag, Percent, Image,
   Settings, LogOut, Menu, X, RotateCcw, Zap, Truck, Ruler, Upload,
   Gift, BarChart2,
 } from 'lucide-react';
@@ -24,10 +25,13 @@ const nav = [
   { href:'/admin/shipping',    icon:Truck,           label:'Shipping Zones' },
   { href:'/admin/uoms',        icon:Ruler,           label:'Units (UOM)' },
   { href:'/admin/banners',     icon:Image,           label:'Banners' },
+  { href:'/admin/popups',      icon:Megaphone,       label:'Popups' },
+  { href:'/admin/issues',      icon:AlertTriangle,   label:'Issues' },
   { href:'/admin/settings',    icon:Settings,        label:'Settings' },
 ];
 
 function SidebarContent({ user, onClose }: { user: any; onClose?: () => void }) {
+  const SITE_CONFIG = useBrand();
   const path = usePathname();
   return (
     <>
@@ -35,7 +39,7 @@ function SidebarContent({ user, onClose }: { user: any; onClose?: () => void }) 
       <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">
-            {SITE_CONFIG.logoText}
+            <BrandMark />
           </div>
           <div>
             <p className="text-xs font-bold text-white leading-tight">{SITE_CONFIG.name}</p>
@@ -87,6 +91,7 @@ function SidebarContent({ user, onClose }: { user: any; onClose?: () => void }) 
 }
 
 export function AdminSidebar({ user }: { user: any }) {
+  const SITE_CONFIG = useBrand();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const path = usePathname();
 
@@ -107,7 +112,7 @@ export function AdminSidebar({ user }: { user: any }) {
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-brand-600 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0">
-            {SITE_CONFIG.logoText}
+            <BrandMark />
           </div>
           <span className="text-sm font-bold text-white">{SITE_CONFIG.name} Admin</span>
         </div>

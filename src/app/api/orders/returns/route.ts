@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -12,7 +13,7 @@ const RETURN_WINDOW_DAYS = 14;
 const OPEN = ['pending', 'photo_submitted', 'approved'];
 const round3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
-export async function GET() {
+async function __GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -21,7 +22,7 @@ export async function GET() {
   } catch (e) { console.error('[GET returns]', e); return NextResponse.json({ error: 'Could not load returns' }, { status: 500 }); }
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
   } catch (e) { console.error('[POST returns]', e); return NextResponse.json({ error: 'Could not submit the return request. Please try again.' }, { status: 500 }); }
 }
 
-export async function PATCH(req: NextRequest) {
+async function __PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || String(session.user.role).toLowerCase() !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -128,3 +129,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (e) { console.error('[PATCH returns]', e); return NextResponse.json({ error: 'Could not update the return.' }, { status: 500 }); }
 }
+
+export const GET = withLog('GET', '/api/orders/returns', __GET);
+export const POST = withLog('POST', '/api/orders/returns', __POST);
+export const PATCH = withLog('PATCH', '/api/orders/returns', __PATCH);

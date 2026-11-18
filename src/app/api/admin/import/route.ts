@@ -1,117 +1,100 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { authOptions } from '@/lib/auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { invalidateProductCache } from '@/lib/firestore-admin';
+import { parseUpload } from '@/lib/import-file';
+import { planImport, slugify, type ImportCtx } from '@/lib/product-import';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 const BATCH_SIZE = 400;
-const MAX_ROWS = 5000;
+const MAX_BYTES = 8 * 1024 * 1024;
 
-const norm = (h: string) => String(h || '').replace(/^﻿/, '').toLowerCase().replace(/[\s_-]+/g, '');
-const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-const num = (v: any): number | undefined => { const n = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) ? n : undefined; };
-const bool = (v: any, dflt: boolean) => { const s = String(v ?? '').trim().toLowerCase(); return s === '' ? dflt : ['true', '1', 'yes', 'y'].includes(s); };
-/** Firestore rejects `undefined`; drop those keys. */
-const defined = <T extends Record<string, any>>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+async function loadCtx(db: FirebaseFirestore.Firestore): Promise<ImportCtx> {
+  const [c, p, u] = await Promise.all([db.collection('categories').get(), db.collection('products').select('sku', 'slug', 'stock').get(), db.collection('uoms').get()]);
+  return {
+    categories: c.docs.map(d => ({ id: d.id, ...(d.data() as any) })),
+    products: p.docs.map(d => ({ id: d.id, ...(d.data() as any) })),
+    uoms: u.docs.map(d => ({ id: d.id, ...(d.data() as any) })),
+  };
+}
 
-export async function POST(req: NextRequest) {
+/**
+ * POST multipart: file (.xlsx / .csv), mode = "preview" | "import".
+ * preview: nothing is written; returns what would happen for every row.
+ * import : creates missing categories/units, then creates and updates products in batches.
+ */
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session || String(session.user.role).toLowerCase() !== 'admin')
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session || String(session.user.role).toLowerCase() !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { rows } = await req.json() as { rows: string[][] };
-    if (!Array.isArray(rows) || rows.length < 2) return NextResponse.json({ error: 'No data rows found.' }, { status: 400 });
-    if (rows.length - 1 > MAX_ROWS) return NextResponse.json({ error: `Too many rows (max ${MAX_ROWS} per file). Split the file and import in parts.` }, { status: 400 });
+    const fd = await req.formData();
+    const file = fd.get('file') as File | null;
+    const mode = String(fd.get('mode') || 'preview');
+    if (!file) return NextResponse.json({ error: 'Choose a file first.' }, { status: 400 });
+    if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File is larger than 8 MB. Split it and import in parts.' }, { status: 400 });
 
-    const headers = rows[0].map(norm);
-    const has = (h: string) => headers.includes(h);
-    const missing = ['name', 'sku', 'price', 'stock'].filter(h => !has(h));
-    if (!has('category') && !has('categoryid')) missing.push('category');
-    if (missing.length) return NextResponse.json({ error: `Missing required column(s): ${missing.join(', ')}` }, { status: 400 });
-    const get = (row: string[], h: string) => { const i = headers.indexOf(h); return i < 0 ? '' : String(row[i] ?? '').trim(); };
+    let rows: string[][];
+    try { rows = await parseUpload(file.name, Buffer.from(await file.arrayBuffer())); }
+    catch (e: any) { return NextResponse.json({ error: e?.message || 'Could not read that file.' }, { status: 400 }); }
 
     const db = getAdminDb();
-    const [catSnap, prodSnap] = await Promise.all([db.collection('categories').get(), db.collection('products').select('sku', 'slug').get()]);
-    const cats = catSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-    const byId = new Map(cats.map((c: any) => [c.id, c]));
-    const lc = (s: any) => String(s || '').trim().toLowerCase();
-    const findCat = (ref: string, parentId?: string) =>
-      cats.find((c: any) => (!parentId || c.parentId === parentId) && (c.id === ref || lc(c.slug) === lc(ref) || lc(c.name) === lc(ref) || (c.nameAr && lc(c.nameAr) === lc(ref))));
+    let ctx = await loadCtx(db);
+    let plan = planImport(rows, { ...ctx, createMissing: true });
+    if (plan.headerError) return NextResponse.json({ error: plan.headerError }, { status: 400 });
 
-    const skus = new Set(prodSnap.docs.map(d => lc((d.data() as any).sku)));
-    const slugs = new Set(prodSnap.docs.map(d => String((d.data() as any).slug || '')));
+    if (mode !== 'import') return NextResponse.json({ success: true, preview: true, plan });
+    if (!plan.counts.create && !plan.counts.update) return NextResponse.json({ error: 'Nothing to import. Fix the rows marked as errors and try again.', plan }, { status: 400 });
 
-    let created = 0, skipped = 0;
-    const errors: string[] = [];
-    const ready: Array<Record<string, any>> = [];
+    // 1. create missing categories (parents first) and units
+    const created = { categories: 0, uoms: 0 };
+    const idByName = new Map<string, string>();
+    for (const nc of plan.newCategories) {
+      const parent = nc.parentName ? (idByName.get(nc.parentName.toLowerCase()) || ctx.categories.find(c => !c.parentId && c.name.toLowerCase() === nc.parentName!.toLowerCase())?.id) : undefined;
+      const exists = ctx.categories.find(c => c.name.toLowerCase() === nc.name.toLowerCase() && (c.parentId || '') === (parent || ''));
+      if (exists) { idByName.set(nc.name.toLowerCase(), exists.id); continue; }
+      let slug = slugify(nc.name) || `category-${Date.now().toString(36)}`;
+      if (ctx.categories.some(c => c.slug === slug)) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+      const ref = await db.collection('categories').add({
+        name: nc.name, slug, ...(parent ? { parentId: parent, parentName: nc.parentName } : {}),
+        isActive: true, showOnHome: false, showOnNav: !parent, sortOrder: 0, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      });
+      idByName.set(nc.name.toLowerCase(), ref.id); created.categories++;
+      ctx.categories.push({ id: ref.id, name: nc.name, slug, parentId: parent });
+    }
+    for (const nu of plan.newUoms) {
+      if (ctx.uoms.some(u => u.name.toLowerCase() === nu.name.toLowerCase())) continue;
+      await db.collection('uoms').add({ name: nu.name, abbreviation: nu.abbreviation, isActive: true, createdAt: FieldValue.serverTimestamp() });
+      created.uoms++;
+    }
 
-    rows.slice(1).forEach((row, idx) => {
-      if (!row.some(c => String(c).trim())) return;
-      const line = idx + 2; // spreadsheet row number (header is row 1)
-      const name = get(row, 'name'), sku = get(row, 'sku');
-      const fail = (m: string) => { errors.push(`Row ${line}: ${m}`); skipped++; };
-      if (!name) return fail('name is empty');
-      if (!sku) return fail(`SKU is empty for "${name}"`);
-      if (skus.has(lc(sku))) return fail(`SKU "${sku}" already exists (or is repeated in this file)`);
-      const price = num(get(row, 'price'));
-      if (price === undefined || price <= 0) return fail(`invalid price for "${name}"`);
-      const stock = num(get(row, 'stock'));
-      if (stock === undefined || stock < 0) return fail(`invalid stock for "${name}"`);
-
-      // category: name, slug (or id) in the "category" column, optional "subcategory" column, or a "Parent > Child" path
-      let catRef = get(row, 'category') || get(row, 'categoryid'), subRef = get(row, 'subcategory');
-      if (!subRef && catRef.includes('>')) { const [a, b] = catRef.split('>'); catRef = a.trim(); subRef = (b || '').trim(); }
-      const top = findCat(catRef);
-      if (!top) return fail(`category "${catRef}" not found - create it first under Categories`);
-      let leaf: any = top;
-      if (subRef) {
-        leaf = findCat(subRef, top.id);
-        if (!leaf) return fail(`subcategory "${subRef}" not found under "${top.name}"`);
-      }
-      const parent: any = leaf.parentId ? byId.get(leaf.parentId) : null;
-
-      let slug = slugify(name) || slugify(sku) || 'product';
-      if (slugs.has(slug)) slug = `${slug}-${slugify(sku)}`;
-      slugs.add(slug); skus.add(lc(sku));
-
-      const img = get(row, 'image');
-      ready.push(defined({
-        name, nameAr: get(row, 'namear') || undefined, slug,
-        description: get(row, 'description') || name, descriptionAr: get(row, 'descriptionar') || undefined,
-        shortDescription: get(row, 'shortdescription') || '', shortDescriptionAr: get(row, 'shortdescriptionar') || undefined,
-        sku, barcode: get(row, 'barcode') || '',
-        price, comparePrice: num(get(row, 'compareprice')), costPrice: num(get(row, 'costprice')),
-        stock: Math.round(stock), lowStockAlert: Math.round(num(get(row, 'lowstockalert')) ?? 5),
-        weight: num(get(row, 'weight')),
-        categoryId: leaf.id, categoryName: leaf.name || '', categoryNameAr: leaf.nameAr || undefined,
-        categoryPath: parent ? [parent.id, leaf.id] : [leaf.id],
-        brand: get(row, 'brand'), images: img ? img.split(/[;|]/).map(s => s.trim()).filter(Boolean) : [],
-        tags: get(row, 'tags') ? get(row, 'tags').split(/[,;|]/).map(t => t.trim()).filter(Boolean) : [],
-        isFeatured: bool(get(row, 'isfeatured'), false), isNewArrival: bool(get(row, 'isnewarrival'), false),
-        isOnSale: bool(get(row, 'isonsale'), false), isActive: bool(get(row, 'isactive'), true),
-        freeShipping: bool(get(row, 'freeshipping'), false),
-        isReturnable: bool(get(row, 'isreturnable'), true), returnDays: Math.round(num(get(row, 'returndays')) ?? 14),
-        metaTitle: get(row, 'metatitle') || name, metaDesc: get(row, 'metadesc') || get(row, 'description') || '',
-        avgRating: 0, totalReviews: 0, totalSold: 0, totalRevenue: 0,
-      }));
-    });
-
-    for (let i = 0; i < ready.length; i += BATCH_SIZE) {
+    // 2. plan again with everything in place (no more "pending" lookups), then write
+    ctx = await loadCtx(db);
+    plan = planImport(rows, { ...ctx, createMissing: false });
+    let createdN = 0, updatedN = 0, i = 0;
+    const work = plan.rows.filter(r => r.action !== 'error' && r.data && Object.keys(r.data).length);
+    while (i < work.length) {
       const batch = db.batch();
-      for (const p of ready.slice(i, i + BATCH_SIZE)) {
-        batch.set(db.collection('products').doc(), { ...p, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-        created++;
+      for (const r of work.slice(i, i + BATCH_SIZE)) {
+        const data: Record<string, any> = Object.fromEntries(Object.entries(r.data!).filter(([k, v]) => v !== undefined && !k.startsWith('__')));
+        if (r.action === 'create') { batch.set(db.collection('products').doc(), { ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }); createdN++; }
+        else { delete data.sku; delete data.slug; batch.update(db.collection('products').doc(r.id!), { ...data, updatedAt: FieldValue.serverTimestamp() }); updatedN++; }
       }
       await batch.commit();
+      i += BATCH_SIZE;
     }
-    if (created) invalidateProductCache();
-
-    return NextResponse.json({ success: true, created, skipped, errors: errors.slice(0, 50), moreErrors: Math.max(0, errors.length - 50) });
-  } catch (err) {
+    invalidateProductCache();
+    const errors = plan.rows.filter(r => r.action === 'error');
+    return NextResponse.json({ success: true, created: createdN, updated: updatedN, createdCategories: created.categories, createdUnits: created.uoms,
+      skipped: errors.length, errors: errors.slice(0, 100).map(e => `Row ${e.line}: ${e.message}`), moreErrors: Math.max(0, errors.length - 100) });
+  } catch (err: any) {
     console.error('Bulk import error:', err);
-    return NextResponse.json({ error: 'Import failed. Check your CSV format and try again.' }, { status: 500 });
+    return NextResponse.json({ error: 'Import failed. Please check the file and try again.' }, { status: 500 });
   }
 }
+
+export const POST = withLog('POST', '/api/admin/import', __POST);

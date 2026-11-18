@@ -1,5 +1,6 @@
 'use client';
 // Kuwait checkout form: address book picker, server-priced totals, double-submit-proof.
+import { errorText } from '@/lib/error-text';
 import { useStoreSettings } from '@/lib/useStoreSettings';
 import { useState, useRef, useEffect, ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
@@ -127,14 +128,14 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
         return;
       }
 
-      // Stripe: the USD amount is computed on the server from the saved order.
-      const tapRes = await fetch('/api/stripe/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: r.orderId }) });
+      // Online payment: the provider (Stripe / Tap / MyFatoorah) and the amount are decided on the server from the saved order.
+      const tapRes = await fetch('/api/payments/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: r.orderId }) });
       const tap = await readJson(tapRes);
       if (!tapRes.ok || !tap?.url) {
         // Payment could not start → cancel the unpaid order so no ghost order / stock hold remains.
         await fetch(`/api/orders/${r.orderId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled', note: 'Payment could not be started' }) }).catch(() => {});
         orderCreated = false;
-        throw new Error(tap?.error || t('c2_chk.cardFail'));
+        throw new Error(errorText(tap, t('c2_chk.cardFail')));
       }
       setDone(true); clearCart(); removeCoupon();
       window.location.href = tap.url;
@@ -226,25 +227,26 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
 
       <section>
         <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4 text-brand-600" />{t('checkout.paymentMethod')}</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${settings.cardEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <button type="button" onClick={() => setPay('cod')}
             className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${pay === 'cod' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
             <Banknote className="w-6 h-6 text-green-600" />
             <span className="text-xs font-semibold text-gray-700">{t('checkout.codTitle')}</span>
             {codFee > 0 && <span className="text-[10px] text-gray-400">+ {formatPrice(codFee)}</span>}
           </button>
-          <button type="button" disabled={!settings.cardEnabled} onClick={() => setPay('card')}
-            className={`disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${pay === 'card' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
-            <CreditCard className="w-6 h-6 text-brand-700" />
-            <span className="text-xs font-semibold text-gray-700">{t('c2_pay.cardTitle')}</span>
-          </button>
+          {settings.cardEnabled && (
+            <button type="button" onClick={() => setPay('card')}
+              className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${pay === 'card' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
+              <CreditCard className="w-6 h-6 text-brand-700" />
+              <span className="text-xs font-semibold text-gray-700">{t('c2_pay.cardTitle')}</span>
+            </button>
+          )}
         </div>
         <p className="mt-3 flex items-center gap-2 text-xs text-gray-500 bg-gray-50 p-3 rounded-xl">
           {pay === 'card' ? <Lock className="w-3.5 h-3.5 text-green-500 flex-shrink-0" /> : <Banknote className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />}
           {pay === 'card' ? t('c2_pay.cardNote') : t('checkout.codNote')}
         </p>
-        {!settings.cardEnabled && <p className="mt-2 text-xs text-amber-700">{t('c2_pay.cardOff')}</p>}
-        {pay === 'card' && quoteReady && settings.cardEnabled && (
+        {pay === 'card' && quoteReady && settings.cardEnabled && settings.onlineCurrency === 'USD' && (
           <p className="mt-2 text-xs text-gray-500">{t('c2_pay.usdNote', { usd: (total * settings.usdRate).toFixed(2), rate: String(settings.usdRate) })}</p>
         )}
       </section>

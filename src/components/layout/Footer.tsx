@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { useBrand } from '@/contexts/BrandContext';
+import { BrandMark } from '@/components/layout/BrandMark';
 import { useEffect, useState } from 'react';
 import { Phone, Mail, MapPin, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
 import { useStoreSettings } from '@/lib/useStoreSettings';
@@ -8,6 +9,7 @@ import { formatPrice } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export function Footer() {
+  const SITE_CONFIG = useBrand();
   const { t, L, dir, isArabic } = useLanguage();
   const { freeShippingThreshold } = useStoreSettings();
   const [cats, setCats] = useState<any[]>([]);
@@ -23,7 +25,7 @@ export function Footer() {
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-11 h-11 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg font-display">{SITE_CONFIG.logoText}</span>
+                <span className="text-white font-bold text-lg font-display"><BrandMark /></span>
               </div>
               <div>
                 <div className="text-white font-bold text-lg font-display">{isArabic ? SITE_CONFIG.fullNameAr : SITE_CONFIG.name}</div>

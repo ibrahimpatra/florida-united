@@ -12,6 +12,7 @@
 //  We use text messages here since this is triggered by customer actions.
 // ─────────────────────────────────────────────────────────────
 
+import { getBrand } from '@/lib/brand-server';
 import type { Order } from '@/types';
 
 const WA_TOKEN    = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -88,7 +89,7 @@ export async function sendWhatsAppOrderConfirmation(order: Order): Promise<void>
   const more = order.items.length > 5 ? `\n  • ...and ${order.items.length - 5} more item(s)` : '';
 
   const msg = [
-    `*Order Confirmed!* — Florida Kuwait`,
+    `*Order Confirmed!* — ${(await getBrand()).name}`,
     ``,
     `Hello ${order.userName.split(' ')[0]}! Your order has been received.`,
     ``,
@@ -132,7 +133,7 @@ export async function sendWhatsAppStatusUpdate(order: Order, newStatus: string):
     : '';
 
   const msg = [
-    `*Order Update* — Florida Kuwait`,
+    `*Order Update* — ${(await getBrand()).name}`,
     ``,
     `Hi ${order.userName.split(' ')[0]}!`,
     statusInfo.line,

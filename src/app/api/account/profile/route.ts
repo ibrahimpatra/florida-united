@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -6,7 +7,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+async function __GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const snap = await getAdminDb().collection('users').doc(session.user.id).get();
@@ -15,7 +16,7 @@ export async function GET() {
 }
 
 /** Customers may change ONLY their name and phone. Never pass the request body through (role, email, etc.). */
-export async function PUT(req: NextRequest) {
+async function __PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -38,3 +39,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
+
+export const GET = withLog('GET', '/api/account/profile', __GET);
+export const PUT = withLog('PUT', '/api/account/profile', __PUT);

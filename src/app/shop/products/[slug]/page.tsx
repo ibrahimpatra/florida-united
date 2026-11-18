@@ -1,3 +1,6 @@
+import { altLinks } from '@/lib/seo';
+import { JsonLd, breadcrumb } from '@/components/seo/JsonLd';
+import { getBrand } from '@/lib/brand-server';
 import type { Metadata } from 'next';
 
 // Revalidate every 60 seconds so stock changes show up quickly
@@ -7,7 +10,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { ProductDetailClient } from '@/components/product/ProductDetailClient';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
-import { adminGetProductBySlug, adminGetProducts } from '@/lib/firestore-admin';
+import { adminGetProductBySlug, adminGetProducts, publicProduct } from '@/lib/firestore-admin';
 
 interface Props { params: { slug: string } }
 
@@ -25,7 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       images: product.images?.length ? [{ url: product.images[0], alt: product.name }] : [],
       type: 'website',
     },
-    alternates: { canonical: `/shop/products/${product.slug}` },
+    alternates: altLinks(`/shop/products/${product.slug}`),
   };
 }
 
@@ -36,7 +39,8 @@ export default async function ProductPage({ params }: Props) {
     product = await adminGetProductBySlug(params.slug);
     if (product) { const pid = product.id; related = await adminGetProducts({ categoryId: product.categoryId, pageSize: 7 }).then(r => r.items.filter(p => p.id !== pid).slice(0,6)).catch(() => []); }
   } catch {}
-  if (!product) notFound();
+  if (!product || (product as any).isActive === false) notFound();
+  product = publicProduct(product); // the cost price must never reach the browser
 
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
   const jsonLd = {
@@ -53,7 +57,7 @@ export default async function ProductPage({ params }: Props) {
       priceCurrency: 'KWD',
       availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
       url: `${siteUrl}/shop/products/${product.slug}`,
-      seller: { '@type': 'Organization', name: 'Florida Kuwait Company' },
+      seller: { '@type': 'Organization', name: (await getBrand()).fullName },
     },
     aggregateRating: product.totalReviews > 0 ? {
       '@type': 'AggregateRating',
@@ -64,7 +68,7 @@ export default async function ProductPage({ params }: Props) {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={[jsonLd, breadcrumb(siteUrl, [{ name: 'Home', path: '/' }, { name: 'Shop', path: '/shop' }, ...(product.categoryName && (product as any).categorySlug ? [{ name: product.categoryName, path: `/shop/${(product as any).categorySlug}` }] : []), { name: product.name, path: `/shop/products/${product.slug}` }])]} />
       <AnnouncementBar />
       <Header />
       <main>

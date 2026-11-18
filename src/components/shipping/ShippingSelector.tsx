@@ -12,6 +12,8 @@ export interface Quote {
   codFee: number;
   codAvailable: boolean;
   subtotal?: number;
+  dealSaving?: number;
+  lines?: any[];
   discount?: number;
   couponError?: string;
 }

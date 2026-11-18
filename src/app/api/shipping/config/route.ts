@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -6,7 +7,7 @@ import { normalizeShippingConfig, ValidationError } from '@/lib/zone-validate';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+async function __GET() {
   try { return NextResponse.json((await adminGetShippingConfig()) || {}, { headers: { 'Cache-Control': 'no-store' } }); }
   catch (e) { console.error('[GET shipping/config]', e); return NextResponse.json({ error: 'Failed to load configuration' }, { status: 500 }); }
 }
@@ -25,5 +26,7 @@ async function save(req: NextRequest) {
   }
 }
 // The admin page historically used PUT; accept both so no client can get a silent 405.
-export const POST = save;
-export const PUT = save;
+
+export const GET = withLog('GET', '/api/shipping/config', __GET);
+export const POST = withLog('POST', '/api/shipping/config', save);
+export const PUT = withLog('PUT', '/api/shipping/config', save);

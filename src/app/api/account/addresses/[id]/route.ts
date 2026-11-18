@@ -1,9 +1,10 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { adminSaveAddress, adminDeleteAddress } from '@/lib/firestore-admin';
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+async function __PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -15,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+async function __DELETE(_: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -25,3 +26,6 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Failed to delete address' }, { status: 500 });
   }
 }
+
+export const PUT = withLog('PUT', '/api/account/addresses/[id]', __PUT);
+export const DELETE = withLog('DELETE', '/api/account/addresses/[id]', __DELETE);

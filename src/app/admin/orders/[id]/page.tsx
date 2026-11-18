@@ -63,7 +63,7 @@ export default function AdminOrderDetailPage() {
   const sc = statusColor[order.status] || 'gray';
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-4">

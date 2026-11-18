@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useCartStore } from '@/store/cartStore';
 import { formatPrice } from '@/lib/utils';
 import { useStoreSettings } from '@/lib/useStoreSettings';
+import { AIRecommendations } from '@/components/product/AIRecommendations';
 import { toast } from 'react-hot-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -129,6 +130,7 @@ export function CartPageClient() {
           </div>
         </div>
       </div>
+      <div className="container-custom pb-10"><h2 className="font-display text-lg font-bold text-gray-900 mb-1">{t('c3_nudge.alsoNeed')}</h2><AIRecommendations productId={items[0].productId} currentCategory={(items[0] as any).categoryId || ''} /></div>
     </div>
   );
 }

@@ -8,15 +8,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#eef3f6', 100: '#d9e4ea', 200: '#b5c9d4', 300: '#86a5b5', 400: '#547f95',
-          500: '#2f5d78', 600: '#234b63', 700: '#1b3b4f', 800: '#152f3f', 900: '#0f2330', 950: '#0a1822',
-        },
-        // Safety yellow: the colour of hazard tape and tool handles. Always pair with dark text.
-        accent: {
-          50: '#fffbe6', 100: '#fff3b8', 200: '#ffe97a', 300: '#ffdc3d', 400: '#fbcb0a',
-          500: '#f5b800', 600: '#d99a00', 700: '#a87400', 800: '#7c5600', 900: '#5a3f00',
-        },
+        // Colours come from CSS variables (see :root in globals.css) so Admin > Settings > Theme can change them live.
+        brand: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map(n => [n, `rgb(var(--brand-${n}) / <alpha-value>)`])),
+        // Safety yellow by default. Always paired with dark text, so pick a light accent colour.
+        accent: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map(n => [n, `rgb(var(--accent-${n}) / <alpha-value>)`])),
         concrete: '#f1f3f4',
         success: '#16a34a',
         warning: '#d97706',

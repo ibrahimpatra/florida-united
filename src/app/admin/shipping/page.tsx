@@ -1,4 +1,5 @@
 'use client';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import {
   MapPin, Plus, Trash2, Save, Edit2, ChevronDown, ChevronUp,
@@ -189,7 +190,7 @@ export default function AdminShippingPage() {
   );
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display flex items-center gap-3">
@@ -319,7 +320,7 @@ export default function AdminShippingPage() {
                     </div>
                     <div>
                       <label className="label">Sort Order</label>
-                      <input type="number" value={editingZone.sortOrder || 0}
+                      <NumberInput type="number" value={editingZone.sortOrder || 0}
                         onChange={e => setEditingZone(z => ({ ...z!, sortOrder: Number(e.target.value) }))} className="input-field"/>
                     </div>
                     <div className="sm:col-span-2">
@@ -394,19 +395,19 @@ export default function AdminShippingPage() {
                     <div className="grid sm:grid-cols-3 gap-4">
                       <div>
                         <label className="label">Centre Latitude</label>
-                        <input type="number" step="0.0001" value={editingZone.centerLat || ''}
+                        <NumberInput type="number" step="0.0001" value={editingZone.centerLat || ''}
                           onChange={e => setEditingZone(z => ({ ...z!, centerLat: Number(e.target.value) }))}
                           className="input-field" placeholder="29.3759"/>
                       </div>
                       <div>
                         <label className="label">Centre Longitude</label>
-                        <input type="number" step="0.0001" value={editingZone.centerLng || ''}
+                        <NumberInput type="number" step="0.0001" value={editingZone.centerLng || ''}
                           onChange={e => setEditingZone(z => ({ ...z!, centerLng: Number(e.target.value) }))}
                           className="input-field" placeholder="47.9774"/>
                       </div>
                       <div>
                         <label className="label">Radius (km)</label>
-                        <input type="number" value={editingZone.radiusKm || ''}
+                        <NumberInput type="number" value={editingZone.radiusKm || ''}
                           onChange={e => setEditingZone(z => ({ ...z!, radiusKm: Number(e.target.value) }))}
                           className="input-field" placeholder="20"/>
                       </div>
@@ -476,13 +477,13 @@ export default function AdminShippingPage() {
                             </div>
                             <div>
                               <label className="text-xs font-semibold text-gray-600 block mb-1">Base Price (KWD)</label>
-                              <input type="number" step="0.001" min="0" value={rate.basePrice}
+                              <NumberInput type="number" step="0.001" min="0" value={rate.basePrice}
                                 onChange={e => updateRate(rate.id, 'basePrice', Number(e.target.value))}
                                 className="input-field text-sm py-2" placeholder="1.500"/>
                             </div>
                             <div>
                               <label className="text-xs font-semibold text-gray-600 block mb-1">Free Above (KWD)</label>
-                              <input type="number" step="0.001" value={rate.freeAboveAmount || ''}
+                              <NumberInput type="number" step="0.001" value={rate.freeAboveAmount || ''}
                                 onChange={e => updateRate(rate.id, 'freeAboveAmount', e.target.value ? Number(e.target.value) : undefined)}
                                 className="input-field text-sm py-2" placeholder="e.g. 10"/>
                             </div>
@@ -493,13 +494,13 @@ export default function AdminShippingPage() {
                             </div>
                             <div>
                               <label className="text-xs font-semibold text-gray-600 block mb-1">Min Order (KWD)</label>
-                              <input type="number" step="0.001" value={rate.minOrderAmount || ''}
+                              <NumberInput type="number" step="0.001" value={rate.minOrderAmount || ''}
                                 onChange={e => updateRate(rate.id, 'minOrderAmount', e.target.value ? Number(e.target.value) : undefined)}
                                 className="input-field text-sm py-2" placeholder="No minimum"/>
                             </div>
                             <div>
                               <label className="text-xs font-semibold text-gray-600 block mb-1">Max Order (KWD)</label>
-                              <input type="number" step="0.001" value={rate.maxOrderAmount || ''}
+                              <NumberInput type="number" step="0.001" value={rate.maxOrderAmount || ''}
                                 onChange={e => updateRate(rate.id, 'maxOrderAmount', e.target.value ? Number(e.target.value) : undefined)}
                                 className="input-field text-sm py-2" placeholder="No maximum"/>
                             </div>
@@ -551,13 +552,13 @@ export default function AdminShippingPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Latitude</label>
-                  <input type="number" step="0.0001" value={config.storeLat || ''}
+                  <NumberInput type="number" step="0.0001" value={config.storeLat || ''}
                     onChange={e => setConfig(c => ({ ...c, storeLat: Number(e.target.value) }))}
                     className="input-field" placeholder="29.3759"/>
                 </div>
                 <div>
                   <label className="label">Longitude</label>
-                  <input type="number" step="0.0001" value={config.storeLng || ''}
+                  <NumberInput type="number" step="0.0001" value={config.storeLng || ''}
                     onChange={e => setConfig(c => ({ ...c, storeLng: Number(e.target.value) }))}
                     className="input-field" placeholder="47.9774"/>
                 </div>
@@ -572,14 +573,14 @@ export default function AdminShippingPage() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Free Shipping Above (KWD)</label>
-                <input type="number" step="0.001" value={config.defaultFreeShippingThreshold || ''}
+                <NumberInput type="number" step="0.001" value={config.defaultFreeShippingThreshold || ''}
                   onChange={e => setConfig(c => ({ ...c, defaultFreeShippingThreshold: Number(e.target.value) }))}
                   className="input-field" placeholder="10.000"/>
                 <p className="text-xs text-gray-400 mt-1">Fallback if no zone matched</p>
               </div>
               <div>
                 <label className="label">Handling Fee (KWD)</label>
-                <input type="number" step="0.001" value={config.handlingFee || ''}
+                <NumberInput type="number" step="0.001" value={config.handlingFee || ''}
                   onChange={e => setConfig(c => ({ ...c, handlingFee: Number(e.target.value) }))}
                   className="input-field" placeholder="0.000"/>
               </div>
@@ -599,7 +600,7 @@ export default function AdminShippingPage() {
             {config.codEnabled && (
               <div>
                 <label className="label">COD Extra Fee (KWD)</label>
-                <input type="number" step="0.001" value={config.codFee || ''}
+                <NumberInput type="number" step="0.001" value={config.codFee || ''}
                   onChange={e => setConfig(c => ({ ...c, codFee: Number(e.target.value) }))}
                   className="input-field" placeholder="0.000 (free)"/>
                 <p className="text-xs text-gray-400 mt-1">Extra charge for cash on delivery orders (set 0 for no extra fee)</p>
@@ -662,13 +663,13 @@ export default function AdminShippingPage() {
               </div>
               <div>
                 <label className="label">Items WITH paid shipping (KWD)</label>
-                <input type="number" step="0.001" value={testInput.orderAmount}
+                <NumberInput type="number" step="0.001" value={testInput.orderAmount}
                   onChange={e => setTestInput(t => ({ ...t, orderAmount: Number(e.target.value) }))}
                   className="input-field" placeholder="5.000"/>
               </div>
               <div>
                 <label className="label">Items flagged FREE shipping (KWD)</label>
-                <input type="number" step="0.001" value={testInput.freeAmount}
+                <NumberInput type="number" step="0.001" value={testInput.freeAmount}
                   onChange={e => setTestInput(t => ({ ...t, freeAmount: Number(e.target.value) }))}
                   className="input-field" placeholder="0.000"/>
                 <p className="text-xs text-gray-400 mt-1">Mixed cart check: a free-shipping item must never waive the fee of a paid-shipping item.</p>

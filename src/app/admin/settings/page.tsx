@@ -1,8 +1,10 @@
 'use client';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import { Save, Globe, Mail, Truck, CreditCard, Shield, Info, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { SITE_CONFIG } from '@/lib/siteConfig';
+import { BrandThemeSection } from '@/components/admin/BrandThemeSection';
 
 const DEFAULT_SETTINGS = {
   storeName:             SITE_CONFIG.fullName,
@@ -23,14 +25,57 @@ const DEFAULT_SETTINGS = {
   metaDesc:              SITE_CONFIG.metaDesc,
   googleAnalyticsId:     '',
   paymentMode:           'test',
+  storeNameAr:           SITE_CONFIG.fullNameAr,
+  taglineAr:             SITE_CONFIG.taglineAr,
+  logoUrl:               '',
+  faviconUrl:            '',
+  brandColor:            '#234b63',
+  accentColor:           '#f5b800',
+  onlineProvider:        'auto',
 };
 
-type Settings = typeof DEFAULT_SETTINGS;
+type Settings = { [K in keyof typeof DEFAULT_SETTINGS]: (typeof DEFAULT_SETTINGS)[K] extends string ? string : (typeof DEFAULT_SETTINGS)[K] extends number ? number : (typeof DEFAULT_SETTINGS)[K] };
+
+/* Defined at module level on purpose: components declared inside the page are re-created on every keystroke,
+   which remounts the inputs and makes them lose focus. */
+const Section = ({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) => (
+  <div className="card p-6 mb-5">
+    <h3 className="font-bold text-gray-800 mb-5 flex items-center gap-2 text-base">
+      <Icon className="w-5 h-5 text-brand-600" />{title}
+    </h3>
+    <div className="space-y-4">{children}</div>
+  </div>
+);
+
+const Field = ({ label, type = 'text', value, onChange, placeholder = '', hint = '' }: {
+  label: string; type?: string; value: string | number;
+  onChange: (v: string) => void; placeholder?: string; hint?: string;
+}) => (
+  <div>
+    <label className="label">{label}</label>
+    {type === 'textarea'
+      ? <textarea value={value as string} onChange={e => onChange(e.target.value)} rows={2} className="input-field resize-none" placeholder={placeholder} />
+      : <input type={type} value={value} onChange={e => onChange(e.target.value)} className="input-field" placeholder={placeholder} />
+    }
+    {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+  </div>
+);
+
+const NumField = ({ label, value, onChange, step = 1, hint = '' }: {
+  label: string; value: number; onChange: (v: number) => void; step?: number; hint?: string;
+}) => (
+  <div>
+    <label className="label">{label}</label>
+    <NumberInput type="number" step={step} value={value} onChange={e => onChange(Number(e.target.value))} className="input-field" />
+    {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+  </div>
+);
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
+  const [providers, setProviders] = useState<{ id: string; name: string; currency: string; configured: boolean }[]>([]);
 
   useEffect(() => {
     fetch('/api/admin/settings')
@@ -39,6 +84,8 @@ export default function AdminSettingsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { fetch('/api/admin/payment-status').then(r => r.json()).then(d => setProviders(d.providers || [])).catch(() => {}); }, []);
 
   const update = (key: keyof Settings, val: string | number) =>
     setSettings(s => ({ ...s, [key]: val }));
@@ -53,7 +100,7 @@ export default function AdminSettingsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
-        toast.success('Settings saved. Shipping and delivery settings apply to checkout immediately.');
+        toast.success('Settings saved. Name, logo and colours appear on the storefront within a minute.');
       } else {
         toast.error(data.error || 'Failed to save');
       }
@@ -63,38 +110,8 @@ export default function AdminSettingsPage() {
     setSaving(false);
   };
 
-  const Section = ({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) => (
-    <div className="card p-6 mb-5">
-      <h3 className="font-bold text-gray-800 mb-5 flex items-center gap-2 text-base">
-        <Icon className="w-5 h-5 text-brand-600" />{title}
-      </h3>
-      <div className="space-y-4">{children}</div>
-    </div>
-  );
 
-  const Field = ({ label, type = 'text', value, onChange, placeholder = '', hint = '' }: {
-    label: string; type?: string; value: string | number;
-    onChange: (v: string) => void; placeholder?: string; hint?: string;
-  }) => (
-    <div>
-      <label className="label">{label}</label>
-      {type === 'textarea'
-        ? <textarea value={value as string} onChange={e => onChange(e.target.value)} rows={2} className="input-field resize-none" placeholder={placeholder} />
-        : <input type={type} value={value} onChange={e => onChange(e.target.value)} className="input-field" placeholder={placeholder} />
-      }
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
-    </div>
-  );
 
-  const NumField = ({ label, value, onChange, step = 1, hint = '' }: {
-    label: string; value: number; onChange: (v: number) => void; step?: number; hint?: string;
-  }) => (
-    <div>
-      <label className="label">{label}</label>
-      <input type="number" step={step} value={value} onChange={e => onChange(Number(e.target.value))} className="input-field" />
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
-    </div>
-  );
 
   if (loading) return (
     <div className="p-8 flex items-center gap-3 text-gray-500">
@@ -103,7 +120,7 @@ export default function AdminSettingsPage() {
   );
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Store Settings</h1>
@@ -123,11 +140,9 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="max-w-3xl">
+        <BrandThemeSection values={settings} onChange={patch => setSettings(s => ({ ...s, ...patch }))} />
+
         <Section icon={Globe} title="Contact Information">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Store Name" value={settings.storeName} onChange={v => update('storeName', v)} hint="Shown in header, footer, emails" />
-            <Field label="Tagline" value={settings.tagline} onChange={v => update('tagline', v)} />
-          </div>
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Phone (display)" value={settings.phone} onChange={v => update('phone', v)} placeholder="+965 XXXX XXXX" hint="Header, footer, contact page" />
             <Field label="WhatsApp Number" value={settings.whatsapp} onChange={v => update('whatsapp', v)} placeholder="96522225050" hint="Digits only, no + or spaces" />
@@ -162,11 +177,32 @@ export default function AdminSettingsPage() {
         </Section>
 
         <Section icon={CreditCard} title="Payment">
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700">
-            Stripe keys (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) are set in your <code className="bg-amber-100 px-1 rounded">.env</code> file for security.
+          <div>
+            <label className="label">Online card payment</label>
+            <select value={settings.onlineProvider} onChange={e => update('onlineProvider', e.target.value)} className="input-field sm:w-72">
+              <option value="auto">Automatic (first provider that has keys)</option>
+              <option value="stripe">Stripe</option>
+              <option value="tap">Tap Payments</option>
+              <option value="myfatoorah">MyFatoorah</option>
+              <option value="none">Off (cash on delivery only)</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Customers only see the card option when the chosen provider has keys on the server.</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 text-sm">
+            {providers.length === 0 && <p className="p-3 text-gray-400">Checking providers…</p>}
+            {providers.map(p => (
+              <div key={p.id} className="p-3 flex items-center justify-between gap-3">
+                <span className="font-medium text-gray-800">{p.name} <span className="text-xs text-gray-400">({p.currency})</span></span>
+                <span className={`text-xs font-semibold ${p.configured ? 'text-green-700' : 'text-gray-400'}`}>{p.configured ? 'Keys found' : 'No keys'}</span>
+              </div>
+            ))}
+          </div>
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-600 space-y-1">
+            <p>Keys are never stored here. Add them as environment variables on the host, then redeploy:</p>
+            <p><code>STRIPE_SECRET_KEY</code> + <code>STRIPE_WEBHOOK_SECRET</code> · <code>TAP_SECRET_KEY</code> · <code>MYFATOORAH_API_KEY</code> (optional <code>MYFATOORAH_BASE_URL</code> for the test server)</p>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            <NumField label="USD per 1 KWD" value={settings.usdRate} onChange={v => update('usdRate', v)} step={0.001} hint="Card payments are charged in USD: order total (KWD) x this rate" />
+            <NumField label="USD per 1 KWD" value={settings.usdRate} onChange={v => update('usdRate', v)} step={0.001} hint="Used by Stripe only (it charges in USD). Tap and MyFatoorah charge in KWD." />
           </div>
           <div>
             <label className="label">Payment Mode (reminder label)</label>

@@ -1,4 +1,6 @@
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { altLinks, siteUrl } from '@/lib/seo';
+import { JsonLd, organization } from '@/components/seo/JsonLd';
+import { getBrand } from '@/lib/brand-server';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Header } from '@/components/layout/Header';
@@ -16,15 +18,19 @@ import { NewsletterSection } from '@/components/home/NewsletterSection';
 import { ProductSkeleton } from '@/components/product/ProductSkeleton';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 
-export const metadata: Metadata = {
-  title: 'Florida Kuwait | Hardware & Electrical Supplies in Kuwait',
-  description: "Shop Kuwait's best selection of hardware, electrical supplies, safety equipment and more. Free shipping on qualifying orders.",
-  alternates: { canonical: '/' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const b = await getBrand();
+  return {
+    title: { absolute: `${b.name} | Hardware & Electrical Supplies in Kuwait` },
+    description: "Shop Kuwait's best selection of hardware, electrical supplies, safety equipment and more. Free shipping on qualifying orders.",
+    alternates: altLinks('/'),
+  };
+}
 
 export const revalidate = 300;
 
 export default async function HomePage() {
+  const SITE_CONFIG = await getBrand();
   const brands = await getTopBrands(12).catch(() => [] as string[]);
   return (
     <>
@@ -32,6 +38,7 @@ export default async function HomePage() {
       <Header/>
       <main>
         <HeroBanner/>
+        <FlashDealsSection/>
         <TrustBadges/>
         <section className="section bg-gray-50">
           <div className="container-custom">
@@ -39,7 +46,6 @@ export default async function HomePage() {
             <CategoryGrid/>
           </div>
         </section>
-        <FlashDealsSection/>
         <section className="section">
           <div className="container-custom">
             <SectionHeader k="featured" href="/shop?featured=true"/>
@@ -56,11 +62,11 @@ export default async function HomePage() {
         <NewsletterSection/>
       </main>
       <Footer/>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify({
-        '@context':'https://schema.org','@type':'WebSite','name':SITE_CONFIG.fullName,
-        'url': process.env.NEXT_PUBLIC_APP_URL,
-        'potentialAction':{'@type':'SearchAction','target':{'@type':'EntryPoint','urlTemplate':`${process.env.NEXT_PUBLIC_APP_URL}/search?q={search_term_string}`},'query-input':'required name=search_term_string'}
-      })}}/>
+      <JsonLd data={[
+        organization(SITE_CONFIG, siteUrl()),
+        { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE_CONFIG.fullName, url: siteUrl(),
+          potentialAction: { '@type': 'SearchAction', target: { '@type': 'EntryPoint', urlTemplate: `${siteUrl()}/search?q={search_term_string}` }, 'query-input': 'required name=search_term_string' } },
+      ]} />
     </>
   );
 }

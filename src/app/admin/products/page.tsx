@@ -60,21 +60,22 @@ export default function AdminProductsPage() {
       const res = await fetch(`/api/products/${product.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !product.isActive }),
+        body: JSON.stringify({ isActive: !product.isActive, ...((product as any).isArchived && !product.isActive ? { isArchived: false } : {}) }),
       });
       if (!res.ok) throw new Error();
-      setProducts(ps => ps.map(p => p.id === product.id ? { ...p, isActive: !p.isActive } : p));
+      setProducts(ps => ps.map(p => p.id === product.id ? { ...p, isActive: !p.isActive, ...((p as any).isArchived ? { isArchived: false } : {}) } as any : p));
       toast.success(`Product ${!product.isActive ? 'activated' : 'deactivated'}`);
     } catch { toast.error('Failed to update'); }
   };
 
   const deleteProduct = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${name}"?\n\nIf it was ever ordered it will be archived (hidden, kept for order history) instead of deleted.`)) return;
     try {
-      await fetch(`/api/products/${id}`, { method: 'DELETE' });
-      setProducts(ps => ps.filter(p => p.id !== id));
-      setTotal(t => t - 1);
-      toast.success('Product deleted');
+      const r = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(j.error || 'Delete failed'); return; }
+      if (j.archived) { setProducts(ps => ps.map(p => p.id === id ? { ...p, isActive: false, isArchived: true } as any : p)); toast(j.message, { icon: 'i', duration: 7000 }); }
+      else { setProducts(ps => ps.filter(p => p.id !== id)); setTotal(t => t - 1); toast.success('Product deleted'); }
     } catch { toast.error('Delete failed'); }
   };
 
@@ -234,7 +235,7 @@ export default function AdminProductsPage() {
                         <button onClick={() => toggleActive(p)}
                           className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${p.isActive ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}>
                           {p.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
-                          {p.isActive ? 'Active' : 'Inactive'}
+                          {(p as any).isArchived ? 'Archived' : p.isActive ? 'Active' : 'Inactive'}
                         </button>
                       </td>
                       <td className="px-4 py-3">

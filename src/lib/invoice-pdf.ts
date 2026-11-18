@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit';
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { getBrand } from '@/lib/brand-server';
 import { registerFonts, drawBidiLine, wrapLines, hasAr } from '@/lib/pdf-bidi';
 
 const kd = (n: number) => `KWD ${(Number(n) || 0).toFixed(3)}`;
@@ -13,7 +13,7 @@ const asDate = (v: any) => {
 
 const PAY_METHOD: Record<string, [string, string]> = {
   cod: ['Cash on Delivery', 'الدفع عند الاستلام'],
-  card: ['Card (Stripe)', 'بطاقة (Stripe)'], tap: ['Online payment', 'دفع إلكتروني'], stripe: ['Online payment', 'دفع إلكتروني'],
+  card: ['Online card payment', 'دفع إلكتروني بالبطاقة'], tap: ['Online payment', 'دفع إلكتروني'], stripe: ['Online payment', 'دفع إلكتروني'],
 };
 const PAY_STATUS: Record<string, [string, string]> = {
   paid: ['Paid', 'مدفوع'], pending: ['Pending', 'قيد الانتظار'], failed: ['Failed', 'فشل'],
@@ -22,6 +22,7 @@ const PAY_STATUS: Record<string, [string, string]> = {
 
 
 export async function buildInvoicePdf(o: any): Promise<Buffer> {
+  const SITE_CONFIG = await getBrand();
   const doc = new PDFDocument({ size: 'A4', margin: 40, info: { Title: `Invoice ${o.orderNumber}`, Author: SITE_CONFIG.fullName } });
   registerFonts(doc);
   const chunks: Buffer[] = [];
@@ -111,6 +112,7 @@ export async function buildInvoicePdf(o: any): Promise<Buffer> {
     y += bold ? 22 : 16;
   };
   row('Subtotal', 'المجموع الفرعي', kd(o.subtotal));
+  if (o.dealDiscount > 0) row('Offers applied (already in prices)', 'العروض المطبقة (محتسبة في الأسعار)', kd(o.dealDiscount));
   if (o.discount > 0) row(`Discount${o.couponCode ? ` (${clean(o.couponCode)})` : ''}`, 'الخصم', `- ${kd(o.discount)}`);
   row('Delivery', 'التوصيل', o.shippingCost > 0 ? kd(o.shippingCost) : 'FREE');
   if (o.codFee > 0) row('COD fee', 'رسوم الدفع عند الاستلام', kd(o.codFee));

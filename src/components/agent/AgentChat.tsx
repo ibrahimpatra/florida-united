@@ -47,10 +47,11 @@ export function AgentChat() {
 
   const hints = [tx('Do you have cable 2.5mm?', 'هل يوجد كيبل 2.5 مم؟'), tx('Shipping cost and delivery?', 'ما تكلفة الشحن والتوصيل؟'), tx('Where is my order?', 'أين طلبي؟')];
 
+  if (path?.startsWith('/checkout')) return null; // never cover the Place order button
   return (
     <>
       <button onClick={() => setOpen(o => !o)} aria-label={tx('Chat assistant', 'مساعد المحادثة')}
-        className="fixed bottom-4 end-4 z-40 w-14 h-14 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg flex items-center justify-center">
+        className="fixed bottom-4 end-3 sm:end-4 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg flex items-center justify-center">
         {open ? <X className="w-6 h-6" /> : <MessageSquare className="w-6 h-6" />}
       </button>
       {open && (

@@ -12,6 +12,7 @@
     "db:seed:uoms": "node scripts/seedUOMs.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1169.0",
     "@hookform/resolvers": "^3.9.0",
     "@stripe/react-stripe-js": "^2.7.3",
     "@stripe/stripe-js": "^3.5.0",
@@ -19,6 +20,7 @@
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
+    "exceljs": "^4.4.0",
     "firebase": "^10.12.2",
     "firebase-admin": "^12.2.0",
     "framer-motion": "^11.3.2",

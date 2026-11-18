@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 
@@ -10,7 +11,7 @@ const digits = (s: any) => String(s || '').replace(/\D/g, '').replace(/^965/, ''
  * Public order tracking. The order number alone is not enough: the caller must also give the
  * email or phone used on the order. Only non-sensitive fields are returned (no address).
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     const { orderNumber, contact } = await req.json();
     const no = String(orderNumber || '').trim().toUpperCase();
@@ -40,3 +41,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
+
+export const POST = withLog('POST', '/api/orders/track', __POST);

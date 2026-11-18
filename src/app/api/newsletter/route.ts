@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -5,7 +6,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     const { email, lang } = await req.json();
     const e = String(email || '').trim().toLowerCase();
@@ -19,3 +20,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
+
+export const POST = withLog('POST', '/api/newsletter', __POST);

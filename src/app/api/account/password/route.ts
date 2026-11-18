@@ -1,9 +1,10 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import { getAdminDb } from '@/lib/firebase-admin';
-export async function PUT(req: NextRequest) {
+async function __PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error:'Unauthorized' }, { status:401 });
   const { currentPassword, newPassword } = await req.json();
@@ -20,3 +21,5 @@ export async function PUT(req: NextRequest) {
   await db.collection('users').doc(session.user.id).update({ password: hashed, updatedAt: new Date().toISOString() });
   return NextResponse.json({ success:true });
 }
+
+export const PUT = withLog('PUT', '/api/account/password', __PUT);

@@ -1,9 +1,10 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { adminGetCategories, adminCreateCategory } from '@/lib/firestore-admin';
 
-export async function GET() {
+async function __GET() {
   try {
     const cats = await adminGetCategories(false);
     return NextResponse.json(cats, {
@@ -15,7 +16,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -28,3 +29,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create category' }, { status: 500 });
   }
 }
+
+export const GET = withLog('GET', '/api/categories', __GET);
+export const POST = withLog('POST', '/api/categories', __POST);

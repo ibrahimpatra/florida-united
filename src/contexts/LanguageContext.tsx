@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { isArabicPath, stripAr, toAr, hasArabicTwin } from '@/lib/locale-path';
 import { en } from '@/lib/i18n/en';
 import { ar } from '@/lib/i18n/ar';
 import { pickLocalized } from '@/lib/i18n/localize';
@@ -44,24 +45,33 @@ function lookup(dict: unknown, key: string): string | undefined {
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   // Start with 'en' so server HTML and first client render match; sync from storage in an effect.
-  const [lang, setLangState] = useState<Language>('en');
   const pathname = usePathname();
+  const router = useRouter();
+  const arPath = isArabicPath(pathname);
+  const [lang, setLangState] = useState<Language>(arPath ? 'ar' : 'en');
   const admin = isAdminPath(pathname);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('fk-lang');
       if (saved === 'ar') setLangState('ar');
+      if (arPath) localStorage.setItem('fk-lang', 'ar'); // someone who arrived on an Arabic page keeps Arabic while browsing
     } catch { /* storage blocked */ }
-  }, []);
+  }, [arPath]);
 
-  const effective: Language = admin ? 'en' : lang;
+  // The URL wins on Arabic pages; elsewhere the saved choice decides.
+  const effective: Language = admin ? 'en' : arPath ? 'ar' : lang;
   useEffect(() => { applyLang(effective); }, [effective]);
 
   const setLang = useCallback((l: Language) => {
     setLangState(l);
     try { localStorage.setItem('fk-lang', l); } catch { /* ignore */ }
-  }, []);
+    // Public pages have a separate Arabic address (/ar/...), so Google can index both languages.
+    if (pathname && hasArabicTwin(pathname)) {
+      const target = l === 'ar' ? toAr(pathname) : stripAr(pathname);
+      if (target !== pathname) router.push(target + (typeof window !== 'undefined' ? window.location.search : ''));
+    }
+  }, [pathname, router]);
 
   const value = useMemo<LanguageContextType>(() => ({
     lang: effective,

@@ -1,3 +1,4 @@
+import { altLinks } from '@/lib/seo';
 import type { Metadata } from 'next';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -7,8 +8,8 @@ import { ShopClient } from '@/components/product/ShopClient';
 
 export const metadata: Metadata = {
   title: 'Deals & Offers',
-  description: 'Shop the best deals on hardware, electrical supplies, safety equipment and tools. Current offers at Florida Kuwait Company.',
-  alternates: { canonical: '/deals' },
+  description: 'Shop the best deals on hardware, electrical supplies, safety equipment and tools. Current offers, updated daily.',
+  alternates: altLinks('/deals'),
 };
 
 export default function DealsPage() {

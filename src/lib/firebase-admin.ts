@@ -3,6 +3,7 @@ import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getStorage, Storage } from 'firebase-admin/storage';
+import { log } from './logger';
 
 let adminApp: App;
 let adminDb: Firestore;
@@ -38,6 +39,9 @@ function getAdminApp(): App {
     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
   if (!projectId || !clientEmail || !privateKey) {
+    log.error('firebase', 'Admin credentials missing - set them in .env.local (or Vercel > Settings > Environment Variables) and restart', {
+      project_id_found: !!projectId, client_email_found: !!clientEmail, key_found: !!privateKey,
+    });
     throw new Error(
       'Firebase Admin credentials are missing. Add these to your .env file:\n' +
       '  FIREBASE_PROJECT_ID=your-project-id\n' +

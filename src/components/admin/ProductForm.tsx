@@ -1,4 +1,6 @@
 'use client';
+import { TranslateButton } from '@/components/admin/TranslateButton';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -73,6 +75,7 @@ export function ProductForm({ initialData, productId }: Props) {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('folder', 'products');
+      fd.append('name', String(watch('name') || '')); // the file is saved as <product-name>-xxxx.webp so Google Images can read it
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.url) { setImages(imgs => [...imgs, data.url]); toast.success('Image uploaded'); }
@@ -124,7 +127,16 @@ export function ProductForm({ initialData, productId }: Props) {
         <div className="lg:col-span-2 space-y-6">
           {/* Basic Info */}
           <div className="card p-6">
-            <h3 className="font-bold text-gray-800 mb-4">Basic Information</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <h3 className="font-bold text-gray-800">Basic Information</h3>
+              <TranslateButton context="a product listing of a hardware and electrical supplies store" label="Translate all to Arabic" fields={[
+                ...(['name', 'shortDescription', 'description'] as const).map(k => ({
+                  en: watch(k as any) as string, ar: watch((k + 'Ar') as any) as string,
+                  set: (v: string) => setValue((k + 'Ar') as any, v as any, { shouldDirty: true }),
+                })),
+                ...units.map((u: any, i: number) => ({ en: u.name, ar: u.nameAr, set: (v: string) => setUnits(units.map((x: any, j: number) => (j === i ? { ...x, nameAr: v } : x))) })),
+              ]} />
+            </div>
             <div className="space-y-4">
               <div>
                 <label className="label">Product Name *</label>
@@ -214,7 +226,7 @@ export function ProductForm({ initialData, productId }: Props) {
           {/* Images */}
           <div className="card p-6">
             <h3 className="font-bold text-gray-800 mb-4">Product Images</h3>
-            <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               {images.map((img,i) => (
                 <div key={i} className="relative group aspect-square bg-gray-100 rounded-xl overflow-hidden">
                   <img src={img} alt="" className="w-full h-full object-cover"/>
@@ -309,9 +321,9 @@ export function ProductForm({ initialData, productId }: Props) {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div><label className="text-xs text-gray-500">Base units inside</label>
-                      <input type="number" min={1} step={1} value={u.factor ?? ''} onChange={e => setUnits(units.map((x, j) => j === i ? { ...x, factor: Number(e.target.value), price: x.priceTouched ? x.price : Math.round(basePrice * Number(e.target.value) * 1000) / 1000 } : x))} className="input-field" /></div>
+                      <NumberInput type="number" min={1} step={1} value={u.factor ?? ''} onChange={e => setUnits(units.map((x, j) => j === i ? { ...x, factor: Number(e.target.value), price: x.priceTouched ? x.price : Math.round(basePrice * Number(e.target.value) * 1000) / 1000 } : x))} className="input-field" /></div>
                     <div><label className="text-xs text-gray-500">Price (KWD)</label>
-                      <input type="number" min={0} step="0.001" value={u.price ?? ''} onChange={e => setUnits(units.map((x, j) => j === i ? { ...x, price: Number(e.target.value), priceTouched: true } : x))} className="input-field" /></div>
+                      <NumberInput type="number" min={0} step="0.001" value={u.price ?? ''} onChange={e => setUnits(units.map((x, j) => j === i ? { ...x, price: Number(e.target.value), priceTouched: true } : x))} className="input-field" /></div>
                   </div>
                   <button type="button" onClick={() => setUnits(units.filter((_, j) => j !== i))} className="text-xs text-red-600 hover:underline">Remove unit</button>
                 </div>

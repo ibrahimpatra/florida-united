@@ -3,20 +3,26 @@ import { adminGetCategories, adminGetProducts } from '@/lib/firestore-admin';
 
 const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
 
+type Entry = MetadataRoute.Sitemap[number];
+/** One entry per language, each pointing at the other (hreflang), so Google serves the right one. */
+const both = (path: string, e: Omit<Entry, 'url' | 'alternates'>): Entry[] => {
+  const en = `${BASE}${path === '/' ? '' : path}`, ar = `${BASE}/ar${path === '/' ? '' : path}`;
+  const alternates = { languages: { en, ar } };
+  return [{ url: en, alternates, ...e }, { url: ar, alternates, ...e }];
+};
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
-    { url: BASE,                        lastModified: new Date(), changeFrequency: 'daily',   priority: 1   },
-    { url: `${BASE}/shop`,              lastModified: new Date(), changeFrequency: 'daily',   priority: 0.9 },
-    { url: `${BASE}/deals`,             lastModified: new Date(), changeFrequency: 'daily',   priority: 0.8 },
-    { url: `${BASE}/contact`,           lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/about`,             lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/terms`,             lastModified: new Date(), changeFrequency: 'yearly',  priority: 0.3 },
-    { url: `${BASE}/privacy`,           lastModified: new Date(), changeFrequency: 'yearly',  priority: 0.3 },
-    { url: `${BASE}/shipping-info`,     lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
-    { url: `${BASE}/returns-policy`,    lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
-    { url: `${BASE}/order-tracking`,    lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
-    { url: `${BASE}/auth/login`,        lastModified: new Date(), changeFrequency: 'yearly',  priority: 0.3 },
-    { url: `${BASE}/auth/register`,     lastModified: new Date(), changeFrequency: 'yearly',  priority: 0.3 },
+    ...both('/', { lastModified: new Date(), changeFrequency: 'daily', priority: 1 }),
+    ...both('/shop', { lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 }),
+    ...both('/deals', { lastModified: new Date(), changeFrequency: 'daily', priority: 0.8 }),
+    ...both('/contact', { lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 }),
+    ...both('/about', { lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 }),
+    ...both('/terms', { lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 }),
+    ...both('/privacy', { lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 }),
+    ...both('/shipping-info', { lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 }),
+    ...both('/returns-policy', { lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 }),
+    ...both('/bundles', { lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 }),
   ];
 
   let categoryPages: MetadataRoute.Sitemap = [];
@@ -24,21 +30,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const categories = await adminGetCategories(true);
-    categoryPages = categories.map(c => ({
-      url: `${BASE}/shop/${c.slug}`,
-      lastModified: new Date(c.updatedAt || c.createdAt),
-      changeFrequency: 'weekly' as const,
-      priority: 0.8,
-    }));
+    categoryPages = categories.flatMap(c => both(`/shop/${c.slug}`, { lastModified: new Date(c.updatedAt || c.createdAt), changeFrequency: 'weekly', priority: 0.8 }));
   } catch {}
 
   try {
-    const { items } = await adminGetProducts({ pageSize: 500 });
-    productPages = items.map(p => ({
-      url: `${BASE}/shop/products/${p.slug}`,
-      lastModified: new Date(p.updatedAt || p.createdAt),
-      changeFrequency: 'weekly' as const,
-      priority: 0.7,
+    const { items } = await adminGetProducts({ pageSize: 5000 });
+    productPages = items.flatMap(p => both(`/shop/products/${p.slug}`, {
+      lastModified: new Date(p.updatedAt || p.createdAt), changeFrequency: 'weekly', priority: 0.7,
     }));
   } catch {}
 

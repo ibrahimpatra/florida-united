@@ -1,3 +1,4 @@
+import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -13,12 +14,13 @@ const convert = (v: unknown): unknown =>
   : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, convert(x)]))
   : v;
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const sp = new URL(req.url).searchParams;
-    if (session.user.role === 'admin') {
+    // Everyone (admins included) gets ONLY their own orders by default. The all-orders list needs ?scope=all AND the admin role.
+    if (sp.get('scope') === 'all' && String(session.user.role).toLowerCase() === 'admin') {
       return NextResponse.json(await adminGetAllOrders({
         status: sp.get('status') || 'all', page: parseInt(sp.get('page') || '1'), search: sp.get('q') || undefined,
       }));
@@ -35,4 +37,7 @@ export async function GET(req: NextRequest) {
 }
 
 // Legacy endpoint kept for compatibility; now uses the same atomic, server-priced engine.
-export async function POST(req: NextRequest) { return placeOrderHandler(req); }
+async function __POST(req: NextRequest) { return placeOrderHandler(req); }
+
+export const GET = withLog('GET', '/api/orders', __GET);
+export const POST = withLog('POST', '/api/orders', __POST);

@@ -1,5 +1,6 @@
 'use client';
-import { SITE_CONFIG } from '@/lib/siteConfig';
+import { useBrand } from '@/contexts/BrandContext';
+import { BrandMark } from '@/components/layout/BrandMark';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -13,6 +14,7 @@ import { LanguageToggle } from '@/components/layout/LanguageToggle';
 interface FormData { name: string; email: string; phone: string; password: string; confirm: string; }
 
 export default function RegisterPage() {
+  const SITE_CONFIG = useBrand();
   const { t, isArabic } = useLanguage();
   const router = useRouter();
   const [showPw, setShowPw] = useState(false);
@@ -24,7 +26,7 @@ export default function RegisterPage() {
     try {
       const res = await fetch('/api/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
       const json = await res.json();
-      if (!res.ok) { toast.error(json.error || t('c2_auth.regFail')); setLoading(false); return; }
+      if (!res.ok) { toast.error((json.error || t('c2_auth.regFail')) + (json.hint ? ` (${json.hint})` : ''), { duration: json.hint ? 9000 : 4000 }); setLoading(false); return; }
       toast.success(t('c2_auth.created'));
       await signIn('credentials', { email: data.email, password: data.password, redirect: false });
       router.push('/');
@@ -38,7 +40,7 @@ export default function RegisterPage() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-3 mb-6">
             <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-xl font-display">{SITE_CONFIG.logoText}</span>
+              <span className="text-white font-bold text-xl font-display"><BrandMark /></span>
             </div>
             <div className="text-start">
               <div className="text-brand-700 font-bold text-lg font-display">{isArabic ? SITE_CONFIG.fullNameAr : SITE_CONFIG.name}</div>

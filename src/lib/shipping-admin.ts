@@ -61,7 +61,10 @@ export async function adminUpdateUOM(id: string, data: Partial<UOM>): Promise<vo
   await getAdminDb().collection('uoms').doc(id).update(d);
 }
 export async function adminDeleteUOM(id: string): Promise<void> {
-  await getAdminDb().collection('uoms').doc(id).delete();
+  const db = getAdminDb();
+  const used = await db.collection('products').where('uomId', '==', id).limit(3).get();
+  if (!used.empty) throw new AdminInputError(409, `This unit is used by ${used.size >= 3 ? 'several products' : used.size === 1 ? `"${(used.docs[0].data() as any).name}"` : 'products'}. Change those products to another unit first.`);
+  await db.collection('uoms').doc(id).delete();
 }
 
 // ── Flash Deals ───────────────────────────────────────────────
@@ -79,17 +82,48 @@ export async function adminGetActiveFlashDeals(): Promise<FlashDeal[]> {
 export async function adminGetFlashDealById(id: string): Promise<FlashDeal | null> {
   return toData<FlashDeal>(await getAdminDb().collection('flashDeals').doc(id).get());
 }
-export async function adminCreateFlashDeal(data: Omit<FlashDeal,'id'|'createdAt'|'updatedAt'>): Promise<string> {
-  const ref = await getAdminDb().collection('flashDeals').add({ ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+/** Whitelists and types the fields a flash deal may have (the form and the AI agent both send loose JSON). */
+export function sanitizeDeal(b: any, partial = false): Record<string, any> {
+  const out: Record<string, any> = {};
+  const str = (k: string, max = 200) => { if (k in b) out[k] = String(b[k] ?? '').trim().slice(0, max); };
+  const num = (k: string) => { if (k in b) { const n = Number(b[k]); if (b[k] === '' || b[k] === null || !Number.isFinite(n)) out[k] = null; else out[k] = n; } };
+  const bool = (k: string) => { if (k in b) out[k] = !!b[k]; };
+  const list = (k: string) => { if (k in b) out[k] = Array.isArray(b[k]) ? [...new Set(b[k].map((x: any) => String(x)).filter(Boolean))].slice(0, 500) : []; };
+  ['title', 'titleAr', 'subtitle', 'subtitleAr', 'badgeText', 'badgeTextAr'].forEach(k => str(k));
+  str('bannerColor', 20); str('image', 600);
+  if ('type' in b) out.type = ['percentage', 'fixed', 'bogo'].includes(b.type) ? b.type : 'percentage';
+  if ('scope' in b) out.scope = ['all', 'category', 'products'].includes(b.scope) ? b.scope : 'all';
+  ['discountValue', 'minCartAmount', 'maxUsesTotal', 'maxUsesPerUser'].forEach(num);
+  ['showCountdown', 'showOnHomepage', 'showOnProductPage', 'isActive', 'isPinned'].forEach(bool);
+  list('categoryIds'); list('productIds');
+  if ('startAt' in b) out.startAt = b.startAt ? new Date(b.startAt).toISOString() : '';
+  if ('endAt' in b) out.endAt = b.endAt ? new Date(b.endAt).toISOString() : '';
+  if (!partial) { out.usedCount = 0; if (!('isActive' in out)) out.isActive = true; }
+  // null means "no limit": store as absent so the pricing code sees undefined
+  for (const k of Object.keys(out)) if (out[k] === null) delete out[k];
+  return out;
+}
+
+export async function adminCreateFlashDeal(data: any): Promise<string> {
+  const ref = await getAdminDb().collection('flashDeals').add({ ...sanitizeDeal(data), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
   return ref.id;
 }
 export async function adminUpdateFlashDeal(id: string, data: Partial<FlashDeal>): Promise<void> {
-  const d: any = { ...data };
-  for (const k of ['id', 'createdAt', 'updatedAt', 'usedCount']) delete d[k]; // server-owned; the form echoes them back
-  await getAdminDb().collection('flashDeals').doc(id).update({ ...d, updatedAt: FieldValue.serverTimestamp() });
+  const ref = getAdminDb().collection('flashDeals').doc(id);
+  const d = sanitizeDeal(data, true);
+  const cleared = ['minCartAmount', 'maxUsesTotal', 'maxUsesPerUser'].filter(k => k in (data as any) && (data as any)[k] === null || (data as any)[k] === '').reduce((o: any, k) => ({ ...o, [k]: FieldValue.delete() }), {});
+  await ref.update({ ...d, ...cleared, updatedAt: FieldValue.serverTimestamp() }); // usedCount / id / createdAt are never taken from the form
 }
-export async function adminDeleteFlashDeal(id: string): Promise<void> {
-  await getAdminDb().collection('flashDeals').doc(id).delete();
+/** A deal that was used keeps its record (orders reference it): it is switched off instead of deleted. */
+export async function adminDeleteFlashDeal(id: string): Promise<{ archived?: true; message: string }> {
+  const ref = getAdminDb().collection('flashDeals').doc(id);
+  const snap = await ref.get();
+  if (snap.exists && Number((snap.data() as any).usedCount || 0) > 0) {
+    await ref.update({ isActive: false, updatedAt: FieldValue.serverTimestamp() });
+    return { archived: true, message: 'This deal was already used in orders, so it was switched off instead of deleted.' };
+  }
+  await ref.delete();
+  return { message: 'Deal deleted.' };
 }
 
 // ── Shipping Calculate (uses zones from Admin SDK) ────────────

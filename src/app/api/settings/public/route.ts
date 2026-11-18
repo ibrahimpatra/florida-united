@@ -1,13 +1,15 @@
+import { withLog } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 import { loadShippingSettings } from '@/lib/orders-server';
-import { cardEnabled, getUsdRate } from '@/lib/stripe';
+import { getUsdRate } from '@/lib/stripe';
+import { onlineProvider } from '@/lib/payments';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { SITE_CONFIG } from '@/lib/siteConfig';
 
 export const dynamic = 'force-dynamic';
 
 /** Non-sensitive storefront settings (same source checkout uses, so they can never disagree). */
-export async function GET() {
+async function __GET() {
   try {
     const { settings } = await loadShippingSettings();
     return NextResponse.json({
@@ -16,11 +18,13 @@ export async function GET() {
       codEnabled: settings.codEnabled !== false,
       codFee: settings.codFee ?? 0,
       usdRate: await getUsdRate(getAdminDb()),
-      cardEnabled: cardEnabled(),
+      ...(await (async () => { const p = await onlineProvider(getAdminDb()); return { cardEnabled: !!p, onlineProvider: p?.id || null, onlineProviderName: p?.name || null, onlineCurrency: p?.currency || null }; })()),
     }, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' } });
   } catch {
     return NextResponse.json({
-      freeShippingThreshold: SITE_CONFIG.freeShippingThreshold, defaultShippingCost: SITE_CONFIG.defaultShippingCost, codEnabled: true, codFee: 0, usdRate: 3.25, cardEnabled: false,
+      freeShippingThreshold: SITE_CONFIG.freeShippingThreshold, defaultShippingCost: SITE_CONFIG.defaultShippingCost, codEnabled: true, codFee: 0, usdRate: 3.25, cardEnabled: false, onlineProvider: null, onlineProviderName: null, onlineCurrency: null,
     });
   }
 }
+
+export const GET = withLog('GET', '/api/settings/public', __GET);

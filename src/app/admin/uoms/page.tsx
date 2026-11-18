@@ -1,4 +1,6 @@
 'use client';
+import { TranslateButton } from '@/components/admin/TranslateButton';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Save, X, Package, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -103,7 +105,7 @@ export default function AdminUOMPage() {
   const filtered = filterCat === 'all' ? uoms : uoms.filter(u => u.category === filterCat);
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display flex items-center gap-3"><Package className="w-7 h-7 text-brand-600"/>Units of Measure (UOM)</h1>
@@ -176,6 +178,10 @@ export default function AdminUOMPage() {
               <button onClick={() => setEditingUOM(null)} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-6 space-y-4">
+              <TranslateButton context="a unit of measure (and its abbreviation) for hardware products" fields={[
+                { en: editingUOM.name, ar: editingUOM.nameAr, set: v => setEditingUOM(u => ({ ...u!, nameAr: v })) },
+                { en: editingUOM.abbreviation, ar: (editingUOM as any).abbreviationAr, set: v => setEditingUOM(u => ({ ...u!, abbreviationAr: v } as any)) },
+              ]} />
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="label">Name *</label><input value={editingUOM.name || ''} onChange={e => setEditingUOM(u => ({ ...u!, name: e.target.value }))} className="input-field" placeholder="Meter"/></div>
                 <div><label className="label">Arabic Name <span dir="rtl" className="text-gray-400 font-normal">(الاسم بالعربية)</span></label><input value={(editingUOM as any).nameAr || ''} onChange={e => setEditingUOM(u => ({ ...u!, nameAr: e.target.value } as any))} dir="rtl" lang="ar" className="input-field" placeholder="متر"/></div>
@@ -195,7 +201,7 @@ export default function AdminUOMPage() {
               {!editingUOM.isBase && (
                 <div>
                   <label className="label">Conversion Factor (× to get to base)</label>
-                  <input type="number" step="0.000001" value={editingUOM.conversionFactor || ''} onChange={e => setEditingUOM(u => ({ ...u!, conversionFactor: Number(e.target.value) }))} className="input-field" placeholder="e.g. 3.28084 for meter→feet"/>
+                  <NumberInput type="number" step="0.000001" value={editingUOM.conversionFactor || ''} onChange={e => setEditingUOM(u => ({ ...u!, conversionFactor: Number(e.target.value) }))} className="input-field" placeholder="e.g. 3.28084 for meter→feet"/>
                   <p className="text-xs text-gray-400 mt-1">e.g. 1 meter = 3.28084 feet → enter 3.28084</p>
                 </div>
               )}

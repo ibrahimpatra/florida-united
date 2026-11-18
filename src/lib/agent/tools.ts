@@ -14,12 +14,16 @@ import { placeOrder, loadShippingSettings, OrderError } from '../orders-server';
 import { SITE_CONFIG } from '../siteConfig';
 import { formatAddress } from '../utils';
 import { getUsdRate, cardEnabled } from '../stripe';
+import { changeOrderStatus, VALID_STATUSES } from '../order-actions';
+import { notifyOrderPlaced } from '../place-order-handler';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminGetUsers, adminGetReturnRequests } from '../firestore-admin';
 
 export interface AgentUser { id?: string; email?: string; name?: string; role?: string }
 export interface ToolResult { data: any; pending?: PendingAction }
 export interface PendingAction { name: string; args: any; summary: string }
 
-const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+const STATUSES = [...VALID_STATUSES, 'cancelled'];
 
 const prod = (p: any) => ({
   name: p.name, nameAr: p.nameAr || undefined, sku: p.sku, price: p.price, comparePrice: p.comparePrice || undefined,
@@ -55,8 +59,14 @@ export const ADMIN_DECLS: any[] = [
   { name: 'admin_create_product', description: 'PROPOSE creating a product. Needs name, price (KWD) and a category slug from list_categories. The admin must confirm.',
     parameters: { type: 'OBJECT', properties: { name: { type: 'STRING' }, nameAr: { type: 'STRING' }, price: { type: 'NUMBER' }, stock: { type: 'INTEGER' }, categorySlug: { type: 'STRING' }, sku: { type: 'STRING' }, brand: { type: 'STRING' }, description: { type: 'STRING' }, descriptionAr: { type: 'STRING' } }, required: ['name', 'price', 'categorySlug'] } },
   { name: 'admin_update_product', description: 'PROPOSE changing a product price and/or stock (by SKU). The admin must confirm.', parameters: { type: 'OBJECT', properties: { sku: { type: 'STRING' }, price: { type: 'NUMBER' }, stock: { type: 'INTEGER' } }, required: ['sku'] } },
+  { name: 'admin_set_tracking', description: 'PROPOSE shipping an order: sets the tracking number and carrier and marks it shipped. The admin must confirm.',
+    parameters: { type: 'OBJECT', properties: { orderNumber: { type: 'STRING' }, trackingNumber: { type: 'STRING' }, carrier: { type: 'STRING' } }, required: ['orderNumber', 'trackingNumber', 'carrier'] } },
+  { name: 'admin_adjust_stock', description: 'PROPOSE adding to or removing from the stock of a product by SKU (delta can be negative), e.g. +50 after a delivery from the supplier. The admin must confirm.',
+    parameters: { type: 'OBJECT', properties: { sku: { type: 'STRING' }, delta: { type: 'INTEGER' }, reason: { type: 'STRING' } }, required: ['sku', 'delta'] } },
+  { name: 'admin_customers', description: 'Find customers by name, email or phone.', parameters: { type: 'OBJECT', properties: { search: { type: 'STRING' }, limit: { type: 'INTEGER' } } } },
+  { name: 'admin_returns', description: 'List return requests, optionally by status (pending, approved, rejected, refunded).', parameters: { type: 'OBJECT', properties: { status: { type: 'STRING' } } } },
   { name: 'admin_place_order', description: 'PROPOSE placing a cash-on-delivery order for a registered customer. Needs customerEmail, items (sku + quantity), and a Kuwait delivery address. The admin must confirm.',
-    parameters: { type: 'OBJECT', properties: { customerEmail: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { sku: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['sku', 'quantity'] } },
+    parameters: { type: 'OBJECT', properties: { customerEmail: { type: 'STRING' }, couponCode: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { sku: { type: 'STRING' }, quantity: { type: 'INTEGER' }, unit: { type: 'STRING', description: 'Selling unit name if not the base unit, e.g. Carton of 12' } }, required: ['sku', 'quantity'] } },
       firstName: { type: 'STRING' }, lastName: { type: 'STRING' }, phone: { type: 'STRING' }, governorate: { type: 'STRING' }, city: { type: 'STRING' }, block: { type: 'STRING' }, street: { type: 'STRING' }, building: { type: 'STRING' } },
       required: ['customerEmail', 'items', 'firstName', 'phone', 'governorate', 'city', 'block', 'street', 'building'] } },
 ];
@@ -68,7 +78,7 @@ export function declsFor(user: AgentUser) {
   return d;
 }
 
-const WRITE_TOOLS = new Set(['admin_update_order_status', 'admin_create_product', 'admin_update_product', 'admin_place_order']);
+const WRITE_TOOLS = new Set(['admin_update_order_status', 'admin_create_product', 'admin_update_product', 'admin_place_order', 'admin_set_tracking', 'admin_adjust_stock']);
 const lim = (n: any, d = 8, max = 20) => Math.min(max, Math.max(1, Number(n) || d));
 
 async function skuProduct(sku: string) {
@@ -128,6 +138,14 @@ export async function runTool(name: string, a: any, user: AgentUser): Promise<To
       const o: any = await adminGetOrderByNumber(String(a.orderNumber || '').trim().toUpperCase());
       return { data: o ? { ...order(o), customer: o.userName, email: o.userEmail, phone: o.shippingAddress?.phone, address: `${formatAddress(o.shippingAddress).line1}, ${formatAddress(o.shippingAddress).line2}` } : { error: 'Order not found.' } };
     }
+    case 'admin_customers': {
+      const r = await adminGetUsers({ search: a.search || undefined, pageSize: lim(a.limit, 10, 25) });
+      return { data: { total: r.total, customers: r.items.map((u: any) => ({ name: u.displayName, email: u.email, phone: u.phone || undefined, role: u.role, active: u.isActive !== false })) } };
+    }
+    case 'admin_returns': {
+      const r = await adminGetReturnRequests({ status: a.status || undefined });
+      return { data: r.slice(0, 20).map((x: any) => ({ orderNumber: x.orderNumber, status: x.status, reason: x.reason, items: (x.items || []).length })) };
+    }
     case 'admin_low_stock': {
       const r = await adminGetProducts({ admin: true, stockStatus: 'low', pageSize: lim(a.limit, 15, 40) } as any);
       const o = await adminGetProducts({ admin: true, stockStatus: 'out', pageSize: 15 } as any);
@@ -143,6 +161,9 @@ async function preview(name: string, a: any): Promise<ToolResult> {
       if (!STATUSES.includes(a.status)) return { data: { error: `Status must be one of: ${STATUSES.join(', ')}` } };
       const o: any = await adminGetOrderByNumber(String(a.orderNumber || '').trim().toUpperCase());
       if (!o) return { data: { error: 'Order not found.' } };
+      if (o.status === 'cancelled') return { data: { error: 'That order is cancelled and cannot be changed.' } };
+      if (o.paymentMethod === 'card' && o.paymentStatus !== 'paid' && a.status !== 'pending' && a.status !== 'cancelled')
+        return { data: { error: 'That is a card order that has not been paid yet, so it cannot move forward. It can only be cancelled.' } };
       return pend(name, { orderNumber: o.orderNumber, status: a.status, note: a.note || '' }, `Change order ${o.orderNumber} from "${o.status}" to "${a.status}"`);
     }
     case 'admin_create_product': {
@@ -161,12 +182,34 @@ async function preview(name: string, a: any): Promise<ToolResult> {
       if (!Object.keys(patch).length) return { data: { error: 'Nothing to change.' } };
       return pend(name, { id: p.id, ...patch }, `Update "${p.name}" (${p.sku}): ${patch.price !== undefined ? `price ${p.price} -> ${patch.price}` : ''} ${patch.stock !== undefined ? `stock ${p.stock} -> ${patch.stock}` : ''}`.trim());
     }
+    case 'admin_set_tracking': {
+      const o: any = await adminGetOrderByNumber(String(a.orderNumber || '').trim().toUpperCase());
+      if (!o) return { data: { error: 'Order not found.' } };
+      if (o.status === 'cancelled') return { data: { error: 'That order is cancelled.' } };
+      if (o.paymentMethod === 'card' && o.paymentStatus !== 'paid') return { data: { error: 'That card order has not been paid yet, so it cannot be shipped.' } };
+      return pend(name, { orderNumber: o.orderNumber, trackingNumber: String(a.trackingNumber).trim(), carrier: String(a.carrier).trim() }, `Ship order ${o.orderNumber} via ${a.carrier}, tracking ${a.trackingNumber} (customer is notified)`);
+    }
+    case 'admin_adjust_stock': {
+      const p = await skuProduct(a.sku);
+      if (!p) return { data: { error: 'No product with that SKU.' } };
+      const delta = Math.trunc(Number(a.delta));
+      if (!delta) return { data: { error: 'delta must be a non-zero whole number.' } };
+      const next = (p.stock ?? 0) + delta;
+      if (next < 0) return { data: { error: `Stock would go below zero (now ${p.stock}).` } };
+      return pend(name, { id: p.id, sku: p.sku, name: p.name, delta }, `Stock of "${p.name}" (${p.sku}): ${p.stock} -> ${next} (${delta > 0 ? '+' : ''}${delta})${a.reason ? `, ${a.reason}` : ''}`);
+    }
     case 'admin_place_order': {
       const items: any[] = [];
       for (const it of a.items || []) {
-        const p = await skuProduct(it.sku);
+        const p: any = await skuProduct(it.sku);
         if (!p) return { data: { error: `No product with SKU ${it.sku}.` } };
-        items.push({ productId: p.id, quantity: Math.max(1, Number(it.quantity) || 1), label: `${it.quantity} x ${p.name}` });
+        let variantId: string | undefined;
+        if (it.unit) {
+          const u = (p.units || []).find((x: any) => [x.id, x.name, x.nameAr].some(v => v && String(v).toLowerCase() === String(it.unit).toLowerCase()));
+          if (!u) return { data: { error: `${p.name} has no unit called "${it.unit}". Units: ${(p.units || []).map((x: any) => x.name).join(', ') || 'none'}.` } };
+          variantId = u.id;
+        }
+        items.push({ productId: p.id, ...(variantId ? { variantId } : {}), quantity: Math.max(1, Math.trunc(Number(it.quantity)) || 1), label: `${it.quantity} x ${p.name}${it.unit ? ` (${it.unit})` : ''}` });
       }
       if (!items.length) return { data: { error: 'No items.' } };
       const u = await getAdminDb().collection('users').where('email', '==', String(a.customerEmail).toLowerCase().trim()).limit(1).get();
@@ -188,11 +231,23 @@ export async function executeConfirmed(p: PendingAction, user: AgentUser): Promi
     case 'admin_update_order_status': {
       const o: any = await adminGetOrderByNumber(a.orderNumber);
       if (!o) throw new Error('Order not found.');
-      if (a.status === 'cancelled') {
-        const { cancelOrder } = await import('../orders-server');
-        await cancelOrder({ orderId: o.id, actor: { id: user.id || 'agent', role: 'admin' }, note: a.note || 'Cancelled by admin assistant' });
-      } else await adminUpdateOrderStatus(o.id, a.status, a.note || 'Updated by admin assistant');
-      return `Order ${a.orderNumber} is now "${a.status}".`;
+      try {
+        const r = await changeOrderStatus({ orderId: o.id, actor: { id: user.id || 'agent', role: 'admin' }, status: a.status, note: a.note || 'Updated by admin assistant' });
+        return a.status === 'cancelled'
+          ? `Order ${a.orderNumber} is cancelled and its stock was returned.${(r as any).refunded ? ' The card payment was refunded.' : (r as any).needsRefund ? ' It was paid by card: refund it in Stripe.' : ''}`
+          : `Order ${a.orderNumber} is now "${a.status}". The customer was notified.`;
+      } catch (e) { throw new Error(e instanceof OrderError ? e.message : 'Could not change the order.'); }
+    }
+    case 'admin_set_tracking': {
+      const o: any = await adminGetOrderByNumber(a.orderNumber);
+      if (!o) throw new Error('Order not found.');
+      try { await changeOrderStatus({ orderId: o.id, actor: { id: user.id || 'agent', role: 'admin' }, trackingNumber: a.trackingNumber, carrier: a.carrier }); }
+      catch (e) { throw new Error(e instanceof OrderError ? e.message : 'Could not update the order.'); }
+      return `Order ${a.orderNumber} is marked shipped with tracking ${a.trackingNumber} (${a.carrier}).`;
+    }
+    case 'admin_adjust_stock': {
+      await getAdminDb().collection('products').doc(a.id).update({ stock: FieldValue.increment(a.delta), updatedAt: FieldValue.serverTimestamp() });
+      return `Stock of "${a.name}" changed by ${a.delta > 0 ? '+' : ''}${a.delta}.`;
     }
     case 'admin_create_product': {
       const id = await adminCreateProduct({
@@ -212,11 +267,13 @@ export async function executeConfirmed(p: PendingAction, user: AgentUser): Promi
       try {
         const r: any = await placeOrder({
           userId: a.userId, userEmail: String(a.customerEmail).toLowerCase(), userName: `${a.firstName} ${a.lastName || ''}`.trim(), userPhone: a.phone,
-          items: a.items.map((i: any) => ({ productId: i.productId, quantity: i.quantity })),
+          items: a.items.map((i: any) => ({ productId: i.productId, quantity: i.quantity, ...(i.variantId ? { variantId: i.variantId } : {}) })),
+          ...(a.couponCode ? { couponCode: String(a.couponCode) } : {}),
           shippingAddress: { firstName: a.firstName, lastName: a.lastName || '', phone: a.phone, governorate: a.governorate, city: a.city, block: a.block, street: a.street, building: a.building },
           paymentMethod: 'cod', notes: 'Placed by admin assistant',
         });
-        return `Order ${r.orderNumber} placed (cash on delivery).`;
+        if (r.order && !r.duplicate) notifyOrderPlaced(r.order);
+        return `Order ${r.orderNumber} placed (cash on delivery), total KWD ${Number(r.total).toFixed(3)}. The customer was emailed.`;
       } catch (e) { throw new Error(e instanceof OrderError ? e.message : 'Could not place the order.'); }
     }
   }
