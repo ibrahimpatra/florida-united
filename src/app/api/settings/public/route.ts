@@ -1,3 +1,4 @@
+import { returnWindowDays, DEFAULT_RETURN_DAYS } from '@/lib/returns';
 import { withLog } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 import { loadShippingSettings } from '@/lib/orders-server';
@@ -14,6 +15,7 @@ async function __GET() {
     const { settings } = await loadShippingSettings();
     return NextResponse.json({
       freeShippingThreshold: settings.freeShippingThreshold ?? null,
+      returnWindowDays: returnWindowDays(settings.returnWindowDays),
       defaultShippingCost: settings.defaultShippingCost,
       codEnabled: settings.codEnabled !== false,
       codFee: settings.codFee ?? 0,
@@ -22,7 +24,7 @@ async function __GET() {
     }, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' } });
   } catch {
     return NextResponse.json({
-      freeShippingThreshold: SITE_CONFIG.freeShippingThreshold, defaultShippingCost: SITE_CONFIG.defaultShippingCost, codEnabled: true, codFee: 0, usdRate: 3.25, cardEnabled: false, onlineProvider: null, onlineProviderName: null, onlineCurrency: null,
+      returnWindowDays: DEFAULT_RETURN_DAYS, freeShippingThreshold: SITE_CONFIG.freeShippingThreshold, defaultShippingCost: SITE_CONFIG.defaultShippingCost, codEnabled: true, codFee: 0, usdRate: 3.25, cardEnabled: false, onlineProvider: null, onlineProviderName: null, onlineCurrency: null,
     });
   }
 }

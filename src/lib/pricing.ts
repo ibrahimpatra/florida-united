@@ -90,6 +90,7 @@ export interface ShippingSettings {
   defaultShippingCost: number;
   localPickupEnabled?: boolean;
   localPickupAddress?: string;
+  returnWindowDays?: number;
   codEnabled?: boolean;
   codFee?: number;
 }
@@ -179,16 +180,19 @@ export function computeShipping(args: {
 // ── Coupons ──────────────────────────────────────────────────
 export interface CouponLike {
   code: string; type: 'percentage' | 'fixed'; value: number; minOrderAmount?: number;
-  maxDiscount?: number; usageLimit?: number; usedCount?: number; isActive: boolean; expiresAt?: string;
+  maxDiscount?: number; usageLimit?: number; perUserLimit?: number | null; usedCount?: number; isActive: boolean; expiresAt?: string;
 }
 
-export function computeCoupon(coupon: CouponLike | null | undefined, subtotal: number, now = new Date()):
+/** `userUses` = how many times THIS customer already used the code (needed only for coupons with a per-customer limit). */
+export function computeCoupon(coupon: CouponLike | null | undefined, subtotal: number, now = new Date(), userUses = 0):
   { valid: boolean; discount: number; error?: string } {
   if (!coupon) return { valid: false, discount: 0, error: 'Invalid coupon code' };
   if (!coupon.isActive) return { valid: false, discount: 0, error: 'This coupon is no longer active' };
   if (coupon.expiresAt && new Date(coupon.expiresAt) < now) return { valid: false, discount: 0, error: 'This coupon has expired' };
   if (coupon.usageLimit && (coupon.usedCount || 0) >= coupon.usageLimit)
     return { valid: false, discount: 0, error: 'This coupon has reached its usage limit' };
+  if (coupon.perUserLimit && userUses >= coupon.perUserLimit)
+    return { valid: false, discount: 0, error: coupon.perUserLimit === 1 ? 'You have already used this coupon' : 'You have reached the limit for this coupon' };
   if (coupon.minOrderAmount && subtotal < coupon.minOrderAmount)
     return { valid: false, discount: 0, error: `Minimum order for this coupon is KD ${coupon.minOrderAmount.toFixed(3)}` };
   let d = coupon.type === 'percentage' ? (subtotal * coupon.value) / 100 : coupon.value;
@@ -270,6 +274,49 @@ export function fuzzyScore(haystack: string, query: string): number {
 }
 
 
+/**
+ * Strict catalogue search used by the shop, the search box and the admin pickers.
+ * Looks ONLY at the name and short description (English and Arabic). Every word the person typed has to be found:
+ * as a word start, or inside a word of 3+ letters, or as a one-letter typo of a word of 5+ letters. Returns 0 for no match.
+ * `extra` lets the admin pickers add the SKU.
+ */
+export function matchScore(fields: { name?: string; nameAr?: string; short?: string; shortAr?: string; extra?: string }, query: string): number {
+  const q = query.toLowerCase().trim();
+  if (!q) return 1;
+  const norm = (x?: string) => String(x || '').toLowerCase();
+  const tokenize = (x: string) => x.split(/[^a-z0-9\u0600-\u06ff.]+/).filter(Boolean);
+  const names = [norm(fields.name), norm(fields.nameAr), norm(fields.extra)];
+  const shorts = [norm(fields.short), norm(fields.shortAr)];
+  const wordScore = (qw: string, texts: string[]): number => {
+    const variants = [qw, ...(SEARCH_SYNONYMS[qw] || [])];
+    let best = 0;
+    for (const t of texts) {
+      if (!t) continue;
+      const words = tokenize(t);
+      for (const v of variants) {
+        const syn = v !== qw;
+        if (words.some(w => w === v)) best = Math.max(best, syn ? 70 : 100);
+        else if (words.some(w => w.startsWith(v))) best = Math.max(best, syn ? 60 : 85);
+        else if (v.length >= 3 && (words.some(w => w.includes(v)) || t.includes(v))) best = Math.max(best, syn ? 40 : 55);
+        else if (!syn && v.length >= 5 && words.some(w => w.length >= 4 && editDistance(w.slice(0, v.length + 1), v, 1) <= 1)) best = Math.max(best, 35);
+      }
+    }
+    return best;
+  };
+  let total = 0;
+  const qWords = q.split(/\s+/).filter(Boolean);
+  for (const qw of qWords) {
+    const inName = wordScore(qw, names);
+    const inShort = Math.round(wordScore(qw, shorts) * 0.6); // a description hit ranks below a name hit
+    const best = Math.max(inName, inShort);
+    if (!best) return 0;
+    total += best;
+  }
+  const phrase = names.some(n => n.includes(q)) ? 40 : 0;
+  return total / qWords.length + phrase;
+}
+
+
 // ── Flash deals ──────────────────────────────────────────────
 /** Subset of a flashDeals document that pricing needs (dates may be ISO strings, Date or Firestore Timestamps). */
 export interface DealLike {
@@ -309,7 +356,7 @@ export function priceUnderDeal(d: DealLike, price: number, quantity: number): { 
 }
 
 /**
- * Applies the best live deal to every ordinary line (bundles are skipped). Pure: the same function runs on the
+ * Applies the best live deal to every ordinary line (bundles only when a deal names them). Pure: the same function runs on the
  * server (what is charged) and in the browser (what the cart shows), so they cannot disagree.
  * `blocked` lets the server exclude deals a given customer has used up.
  */
@@ -319,10 +366,12 @@ export function applyFlashDeals<T extends PricedLine>(lines: T[], deals: DealLik
   const cartBefore = round3(lines.reduce((a, l) => a + l.price * l.quantity, 0));
   const used = new Set<string>(); let totalSaving = 0;
   const out = lines.map(l => {
-    if (l.bundleItems || l.dealId) return l;
+    if (l.dealId) return l;
     let best: { d: DealLike; r: ReturnType<typeof priceUnderDeal> } | null = null;
     for (const d of live) {
       if (d.minCartAmount && cartBefore < d.minCartAmount) continue;
+      // a bundle gets a deal only when the deal names that bundle ("all products" / category deals never touch bundles)
+      if (l.bundleItems && !(d.scope === 'products' && (d.productIds || []).includes(l.productId))) continue;
       if (!dealCoversProduct(d, l.productId, l.categoryId)) continue;
       const r = priceUnderDeal(d, l.price, l.quantity);
       if (r.saving > 0 && (!best || r.saving > best.r.saving || (r.saving === best.r.saving && d.isPinned && !best.d.isPinned))) best = { d, r };

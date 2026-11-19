@@ -87,12 +87,12 @@ export function Header() {
               <span className="flex items-center gap-1.5">
                 <Phone className="w-3 h-3" />
                 <a href={`tel:${SITE_CONFIG.phoneTel}`} className="hover:text-brand-200 transition-colors">
-                  +965 2222 5050
+                  <span dir="ltr">{SITE_CONFIG.phone}</span>
                 </a>
               </span>
               <span className="flex items-center gap-1.5">
                 <MapPin className="w-3 h-3" />
-                {isArabic ? SITE_CONFIG.addressFullAr : SITE_CONFIG.addressLine2} | {t('c1_nav.serving')}
+                <span className="truncate max-w-[26rem]">{isArabic ? SITE_CONFIG.addressFullAr : SITE_CONFIG.addressLine2}</span> | {t('c1_nav.serving')}
               </span>
             </div>
             <div className="flex items-center gap-4">
@@ -398,7 +398,7 @@ export function Header() {
               </nav>
               <div className="p-4 bg-gray-50 border-t border-gray-200">
                 <a href={`tel:${SITE_CONFIG.phoneTel}`} className="flex items-center gap-2 text-brand-700 font-semibold text-sm">
-                  <Phone className="w-4 h-4" /> <span dir="ltr">+965 2222 5050</span>
+                  <Phone className="w-4 h-4" /> <span dir="ltr">{SITE_CONFIG.phone}</span>
                 </a>
               </div>
             </div>

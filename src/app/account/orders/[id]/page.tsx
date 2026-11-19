@@ -10,6 +10,8 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { formatPrice, formatDate, formatDateTime, getStatusColor, statusText, govLabel } from '@/lib/utils';
 import { reorder } from '@/lib/reorder';
+import { useStoreSettings } from '@/lib/useStoreSettings';
+import { returnDaysLeft, returnWindowDays } from '@/lib/returns';
 import { SmartReturnFlow } from '@/components/returns/SmartReturnFlow';
 import { toast } from 'react-hot-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -63,8 +65,12 @@ export default function OrderDetailPage() {
     } catch (e: any) { toast.error(e.message || t('c2_pay.payNowFail')); setPaying(false); }
   };
   const canCancel = order && ['pending', 'confirmed'].includes(order.status);
-  const canReturn = order && order.status === 'delivered' &&
-    !['return_requested','return_approved','return_picked_up','returned','refunded'].includes(order.status);
+  const retSettings = useStoreSettings();
+  const retWindow = returnWindowDays(retSettings.returnWindowDays);
+  const retLeft = order ? returnDaysLeft(order, retWindow) : null;
+  // the Return button exists only while the order is delivered AND inside the return window
+  const canReturn = !!order && order.status === 'delivered' && (retLeft === null || retLeft >= 0);
+  const returnClosed = !!order && order.status === 'delivered' && retLeft !== null && retLeft < 0;
 
   const handleReorder = async () => {
     if (!order) return;
@@ -188,9 +194,10 @@ export default function OrderDetailPage() {
               {canReturn && (
                 <button onClick={() => setShowReturn(true)}
                   className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 text-orange-700 rounded-xl text-xs font-semibold hover:bg-orange-100 transition-colors">
-                  <RotateCcw className="w-3.5 h-3.5" /> {t('orders.requestReturn')}
+                  <RotateCcw className="w-3.5 h-3.5" /> {t('orders.requestReturn')}{retLeft !== null && retLeft <= 2 ? <span className="text-[10px] font-bold">({retLeft === 0 ? t('c2_ret.lastDay') : t('c2_ret.daysLeftN', { n: retLeft })})</span> : null}
                 </button>
               )}
+              {returnClosed && <span className="px-3 py-2 bg-gray-100 text-gray-500 rounded-xl text-xs font-semibold">{t('c2_ret.winClosed')}</span>}
               <a href={`/api/orders/${order.id}/invoice`} target="_blank" rel="noopener"
                 className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-200 transition-colors">
                 <FileText className="w-3.5 h-3.5" /> {t('orders.downloadInvoice')}
@@ -214,7 +221,7 @@ export default function OrderDetailPage() {
                       : <div className="w-full h-full flex items-center justify-center"><Package className="w-5 h-5 text-gray-300" /></div>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm">{L({ name: item.productName, nameAr: item.productNameAr }, 'name')}</p>
+                    <Link href={`/p/${encodeURIComponent(item.productId)}`} className="font-semibold text-gray-800 text-sm hover:text-brand-700 hover:underline block">{L({ name: item.productName, nameAr: item.productNameAr }, 'name')}</Link>
                     {item.variantName && <p className="text-xs text-gray-400">{L({ name: item.variantName, nameAr: item.variantNameAr }, 'name')}</p>}
                     <p className="text-xs text-gray-400">{t('c2_ord.sku')}: <span dir="ltr">{item.productSku}</span> &middot; {t('c2_ord.qty')}: {item.quantity}</p>
                     {(item as any).dealId && <p className="text-xs text-amber-700 font-medium">{t('c2_ord.offerApplied', { title: L({ t: (item as any).dealTitle, tAr: (item as any).dealTitleAr } as any, 't') || '' })}</p>}

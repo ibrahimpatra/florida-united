@@ -197,7 +197,7 @@ export default function AdminFlashDealsPage() {
                     <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={withSubs} onChange={e => setWithSubs(e.target.checked)} className="w-4 h-4" />Include every sub-category under the ones I pick</label>
                   </div>
                 )}
-                {form.scope === 'products' && <EntityPicker kind="product" multiple value={form.productIds || []} onChange={ids => set({ productIds: ids })} />}
+                {form.scope === 'products' && <EntityPicker kind="product" withBundles multiple value={form.productIds || []} onChange={ids => set({ productIds: ids })} />}
                 {form.scope === 'all' && <p className="text-sm text-gray-500">The discount applies to every product in the shop.</p>}
               </section>
 

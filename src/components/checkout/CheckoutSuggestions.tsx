@@ -11,12 +11,12 @@ export function CheckoutSuggestions() {
   const { items, addItem } = useCartStore();
   const [recs, setRecs] = useState<any[]>([]);
   const [added, setAdded] = useState<Record<string, boolean>>({});
-  const seedId = items[0]?.productId;
+  const seedId = items.map(i => i.productId).filter(id => !String(id).startsWith('bundle:')).slice(0, 12).join(',');
 
   useEffect(() => {
     if (!seedId) return;
     let dead = false;
-    fetch(`/api/recommendations?productId=${seedId}&limit=8`).then(r => r.json()).then(d => { if (!dead) setRecs(d.recommendations || []); }).catch(() => {});
+    fetch(`/api/recommendations?ids=${encodeURIComponent(seedId)}&limit=8`).then(r => r.json()).then(d => { if (!dead) setRecs(d.recommendations || []); }).catch(() => {});
     return () => { dead = true; };
   }, [seedId]);
 

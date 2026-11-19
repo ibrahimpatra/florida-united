@@ -130,7 +130,7 @@ export function CartPageClient() {
           </div>
         </div>
       </div>
-      <div className="container-custom pb-10"><h2 className="font-display text-lg font-bold text-gray-900 mb-1">{t('c3_nudge.alsoNeed')}</h2><AIRecommendations productId={items[0].productId} currentCategory={(items[0] as any).categoryId || ''} /></div>
+      <div className="container-custom pb-10"><h2 className="font-display text-lg font-bold text-gray-900 mb-1">{t('c3_nudge.alsoNeed')}</h2><AIRecommendations productId={items[0].productId} ids={items.map(i => i.productId).filter(id => !String(id).startsWith('bundle:')).slice(0, 12).join(',')} currentCategory={(items[0] as any).categoryId || ''} /></div>
     </div>
   );
 }

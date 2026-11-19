@@ -2,7 +2,7 @@ import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { adminGetProducts, adminCreateProduct, ProductError } from '@/lib/firestore-admin';
+import { adminGetProducts, searchBundles, adminCreateProduct, ProductError } from '@/lib/firestore-admin';
 import { adminGetActiveFlashDeals } from '@/lib/shipping-admin';
 import { dealIsLive, dealCoversProduct } from '@/lib/pricing';
 import type { ProductFilters } from '@/types';
@@ -43,6 +43,11 @@ async function __GET(req: NextRequest) {
       const hit = all.items.filter((p: any) => p.isOnSale || deals.some((d: any) => dealCoversProduct(d, p.id, p.categoryId)));
       result = { items: hit.slice((page - 1) * size, page * size), total: hit.length, page, pageSize: size, hasMore: page * size < hit.length };
     } else result = await adminGetProducts(filters as any);
+    // searching also finds bundles (public: active bundles only)
+    if (filters.search && !isAdmin && (filters.page || 1) === 1) {
+      const found = await searchBundles(filters.search, 6).catch(() => []);
+      result = { ...result, bundles: found.map((b: any) => ({ id: b.id, name: b.name, nameAr: b.nameAr, image: b.image || b.items?.[0]?.image || '', price: Number(b.bundlePrice), comparePrice: b.comparePrice || undefined, itemCount: (b.items || []).length })) };
+    }
     return NextResponse.json(result, {
       headers: { 'Cache-Control': isAdmin ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=60' },
     });

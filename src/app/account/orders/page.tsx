@@ -100,7 +100,7 @@ export default function OrdersPage() {
                       <div key={i} className="flex-shrink-0 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 text-xs">
                         {item.image && <img src={item.image} alt={L({ name: item.productName, nameAr: item.productNameAr }, 'name')} className="w-8 h-8 rounded-lg object-cover"/>}
                         <div>
-                          <p className="font-medium text-gray-800 max-w-[110px] truncate">{L({ name: item.productName, nameAr: item.productNameAr }, 'name')}</p>
+                          <Link href={`/p/${encodeURIComponent(item.productId)}`} className="font-medium text-gray-800 max-w-[110px] truncate block hover:text-brand-700 hover:underline">{L({ name: item.productName, nameAr: item.productNameAr }, 'name')}</Link>
                           <p className="text-gray-400">&times;{item.quantity} &middot; {formatPrice(item.price)}</p>
                         </div>
                       </div>

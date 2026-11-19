@@ -4,11 +4,14 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 import sharp from 'sharp';
-import { r2Enabled, uploadToR2 } from '@/lib/r2';
+import { r2Enabled, uploadToR2, deleteFromR2 } from '@/lib/r2';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_BYTES = 5 * 1024 * 1024;
+const GIF_MAX = 1024 * 1024;
+// Storage is billed by size, so every picture is shrunk to what a screen really needs.
+const SIZES: Record<string, [number, number]> = { products: [1000, 72], bundles: [1000, 72], categories: [800, 74], banners: [1920, 76], brand: [1024, 85], returns: [1000, 68], uploads: [1200, 74] };
 const TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
 // Customers may only upload return photos; everything else is admin-only. Folder names are a fixed whitelist.
 const CUSTOMER_FOLDERS = ['returns'];
@@ -45,12 +48,14 @@ async function __POST(req: NextRequest) {
     const hint = String((fd0?.get('name')) || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
     const id = `${hint ? hint + '-' : ''}${Math.random().toString(36).slice(2, 8)}`;
 
+    if (type === 'image/gif' && buffer.length > GIF_MAX) return NextResponse.json({ error: 'GIF too large (max 1 MB). Use a JPG or PNG instead.' }, { status: 400 });
     if (r2Enabled()) {
-      // Shrink before storing: max 1600px wide, WebP. Keeps storage (and page loads) small. GIFs are kept as-is.
+      // Shrink before storing (size per folder above), WebP. GIFs are kept as-is.
+      const [maxW, q] = SIZES[folder] || [1200, 74];
       let out = buffer, outType = type, ext = TYPES[type];
       if (type !== 'image/gif') {
         try {
-          out = await sharp(buffer).rotate().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+          out = await sharp(buffer).rotate().resize({ width: maxW, withoutEnlargement: true }).webp({ quality: q, effort: 5 }).toBuffer();
           outType = 'image/webp'; ext = 'webp';
         } catch { /* unreadable as an image: store the original */ }
       }
@@ -70,4 +75,14 @@ async function __POST(req: NextRequest) {
   }
 }
 
+/** Admin removes an image that is no longer used, so it stops costing storage. Body: { url } */
+async function __DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (String(session?.user?.role).toLowerCase() !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const b = await req.json().catch(() => ({}));
+  const removed = r2Enabled() ? await deleteFromR2(String(b.url || '')) : false;
+  return NextResponse.json({ success: true, removed });
+}
+
+export const DELETE = withLog('DELETE', '/api/upload', __DELETE);
 export const POST = withLog('POST', '/api/upload', __POST);

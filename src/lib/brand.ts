@@ -34,6 +34,8 @@ export function mergeBrand(st: Record<string, any> | null | undefined): Brand {
   if (s(x.email)) b.email = s(x.email);
   if (s(x.emailOrders)) b.emailOrders = s(x.emailOrders);
   if (s(x.address)) { b.addressFull = s(x.address); b.addressLine2 = s(x.address); }
+  // Arabic address: its own setting; if only the English one was changed, show that rather than the stale default
+  if (s(x.addressAr)) b.addressFullAr = s(x.addressAr); else if (s(x.address)) b.addressFullAr = s(x.address);
   if (s(x.hoursWeekdays)) b.hoursWeekdays = s(x.hoursWeekdays);
   if (s(x.hoursSaturday)) b.hoursSaturday = s(x.hoursSaturday);
   if (s(x.logoUrl)) b.logoUrl = s(x.logoUrl);

@@ -63,17 +63,17 @@ export default function AdminOrderDetailPage() {
   const sc = statusColor[order.status] || 'gray';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-full overflow-x-hidden">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 mb-5 sm:mb-8">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <button onClick={()=>router.back()} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><ArrowLeft className="w-5 h-5"/></button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 font-display">Order #{order.orderNumber}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-display break-all">Order #{order.orderNumber}</h1>
             <p className="text-gray-500 text-sm mt-0.5">{formatDateTime(order.createdAt)}</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <a href={`/api/orders/${order.id}/invoice`} target="_blank" rel="noopener" className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50 transition-colors no-print">
             Invoice PDF
           </a>
@@ -84,15 +84,41 @@ export default function AdminOrderDetailPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-3 gap-4 sm:gap-6 [&>*]:min-w-0">
         {/* Left - Order details */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
           {/* Items */}
           <div className="card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-2">
               <Package className="w-5 h-5 text-brand-600"/><h3 className="font-bold text-gray-800">Order Items</h3>
             </div>
-            <div className="overflow-x-auto"><table className="table">
+            {/* Phones: item cards instead of a wide table */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {order.items.map((item, i) => (
+                <div key={i} className="p-4 flex gap-3">
+                  {item.image && <img src={item.image} alt={item.productName} className="w-14 h-14 rounded-lg object-cover bg-gray-100 flex-shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/p/${encodeURIComponent(item.productId)}`} target="_blank" className="font-semibold text-gray-800 text-sm hover:text-brand-700 block break-words">{item.productName}</Link>
+                    {item.productNameAr && <p className="text-xs text-gray-500" dir="rtl">{item.productNameAr}</p>}
+                    {item.productSku && <p className="font-mono text-[11px] text-gray-400 break-all">{item.productSku}</p>}
+                    {(item as any).dealId && <p className="text-xs text-amber-700">Offer: {(item as any).dealTitle || 'Flash deal'}</p>}
+                    <div className="flex items-center justify-between mt-1.5 text-sm">
+                      <span className="text-gray-600">{item.quantity} × {formatPrice(item.price)}</span>
+                      <span className="font-bold text-gray-900">{formatPrice(item.total)}</span>
+                    </div>
+                    <span className={`badge text-xs mt-1 ${item.isReturnable ? 'badge-green' : 'badge-red'}`}>{item.isReturnable ? 'Returnable' : 'Non-returnable'}</span>
+                  </div>
+                </div>
+              ))}
+              <div className="p-4 space-y-1.5 text-sm bg-gray-50">
+                <div className="flex justify-between text-gray-600"><span>Subtotal</span><b>{formatPrice(order.subtotal)}</b></div>
+                {order.discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><b>-{formatPrice(order.discount)}</b></div>}
+                <div className="flex justify-between text-gray-600"><span>Shipping</span><b>{order.shippingCost === 0 ? 'FREE' : formatPrice(order.shippingCost)}</b></div>
+                <div className="flex justify-between text-gray-600"><span>Tax</span><b>{formatPrice(order.tax)}</b></div>
+                <div className="flex justify-between text-base font-black text-gray-900 pt-1.5 border-t border-gray-200"><span>TOTAL</span><span className="text-brand-700">{formatPrice(order.total)}</span></div>
+              </div>
+            </div>
+            <div className="hidden sm:block overflow-x-auto"><table className="table">
               <thead><tr><th>Product</th><th>SKU</th><th className="text-center">Qty</th><th className="text-right">Price</th><th className="text-right">Total</th></tr></thead>
               <tbody>
                 {order.items.map((item,i) => (
@@ -101,7 +127,7 @@ export default function AdminOrderDetailPage() {
                       <div className="flex items-center gap-3">
                         {item.image && <img src={item.image} alt={item.productName} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/>}
                         <div>
-                          <p className="font-semibold text-gray-800 text-sm">{item.productName}</p>
+                          <Link href={`/p/${encodeURIComponent(item.productId)}`} target="_blank" className="font-semibold text-gray-800 text-sm hover:text-brand-700 hover:underline block">{item.productName}</Link>
                           {item.productNameAr && <p className="text-xs text-gray-500" dir="rtl">{item.productNameAr}</p>}
                           {item.variantName && <p className="text-xs text-gray-500">{item.variantName}</p>}
                           {(item as any).dealId && <p className="text-xs text-amber-700">Offer: {(item as any).dealTitle || 'Flash deal'} (was {formatPrice((item as any).listPrice)} each)</p>}
@@ -127,7 +153,7 @@ export default function AdminOrderDetailPage() {
           </div>
 
           {/* Status History */}
-          <div className="card p-6">
+          <div className="card p-4 sm:p-6">
             <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><CheckCircle className="w-5 h-5 text-brand-600"/>Order Timeline</h3>
             <div className="space-y-3">
               {[...(order.statusHistory || [])].reverse().map((h,i) => (
@@ -145,7 +171,7 @@ export default function AdminOrderDetailPage() {
         </div>
 
         {/* Right - Actions & Info */}
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5 min-w-0 [overflow-wrap:anywhere]">
           {/* Customer */}
           <div className="card p-5">
             <h3 className="font-bold text-gray-800 mb-3">Customer</h3>

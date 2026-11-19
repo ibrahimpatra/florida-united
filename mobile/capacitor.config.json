@@ -1,0 +1,17 @@
+{
+  "appId": "com.floridakuwait.store",
+  "appName": "Florida Kuwait",
+  "webDir": "www",
+  "server": {
+    "url": "https://florida-united.vercel.app",
+    "cleartext": false,
+    "allowNavigation": ["florida-united.vercel.app", "*.stripe.com", "*.tap.company", "*.myfatoorah.com", "*.r2.dev"]
+  },
+  "appendUserAgent": "FloridaKuwaitApp",
+  "backgroundColor": "#ffffff",
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 1200, "backgroundColor": "#ffffff", "showSpinner": false },
+    "StatusBar": { "style": "DARK", "backgroundColor": "#ffffff" }
+  }
+}

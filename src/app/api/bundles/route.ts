@@ -11,7 +11,7 @@ async function __GET(req: NextRequest) {
   try {
     const activeOnly = req.nextUrl.searchParams.get('active') === 'true';
     const bundles = activeOnly ? await getStorefrontBundles() : await adminGetBundles(false);
-    return NextResponse.json(bundles, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(bundles, { headers: { 'Cache-Control': activeOnly ? 'public, s-maxage=60, stale-while-revalidate=300' : 'no-store' } });
   } catch (e) {
     console.error('[GET /api/bundles]', e);
     return NextResponse.json({ error: 'Failed to load bundles' }, { status: 500 });

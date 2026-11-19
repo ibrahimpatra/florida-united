@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 /**
  * Cloudflare R2 image storage (S3-compatible). Free for the first 10 GB, no download fees.
@@ -20,10 +20,23 @@ function getClient() {
   return client;
 }
 
+import { publicBase } from './image-url';
+
 export async function uploadToR2(key: string, body: Buffer, contentType: string): Promise<string> {
   await getClient().send(new PutObjectCommand({
     Bucket: process.env.R2_BUCKET!, Key: key, Body: body, ContentType: contentType,
     CacheControl: 'public, max-age=31536000, immutable', // file names are unique, so browsers can cache forever
   }));
-  return `${process.env.R2_PUBLIC_URL!.replace(/\/+$/, '')}/${key}`;
+  return `${publicBase(process.env.R2_PUBLIC_URL)}/${key}`;
+}
+
+/** Removes one stored image. Only keys under our own public address are accepted. Returns true if it was ours. */
+export async function deleteFromR2(url: string): Promise<boolean> {
+  const base = publicBase(process.env.R2_PUBLIC_URL);
+  const u = String(url || '');
+  if (!base || !u.startsWith(base + '/')) return false;
+  const key = decodeURIComponent(u.slice(base.length + 1).split('?')[0]);
+  if (!/^(products|categories|banners|bundles|uploads|brand|returns)\/[A-Za-z0-9._-]+$/.test(key)) return false;
+  await getClient().send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: key }));
+  return true;
 }

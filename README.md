@@ -37,6 +37,8 @@ Put these in `.env.local` on your computer, and in **Vercel > Project > Settings
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | recommended | Image storage (section 4). Without them uploads go to Firebase Storage |
 | `GEMINI_API_KEY` | optional | AI assistant and the Arabic Translate button. Key from aistudio.google.com |
 | `GEMINI_MODEL` | optional | A model to try first. Others are tried automatically (section 6) |
+| `ANTHROPIC_API_KEY` | optional | Turns on **Claude** for the assistant, Translate and "Write with AI" (Gemini stays as backup). Key from console.anthropic.com |
+| `ANTHROPIC_MODEL` / `ANTHROPIC_FAST_MODEL` | optional | Defaults `claude-sonnet-5-5` / `claude-haiku-5-5` |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | optional | Card payments with Stripe (charged in USD) |
 | `TAP_SECRET_KEY` | optional | Card payments with Tap (charged in KWD) |
 | `MYFATOORAH_API_KEY`, `MYFATOORAH_BASE_URL` | optional | Card payments with MyFatoorah. Base URL only for the test server: `https://apitest.myfatoorah.com` |
@@ -97,7 +99,7 @@ Admin > Settings > **Online card payment** picks the provider: Automatic (first 
 
 ## 6. AI assistant and Arabic translation (Gemini)
 
-Needs `GEMINI_API_KEY`. The shopper assistant answers product and delivery questions and can look up orders. For admins it can also change order status, add tracking, adjust stock, check customers and returns.
+Needs `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`. With the Claude key, Claude answers first and Gemini is the backup. The assistant chat button appears on every page, including the admin area, so staff can ask it for orders, stock, product copy and translations. **Admin > Products > Write with AI** drafts the English and Arabic descriptions, meta text and tags from the name and facts you type (it is told not to invent specifications; always read before saving). The shopper assistant answers product and delivery questions and can look up orders. For admins it can also change order status, add tracking, adjust stock, check customers and returns.
 
 If a model is busy ("high demand", 429 or 503), retired, or the network fails, the next model is tried automatically (`gemini-3.6-flash`, `gemini-3.8-flash`, `gemini-3.5-flash-lite`) and the busy one is skipped for a minute. Only a bad API key stops it. Shoppers see a friendly message; **admins also see the technical reason** marked `[admin only]`, in the assistant, at checkout and on invoices. Google retires model names over time. If every model fails with "does not exist", set `GEMINI_MODEL` to a current name from aistudio.google.com.
 
@@ -169,3 +171,20 @@ Every public page has its own title, description and canonical link. English and
 ## 12. Project layout
 
 `src/app` pages and API routes (`/ar/...` are the Arabic twins) · `src/components` screens · `src/lib` business logic (orders, payments, brand, popups, import, SEO, Gemini) · `tests` automated checks with an in-memory database · `public` logo and icons · `firestore.rules`, `storage.rules`, `vercel.json`.
+
+
+## Keeping image storage cheap (Cloudflare R2)
+
+R2 bills by stored size and by write/read operations, so the app keeps files small: every upload is converted to WebP and shrunk (products 1200 px, banners 1920 px, categories 800 px, return photos 1000 px), GIFs over 1 MB are refused, a product can hold 8 images, and an image you add and then remove before saving is deleted from the bucket straight away. Old images from before this version are untouched; delete unused ones in the Cloudflare dashboard if you want the total to drop.
+`R2_PUBLIC_URL` must start with `https://`. If it does not, the app now adds it, but fix the value in Vercel anyway.
+
+
+## Mobile app (Android and iOS)
+
+The `mobile/` folder wraps the live website in a real app (Capacitor). It is the same store, not a copy: shop, cart, checkout, account, returns, admin and the assistant all work exactly as on the website, and every deploy updates the app instantly with no new release. Customers can sign in with email and password; "Continue with Google" is hidden inside the app because Google blocks it in app web views.
+
+**Android (easiest, free):** push the project to GitHub, open **Actions > Build Android app > Run workflow**, keep the site address (or change it), wait about 6 minutes, then download `florida-kuwait-app` from the run page. Unzip it and install `app-debug.apk` on a phone to test. For Google Play you need a signed release build: open the generated `mobile/android` folder in Android Studio, choose Build > Generate Signed Bundle, and upload the `.aab` in Play Console (one-time US$25 developer fee).
+
+**On your own computer:** `cd mobile && npm install && npx cap add android && npx capacitor-assets generate --android && npx cap sync && npx cap open android`. For iPhone use `add ios` and `open ios`; it needs a Mac with Xcode and an Apple Developer account (US$99/year). Apple sometimes rejects apps that only show a website, so for the App Store plan to add native features (push notifications, barcode scanner) first.
+
+Change `server.url` in `mobile/capacitor.config.json` if your website address changes.

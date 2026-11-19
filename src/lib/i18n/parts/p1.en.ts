@@ -150,6 +150,8 @@ export const p1En = {
     p4: "Wire connectors",
     p5: "Safety gloves",
     p6: "LED lights",
+    bundles: "Bundles",
+    bundleItems: "{n} items in this bundle",
   },
   c1_cart: {
     myCart: "My cart",

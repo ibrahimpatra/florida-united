@@ -26,7 +26,7 @@ function loadCategories(): Promise<PickItem[]> {
   }).catch(() => { catsPromise = null; return []; });
   return catsPromise;
 }
-const prodItem = (p: any): PickItem => ({ id: p.id, label: p.name, sub: [p.sku, p.nameAr].filter(Boolean).join('  ·  '), image: p.image });
+const prodItem = (p: any): PickItem => ({ id: p.id, label: p.isBundle ? `${p.name} (bundle)` : p.name, sub: [p.isBundle ? 'Bundle' : p.sku, p.nameAr].filter(Boolean).join('  ·  '), image: p.image });
 
 /** All descendants of a category id, from the loaded category list. */
 export async function categoryWithDescendants(id: string): Promise<string[]> {
@@ -36,8 +36,8 @@ export async function categoryWithDescendants(id: string): Promise<string[]> {
   return out;
 }
 
-export function EntityPicker({ kind, value, onChange, multiple = false, placeholder, disabled }: {
-  kind: Kind; value: string[]; onChange: (ids: string[]) => void; multiple?: boolean; placeholder?: string; disabled?: boolean;
+export function EntityPicker({ kind, value, onChange, multiple = false, placeholder, disabled, withBundles = false }: {
+  withBundles?: boolean; kind: Kind; value: string[]; onChange: (ids: string[]) => void; multiple?: boolean; placeholder?: string; disabled?: boolean;
 }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -68,14 +68,14 @@ export function EntityPicker({ kind, value, onChange, multiple = false, placehol
     }
     setBusy(true);
     const t = setTimeout(() => {
-      fetch(`/api/products/search?q=${encodeURIComponent(q.trim())}&limit=12`).then(r => r.json()).then((l: any[]) => {
+      fetch(`/api/products/search?q=${encodeURIComponent(q.trim())}&limit=12${withBundles ? '&bundles=1' : ''}`).then(r => r.json()).then((l: any[]) => {
         if (my !== seq.current) return;
         const items = (Array.isArray(l) ? l : []).map(prodItem); items.forEach(i => cache.product.set(i.id, i));
         setResults(items); setHi(0);
       }).catch(() => setResults([])).finally(() => { if (my === seq.current) setBusy(false); });
     }, 220);
     return () => clearTimeout(t);
-  }, [q, open, kind]);
+  }, [q, open, kind, withBundles]);
 
   useEffect(() => {
     const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };

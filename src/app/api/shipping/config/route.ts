@@ -8,7 +8,7 @@ import { normalizeShippingConfig, ValidationError } from '@/lib/zone-validate';
 export const dynamic = 'force-dynamic';
 
 async function __GET() {
-  try { return NextResponse.json((await adminGetShippingConfig()) || {}, { headers: { 'Cache-Control': 'no-store' } }); }
+  try { return NextResponse.json((await adminGetShippingConfig()) || {}, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' } }); }
   catch (e) { console.error('[GET shipping/config]', e); return NextResponse.json({ error: 'Failed to load configuration' }, { status: 500 }); }
 }
 

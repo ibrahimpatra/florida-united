@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useState } from 'react';
 import { Search, Truck, CheckCircle, Clock, MapPin, ClipboardList, PackageCheck } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
@@ -103,7 +104,7 @@ export default function OrderTrackingPage() {
                 {order.items.map((item: any, i: number) => (
                   <div key={i} className="flex gap-3 py-2 border-b border-gray-50 last:border-0">
                     <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">{item.image && <img src={item.image} alt="" className="w-full h-full object-cover" />}</div>
-                    <div className="flex-1"><p className="text-sm font-semibold text-gray-800">{L({ name: item.productName, nameAr: item.productNameAr }, 'name')}</p><p className="text-xs text-gray-500">{t('c2_trk.sku')}: <span dir="ltr">{item.productSku}</span> &middot; {t('c2_trk.qty')}: {item.quantity}</p></div>
+                    <div className="flex-1"><Link href={`/p/${encodeURIComponent(item.productId)}`} className="text-sm font-semibold text-gray-800 hover:text-brand-700 hover:underline block">{L({ name: item.productName, nameAr: item.productNameAr }, 'name')}</Link><p className="text-xs text-gray-500">{t('c2_trk.sku')}: <span dir="ltr">{item.productSku}</span> &middot; {t('c2_trk.qty')}: {item.quantity}</p></div>
                     <span className="font-bold text-gray-800">{formatPrice(item.total)}</span>
                   </div>
                 ))}
