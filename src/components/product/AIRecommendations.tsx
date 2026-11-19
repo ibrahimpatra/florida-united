@@ -10,13 +10,15 @@ import type { Product, ProductRecommendation } from '@/types';
 interface Props {
   productId: string;
   currentCategory: string;
+  /** comma separated ids (the whole cart) instead of one product */
+  ids?: string;
 }
 
 const REASON_KEYS: Record<string, string> = {
   compatible: 'r_compatible', frequently_bought_together: 'r_fbt', same_category: 'r_same', similar_specs: 'r_specs',
 };
 
-export function AIRecommendations({ productId, currentCategory }: Props) {
+export function AIRecommendations({ productId, currentCategory, ids }: Props) {
   const { t } = useLanguage();
   const [recs, setRecs] = useState<ProductRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +27,7 @@ export function AIRecommendations({ productId, currentCategory }: Props) {
   useEffect(() => {
     setLoading(true);
     setError(false);
-    fetch(`/api/recommendations?productId=${productId}&limit=8`)
+    fetch(`/api/recommendations?${ids ? `ids=${encodeURIComponent(ids)}` : `productId=${productId}`}&limit=8`)
       .then(r => r.json())
       .then(data => {
         if (data.recommendations) setRecs(data.recommendations);
@@ -33,7 +35,7 @@ export function AIRecommendations({ productId, currentCategory }: Props) {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [productId]);
+  }, [productId, ids]);
 
   if (loading) return (
     <div className="flex items-center justify-center py-10 gap-3 text-gray-400">

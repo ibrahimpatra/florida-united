@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { generate, geminiConfigured, explainGemini } from '@/lib/gemini';
+import { aiText, aiConfigured, explainAi, parseJsonLoose } from '@/lib/ai';
 import { log, withLog } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export const maxDuration = 30;
 async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || String(session.user.role).toLowerCase() !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!geminiConfigured()) return NextResponse.json({ error: 'Translation needs GEMINI_API_KEY in the server environment.' }, { status: 503 });
+  if (!aiConfigured()) return NextResponse.json({ error: 'Translation needs ANTHROPIC_API_KEY or GEMINI_API_KEY in the server environment.' }, { status: 503 });
 
   const body = await req.json().catch(() => ({}));
   const texts: Record<string, string> = {};
@@ -25,18 +25,14 @@ async function __POST(req: NextRequest) {
   if (!Object.keys(texts).length) return NextResponse.json({ error: 'Nothing to translate. Fill in the English fields first.' }, { status: 400 });
 
   try {
-    const d = await generate({
-      systemInstruction: { parts: [{ text:
-        `You translate text for an online hardware and electrical supplies store in Kuwait from English to Modern Standard Arabic. ` +
+    const { text: raw } = await aiText({
+      system: `You translate text for an online hardware and electrical supplies store in Kuwait from English to Modern Standard Arabic. ` +
         `Context: ${String(body.context || 'store content').slice(0, 120)}. Rules: keep brand names, model numbers, SKUs, sizes and units (mm, V, A, W, KWD) in Latin characters exactly as written; ` +
         `use natural trade terminology Kuwaiti customers use; keep it short like the original; no emojis; do not add explanations. ` +
-        `Return ONLY a JSON object with exactly the same keys as the input and the Arabic translations as values.` }] },
-      contents: [{ role: 'user', parts: [{ text: JSON.stringify(texts) }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json' },
+        `Return ONLY a JSON object with exactly the same keys as the input and the Arabic translations as values.`,
+      user: JSON.stringify(texts), json: true, fast: true, maxTokens: 4096,
     });
-    const raw = (d?.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('').trim();
-    let out: any = {};
-    try { out = JSON.parse(raw.replace(/^```(?:json)?|```$/g, '').trim()); } catch { /* handled below */ }
+    const out: any = parseJsonLoose(raw);
     const translations: Record<string, string> = {};
     for (const k of Object.keys(texts)) if (typeof out?.[k] === 'string' && out[k].trim()) translations[k] = out[k].trim();
     if (!Object.keys(translations).length) {
@@ -45,7 +41,7 @@ async function __POST(req: NextRequest) {
     }
     return NextResponse.json({ translations });
   } catch (e: any) {
-    return NextResponse.json({ error: explainGemini(e) }, { status: 502 });
+    return NextResponse.json({ error: explainAi(e) }, { status: 502 });
   }
 }
 

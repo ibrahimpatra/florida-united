@@ -218,6 +218,8 @@ export interface Coupon {
   minOrderAmount: number;
   maxDiscount?: number;
   usageLimit?: number;
+  /** max uses per customer; 1 = once per customer; empty/0 = unlimited */
+  perUserLimit?: number | null;
   usedCount: number;
   isActive: boolean;
   expiresAt?: string;

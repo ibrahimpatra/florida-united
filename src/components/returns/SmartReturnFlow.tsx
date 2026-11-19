@@ -5,7 +5,23 @@ import { Camera, Upload, CheckCircle, XCircle, AlertCircle, RotateCcw, Loader2, 
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
 import { statusText } from '@/lib/utils';
+import { useStoreSettings } from '@/lib/useStoreSettings';
+import { returnDaysLeft, returnWindowDays } from '@/lib/returns';
 import type { Order, OrderItem } from '@/types';
+
+const MAX_PHOTOS = 6;
+
+/** Phone photos are 3-8 MB; shrink to 1280 px JPEG (about 150-300 KB) before sending so it never hits the upload size limit. */
+async function shrink(src: Blob | string): Promise<string> {
+  const url = typeof src === 'string' ? src : URL.createObjectURL(src);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('decode')); i.src = url; });
+    const k = Math.min(1, 1280 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.8);
+  } finally { if (typeof src !== 'string') URL.revokeObjectURL(url); }
+}
 
 interface Props {
   order: Order;
@@ -27,7 +43,11 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
-  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [progress, setProgress] = useState('');
+  const settings = useStoreSettings();
+  const windowDays = returnWindowDays(settings.returnWindowDays);
+  const daysLeft = returnDaysLeft(order, windowDays);
   const [cameraActive, setCameraActive] = useState(false);
   const [ineligibleReason, setIneligibleReason] = useState('');
   const [submitErr, setSubmitErr] = useState('');
@@ -36,11 +56,7 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Eligibility check ---
-  const returnableItems = order.items.filter(i => i.isReturnable);
-  const deliveredAt = order.deliveredAt ? new Date(order.deliveredAt) : null;
-  const daysSinceDelivery = deliveredAt
-    ? Math.floor((Date.now() - deliveredAt.getTime()) / 86400000)
-    : null;
+  const returnableItems = order.items.filter(i => (i as any).isReturnable !== false);
   const isDelivered = order.status === 'delivered';
 
   const checkEligibility = () => {
@@ -54,8 +70,8 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
       setStep('ineligible');
       return;
     }
-    if (daysSinceDelivery !== null && daysSinceDelivery > 14) {
-      setIneligibleReason(t('c2_ret.inel3'));
+    if (daysLeft !== null && daysLeft < 0) {
+      setIneligibleReason(t('c2_ret.inel3', { n: windowDays }));
       setStep('ineligible');
       return;
     }
@@ -91,41 +107,48 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
     setCameraActive(false);
   }, []);
 
+  const addPhoto = async (src: Blob | string) => {
+    try {
+      const d = await shrink(src);
+      setPhotos(p => (p.length >= MAX_PHOTOS ? p : [...p, d]));
+    } catch { toast.error(t('c2_ret.readFail')); }
+  };
+
   const capturePhoto = () => {
     if (!videoRef.current) return;
     const canvas = document.createElement('canvas');
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     canvas.getContext('2d')!.drawImage(videoRef.current, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    setPhotoDataUrl(dataUrl);
+    addPhoto(canvas.toDataURL('image/jpeg', 0.85));
     stopCamera();
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setPhotoDataUrl(ev.target?.result as string);
-    reader.readAsDataURL(file);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).slice(0, MAX_PHOTOS - photos.length);
+    e.target.value = ''; // lets the same file be chosen again
+    for (const f of files) await addPhoto(f);
   };
 
   // --- Submit ---
   const handleSubmit = async () => {
-    if (!photoDataUrl) { toast.error(t('c2_ret.needPhoto')); return; }
+    if (!photos.length) { toast.error(t('c2_ret.needPhoto')); return; }
     setStep('submitting');
-
     try {
-      const uploadRes = await fetch('/api/upload', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl: photoDataUrl, folder: 'returns' }),
-      });
-      const up = await uploadRes.json().catch(() => null);
-      if (!uploadRes.ok || !up?.url) { setStep('photo'); toast.error(up?.error || t('c2_ret.uploadFail')); return; }
-
+      const urls: string[] = [];
+      for (let i = 0; i < photos.length; i++) {
+        setProgress(t('c2_ret.uploadN', { n: i + 1, total: photos.length }));
+        const up = await fetch('/api/upload', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl: photos[i], folder: 'returns' }),
+        }).then(async r => ({ ok: r.ok, status: r.status, body: await r.json().catch(() => null) }));
+        if (!up.ok || !up.body?.url) { setStep('photo'); toast.error(up.body?.error || (up.status === 413 ? t('c2_ret.uploadFail') : t('c2_ret.uploadFail'))); return; }
+        urls.push(up.body.url);
+      }
+      setProgress('');
       const res = await fetch('/api/orders/returns', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id, reason, description, images: [up.url], selectedProductIds: selectedItems }),
+        body: JSON.stringify({ orderId: order.id, reason, description, images: urls, selectedProductIds: selectedItems }),
       });
       const j = await res.json().catch(() => null);
       if (!res.ok) { setStep('photo'); toast.error(j?.error || t('c2_ret.submitFail')); return; }
@@ -143,7 +166,7 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
         <AlertCircle className="w-5 h-5 text-brand-600 flex-shrink-0" />
         <div>
           <p className="font-semibold text-brand-900 text-sm">{t('c2_ret.policy')}</p>
-          <p className="text-brand-700 text-xs mt-0.5">{t('c2_ret.policyD')}</p>
+          <p className="text-brand-700 text-xs mt-0.5">{t('c2_ret.policyD', { n: windowDays })}</p>
         </div>
       </div>
       <div className="space-y-2 text-sm">
@@ -157,11 +180,11 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
           <span className="text-gray-500">{t('c2_ret.returnable')}</span>
           <span className="font-semibold">{t('c2_ret.ofN', { a: returnableItems.length, b: order.items.length })}</span>
         </div>
-        {daysSinceDelivery !== null && (
+        {daysLeft !== null && (
           <div className="flex justify-between py-2">
-            <span className="text-gray-500">{t('c2_ret.daysSince')}</span>
-            <span className={`font-semibold ${daysSinceDelivery > 14 ? 'text-red-600' : 'text-green-600'}`}>
-              {t('c2_ret.daysN', { n: daysSinceDelivery })}
+            <span className="text-gray-500">{t('c2_ret.winTitle')}</span>
+            <span className={`font-semibold ${daysLeft < 0 ? 'text-red-600' : daysLeft === 0 ? 'text-orange-600' : 'text-green-600'}`}>
+              {daysLeft < 0 ? t('c2_ret.winClosed') : daysLeft === 0 ? t('c2_ret.lastDay') : t('c2_ret.daysLeftN', { n: daysLeft })}
             </span>
           </div>
         )}
@@ -233,7 +256,7 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
     <div className="space-y-4">
       <div>
         <h3 className="font-bold text-gray-900">{t('c2_ret.photoTitle')}</h3>
-        <p className="text-sm text-gray-500 mt-1">{t('c2_ret.photoSub')}</p>
+        <p className="text-sm text-gray-500 mt-1">{t('c2_ret.photoSub', { max: MAX_PHOTOS })}</p>
       </div>
 
       {cameraActive && (
@@ -248,38 +271,42 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
         </div>
       )}
 
-      {photoDataUrl && !cameraActive && (
-        <div className="relative">
-          <img src={photoDataUrl} alt={t('c2_ret.photoAlt')} className="w-full rounded-xl object-cover max-h-64" />
-          <button onClick={() => setPhotoDataUrl(null)} aria-label={t('c2_ret.removePhoto')}
-            className="absolute top-2 end-2 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-red-600"><X className="w-4 h-4" /></button>
-          <div className="absolute bottom-2 start-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-            <CheckCircle className="w-3 h-3" /> {t('c2_ret.photoReady')}
+      {photos.length > 0 && !cameraActive && (
+        <div>
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map((p, i) => (
+              <div key={i} className="relative aspect-square">
+                <img src={p} alt={t('c2_ret.photoAlt')} className="w-full h-full object-cover rounded-xl border border-gray-200" />
+                <button onClick={() => setPhotos(ps => ps.filter((_, j) => j !== i))} aria-label={t('c2_ret.removePhoto')}
+                  className="absolute -top-1.5 -end-1.5 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 shadow"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ))}
           </div>
+          <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-500" />{t('c2_ret.photosN', { n: photos.length, max: MAX_PHOTOS })}</p>
         </div>
       )}
 
-      {!cameraActive && !photoDataUrl && (
+      {!cameraActive && photos.length < MAX_PHOTOS && (
         <div className="grid grid-cols-2 gap-3">
           <button onClick={startCamera}
             className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-brand-400 hover:bg-brand-50 transition-colors">
-            <Camera className="w-8 h-8 text-gray-500" />
-            <span className="text-sm font-semibold text-gray-700">{t('c2_ret.openCam')}</span>
+            <Camera className="w-7 h-7 text-gray-500" />
+            <span className="text-sm font-semibold text-gray-700">{photos.length ? t('c2_ret.addMore') : t('c2_ret.openCam')}</span>
             <span className="text-xs text-gray-400">{t('c2_ret.takeNow')}</span>
           </button>
           <button onClick={() => fileInputRef.current?.click()}
             className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-brand-400 hover:bg-brand-50 transition-colors">
-            <Upload className="w-8 h-8 text-gray-500" />
+            <Upload className="w-7 h-7 text-gray-500" />
             <span className="text-sm font-semibold text-gray-700">{t('c2_ret.upload')}</span>
             <span className="text-xs text-gray-400">{t('c2_ret.gallery')}</span>
           </button>
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileUpload} />
         </div>
       )}
 
       <div className="flex gap-3">
         <button onClick={() => setStep('reason')} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">{t('c2_ret.back')}</button>
-        <button onClick={handleSubmit} disabled={!photoDataUrl}
+        <button onClick={handleSubmit} disabled={photos.length === 0}
           className="flex-1 py-3 bg-brand-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
           <RotateCcw className="w-4 h-4" /> {t('c2_ret.submit')}
         </button>
@@ -290,7 +317,7 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   if (step === 'submitting') return (
     <div className="text-center py-10 space-y-4">
       <Loader2 className="w-12 h-12 text-brand-600 animate-spin mx-auto" />
-      <p className="font-semibold text-gray-700">{t('c2_ret.submitting')}</p>
+      <p className="font-semibold text-gray-700">{progress || t('c2_ret.submitting')}</p>
     </div>
   );
 

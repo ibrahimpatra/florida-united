@@ -266,7 +266,7 @@ export default function AdminDashboard() {
                       }`}>{i + 1}</span>
                       {p.image && <img src={p.image} alt="" className="w-8 h-8 rounded-lg object-cover border border-gray-200 flex-shrink-0" />}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{p.name}</p>
+                        <Link href={`/p/${encodeURIComponent(p.id)}`} target="_blank" className="text-sm font-semibold text-gray-800 truncate block hover:text-brand-700 hover:underline">{p.name}</Link>
                         <p className="text-xs text-gray-400">{p.units} units sold</p>
                       </div>
                       <p className="font-black text-gray-900 flex-shrink-0">{formatPrice(p.revenue)}</p>
@@ -287,7 +287,7 @@ export default function AdminDashboard() {
             {(stats?.deadStock || []).length === 0 ? <p className="text-sm text-gray-400">None </p> :
               (stats?.deadStock || []).map((p: any) => (
                 <Link key={p.id} href={`/admin/products/${p.id}`} className="flex items-center justify-between py-2 border-b border-gray-50 text-sm hover:text-brand-600">
-                  <span className="truncate pr-3">{p.name}</span><span className="text-gray-400 flex-shrink-0">{p.stock} in stock</span>
+                  <Link href={`/p/${encodeURIComponent(p.id)}`} target="_blank" className="truncate pr-3 hover:text-brand-700 hover:underline">{p.name}</Link><span className="text-gray-400 flex-shrink-0">{p.stock} in stock</span>
                 </Link>))}
           </div>
           <div className="card p-4">

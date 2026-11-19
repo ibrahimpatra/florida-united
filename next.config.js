@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 // Host of the Cloudflare R2 public bucket address (R2_PUBLIC_URL), so next/image may load it.
 let r2Host = null;
-try { if (process.env.R2_PUBLIC_URL) r2Host = new URL(process.env.R2_PUBLIC_URL).hostname; } catch (e) {}
+try { if (process.env.R2_PUBLIC_URL) r2Host = new URL(/^https?:\/\//i.test(process.env.R2_PUBLIC_URL.trim()) ? process.env.R2_PUBLIC_URL.trim() : 'https://' + process.env.R2_PUBLIC_URL.trim()).hostname; } catch (e) {}
 const nextConfig = {
   // Suppress font stylesheet fetch warnings during build (fonts load at runtime)
   optimizeFonts: false,
@@ -10,7 +10,7 @@ const nextConfig = {
   experimental: {
     instrumentationHook: true, // src/instrumentation.ts checks the environment once at server start
     // the invoice PDF reads its Arabic font from disk at runtime
-    outputFileTracingIncludes: { '/api/orders/[id]/invoice': ['./node_modules/pdfkit/js/data/**/*'] }, // pdfkit's built-in Helvetica metrics
+    outputFileTracingIncludes: { '/api/orders/[id]/invoice': ['./node_modules/pdfkit/js/**/*'] }, // pdfkit's built-in Helvetica metrics
     serverComponentsExternalPackages: [
       'pdfkit',
       'firebase-admin',
@@ -32,9 +32,9 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.r2.dev' },
       ...(r2Host ? [{ protocol: 'https', hostname: r2Host }] : []),
     ],
-    formats: ['image/avif', 'image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    // Uploads are already shrunk WebP files with a one-year browser cache (see upload route). Serving them directly avoids
+    // Vercel's image-optimisation quota/billing and a second processing pass; the browser keeps each picture after the first view.
+    unoptimized: true,
   },
 
   compress: true,
@@ -66,7 +66,9 @@ const nextConfig = {
           { key: 'Permissions-Policy',        value: 'camera=(), microphone=(), geolocation=()' },
         ],
       },
-      { source: '/api/(.*)', headers: [{ key: 'Cache-Control', value: 'no-store' }] },
+      // private/admin APIs are never cached; the public read-only ones set their own short s-maxage so Vercel's edge answers repeat visitors
+      { source: '/api/((?!products|recommendations|settings/public|bundles|categories|banners|popups|shipping/config|shipping/zones).*)', headers: [{ key: 'Cache-Control', value: 'no-store' }] },
+      { source: '/:file(logo.svg|logo-full.svg|icon-192.png|icon-512.png|manifest.json|apple-icon.png)', headers: [{ key: 'Cache-Control', value: 'public, max-age=604800, stale-while-revalidate=86400' }] },
     ];
   },
 

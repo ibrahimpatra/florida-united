@@ -67,7 +67,7 @@ export function AgentChat() {
             {msgs.map((m, i) => (
               <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                 <div className={`max-w-[85%] rounded-2xl px-3 py-2 whitespace-pre-wrap ${m.role === 'user' ? 'bg-brand-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
-                  {m.text}
+                  {linkify(m.text, m.role === 'user')}
                   {m.pending && !m.done && m.pending.map((p, k) => (
                     <div key={k} className="mt-2 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
                       <p className="mb-2">{p.summary}</p>
@@ -92,4 +92,20 @@ export function AgentChat() {
       )}
     </>
   );
+}
+
+
+/** Turns [name](/shop/products/slug) and bare /shop/products/slug paths in a reply into real links, so every product the assistant mentions is one tap away. */
+function linkify(text: string, plain: boolean) {
+  if (plain) return text;
+  const re = /\[([^\]]+)\]\((\/[^)\s]*)\)|(\/(?:shop\/products|bundles|deals|shop)[A-Za-z0-9\-_/%?=&]*)/g;
+  const out: any[] = []; let last = 0, m: RegExpExecArray | null, k = 0;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const href = m[2] || m[3]; const label = m[1] || href.split('/').filter(Boolean).pop()?.replace(/-/g, ' ') || href;
+    out.push(<a key={k++} href={href} className="underline font-semibold text-brand-700 hover:text-brand-900">{label}</a>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
 }

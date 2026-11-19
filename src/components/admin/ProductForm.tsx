@@ -4,7 +4,7 @@ import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { Upload, X, Plus, Save, ArrowLeft } from 'lucide-react';
+import { Upload, X, Plus, Save, ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { generateSlug, generateSKU } from '@/lib/utils';
 import type { Category } from '@/types';
@@ -20,6 +20,9 @@ export function ProductForm({ initialData, productId }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiFacts, setAiFacts] = useState('');
+  const [aiOverwrite, setAiOverwrite] = useState(false);
   const [uoms, setUoms] = useState<any[]>([]);
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
@@ -69,7 +72,31 @@ export function ProductForm({ initialData, productId }: Props) {
     }
   }, [nameValue]);
 
+  /** Writes descriptions (English + Arabic), meta text and tags from the name and the facts typed here. Only empty fields are filled unless "replace" is ticked. */
+  const writeWithAi = async () => {
+    const name = String(watch('name') || '').trim();
+    if (name.length < 3) { toast.error('Enter the product name first.'); return; }
+    setAiBusy(true);
+    try {
+      const cat = categories.find((c: any) => c.id === watch('categoryId'));
+      const res = await fetch('/api/admin/describe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        name, nameAr: watch('nameAr' as any), brand: watch('brand'), category: (cat as any)?.name, sku: watch('sku'), specs: aiFacts, tags, existing: aiOverwrite ? watch('description') : '',
+      }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(d.error || 'The writer is unavailable right now.'); return; }
+      let n = 0;
+      for (const [k, v] of Object.entries(d.fields || {})) {
+        if (!aiOverwrite && String(watch(k as any) || '').trim()) continue;
+        setValue(k as any, v as any, { shouldDirty: true }); n++;
+      }
+      if (Array.isArray(d.tags)) setTags(ts => [...ts, ...d.tags.filter((t: string) => !ts.includes(t))].slice(0, 20));
+      toast.success(n ? `Written with ${d.provider === 'claude' ? 'Claude' : 'Gemini'}. Please read it before saving.` : 'Everything was already filled. Tick "Replace" to rewrite.');
+    } catch { toast.error('Network error: check your connection and try again.'); }
+    finally { setAiBusy(false); }
+  };
+
   const uploadImage = async (file: File) => {
+    if (images.length >= 8) { toast.error('Up to 8 images per product keeps storage small.'); return; }
     setUploading(true);
     try {
       const fd = new FormData();
@@ -136,6 +163,15 @@ export function ProductForm({ initialData, productId }: Props) {
                 })),
                 ...units.map((u: any, i: number) => ({ en: u.name, ar: u.nameAr, set: (v: string) => setUnits(units.map((x: any, j: number) => (j === i ? { ...x, nameAr: v } : x))) })),
               ]} />
+            </div>
+            <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-3 mb-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={writeWithAi} disabled={aiBusy} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-60">
+                  {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Write with AI
+                </button>
+                <label className="flex items-center gap-1.5 text-xs text-gray-600"><input type="checkbox" checked={aiOverwrite} onChange={e => setAiOverwrite(e.target.checked)} className="accent-brand-600" /> Replace what I already wrote</label>
+              </div>
+              <textarea value={aiFacts} onChange={e => setAiFacts(e.target.value)} rows={2} className="input-field mt-2 text-sm resize-y" placeholder="Optional facts for the writer: size, power, material, what is in the box… It only uses what you give it." />
             </div>
             <div className="space-y-4">
               <div>
@@ -230,7 +266,11 @@ export function ProductForm({ initialData, productId }: Props) {
               {images.map((img,i) => (
                 <div key={i} className="relative group aspect-square bg-gray-100 rounded-xl overflow-hidden">
                   <img src={img} alt="" className="w-full h-full object-cover"/>
-                  <button type="button" onClick={()=>setImages(imgs=>imgs.filter((_,idx)=>idx!==i))}
+                  <button type="button" onClick={()=>{
+                    // an image uploaded in this editing session and now removed is unused: delete it from storage so it stops costing money
+                    if (!(initialData?.images || []).includes(img)) fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: img }) }).catch(() => {});
+                    setImages(imgs=>imgs.filter((_,idx)=>idx!==i));
+                  }}
                     className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <X className="w-3 h-3"/>
                   </button>
@@ -359,10 +399,7 @@ export function ProductForm({ initialData, productId }: Props) {
               <input type="checkbox" {...register('isReturnable')} className="w-4 h-4 accent-brand-600 rounded"/>
               <span className="text-sm text-gray-700">Item is returnable</span>
             </label>
-            <div>
-              <label className="label">Return Window (days)</label>
-              <input {...register('returnDays')} type="number" min="0" max="365" className="input-field"/>
-            </div>
+            <p className="text-xs text-gray-500">The return window (days after delivery) is set once for the whole store in Settings.</p>
           </div>
 
           {/* Save */}

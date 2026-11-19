@@ -11,13 +11,15 @@
  */
 import { getAdminDb } from './firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { fuzzyScore, computeCoupon } from './pricing';
+import { matchScore, computeCoupon } from './pricing';
 import type {
   Product, Category, Order, User, Review, Coupon,
   Banner, ReturnRequest, ProductFilters, PaginatedResponse, DashboardStats
 } from '@/types';
 
 // ── helpers ──────────────────────────────────────────────────
+import { fixImageUrl } from './image-url';
+
 function toData<T>(snap: FirebaseFirestore.DocumentSnapshot): T | null {
   if (!snap.exists) return null;
   const d = snap.data()!;
@@ -25,7 +27,9 @@ function toData<T>(snap: FirebaseFirestore.DocumentSnapshot): T | null {
     Object.fromEntries(
       Object.entries(obj).map(([k, v]) => [
         k,
-        v && typeof v === 'object' && 'toDate' in (v as object)
+        (k === 'images' && Array.isArray(v)) ? (v as any[]).map(fixImageUrl)
+        : (k === 'image' || k === 'imageUrl' || k === 'logoUrl') ? fixImageUrl(v)
+        : v && typeof v === 'object' && 'toDate' in (v as object)
           ? (v as { toDate: () => Date }).toDate().toISOString()
           : v && typeof v === 'object' && !Array.isArray(v)
           ? convert(v as Record<string, unknown>)
@@ -208,10 +212,7 @@ export async function adminGetProducts(
     const q = filters.search.trim();
     scores = new Map();
     items = items.filter(p => {
-      const sc = Math.max(
-        fuzzyScore(p.name || '', q) * 1.5, fuzzyScore(p.nameAr || '', q) * 1.5, fuzzyScore(p.sku || '', q), fuzzyScore(p.brand || '', q),
-        fuzzyScore((p.tags || []).join(' '), q), fuzzyScore(p.categoryName || '', q), fuzzyScore(p.categoryNameAr || '', q),
-      );
+      const sc = matchScore({ name: p.name, nameAr: p.nameAr, short: p.shortDescription, shortAr: p.shortDescriptionAr, extra: filters.admin ? p.sku : undefined }, q);
       if (sc > 0) scores!.set(p.id, sc);
       return sc > 0;
     });
@@ -446,7 +447,7 @@ export async function adminUpdateOrderStatus(id: string, status: string, note?: 
     if (cur && String(cur.paymentMethod).toLowerCase() === 'cod' && cur.paymentStatus !== 'paid') {
       patch.paymentStatus = 'paid'; patch.paidAt = new Date().toISOString();
     }
-    patch.deliveredAt = new Date().toISOString(); // starts the 14-day return window
+    patch.deliveredAt = new Date().toISOString(); // starts the return window
   }
   await db.collection('orders').doc(id).update(patch);
 }
@@ -524,13 +525,15 @@ export async function adminDeleteAddress(userId: string, addressId: string): Pro
 export { adminGetDashboardStats, adminRebuildStats } from './stats-server';
 
 // ── COUPONS ──────────────────────────────────────────────────
-export async function adminValidateCoupon(code: string, orderAmount: number) {
+export async function adminValidateCoupon(code: string, orderAmount: number, userId?: string) {
   const c = String(code || '').trim().toUpperCase();
   if (!c) return { valid: false, error: 'Enter a coupon code' };
   const snap = await getAdminDb().collection('coupons').where('code', '==', c).limit(1).get();
   const coupon = snap.empty ? null : (toData<Coupon>(snap.docs[0]) as any);
   // same rules placeOrder() applies, so the cart preview and the final charge always agree
-  const r = computeCoupon(coupon, Number(orderAmount) || 0);
+  let uses = 0;
+  if (coupon?.perUserLimit && userId) uses = Number((await getAdminDb().collection('couponUsage').doc(`${coupon.id}_${userId}`).get()).data()?.count || 0);
+  const r = computeCoupon(coupon, Number(orderAmount) || 0, new Date(), uses);
   if (!r.valid) return { valid: false, error: r.error };
   return { valid: true, discount: r.discount, coupon: { code: coupon.code, type: coupon.type, value: coupon.value } };
 }
@@ -698,6 +701,16 @@ export async function adminSearchProducts(query: string, limit = 10): Promise<Pr
   return result.items;
 }
 
+/** Bundles whose name or short description matches the query (storefront: active bundles only). */
+export async function searchBundles(query: string, limit = 6, includeInactive = false) {
+  const q = query.trim();
+  if (!q) return [];
+  const all = await adminGetBundles(!includeInactive);
+  return all
+    .map((b: any) => ({ b, sc: matchScore({ name: b.name, nameAr: b.nameAr, short: b.description, shortAr: b.descriptionAr }, q) }))
+    .filter(x => x.sc > 0).sort((a, c) => c.sc - a.sc).slice(0, limit).map(x => x.b);
+}
+
 // ── BANNERS (full CRUD) ───────────────────────────────────────
 
 // ── COUPONS (full CRUD) ───────────────────────────────────────
@@ -722,7 +735,7 @@ async function normaliseCoupon(data: any, partial: boolean, selfId?: string) {
     if (!(d.value > 0)) throw new ProductError(400, 'Discount value must be greater than zero.');
     if (d.type === 'percentage' && d.value > 100) throw new ProductError(400, 'A percentage discount cannot exceed 100.');
   }
-  for (const k of ['minOrderAmount', 'maxDiscount', 'usageLimit']) if (k in d) {
+  for (const k of ['minOrderAmount', 'maxDiscount', 'usageLimit', 'perUserLimit']) if (k in d) {
     if (d[k] === '' || d[k] === null || d[k] === undefined) { d[k] = k === 'minOrderAmount' ? 0 : null; continue; }
     d[k] = Number(d[k]);
     if (!(d[k] >= 0)) throw new ProductError(400, `${k} cannot be negative.`);

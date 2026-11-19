@@ -32,7 +32,7 @@ async function __POST(req: NextRequest) {
     const raw = await req.json();
     // whitelist + coerce: the form posts every value as a string
     const NUM = ['freeShippingThreshold', 'defaultShippingCost', 'taxRate', 'defaultReturnDays', 'usdRate'];
-    const STR = ['storeName', 'tagline', 'phone', 'email', 'emailOrders', 'address', 'whatsapp', 'hoursWeekdays', 'hoursSaturday', 'metaTitle', 'metaDesc', 'googleAnalyticsId', 'paymentMode',
+    const STR = ['storeName', 'tagline', 'phone', 'email', 'emailOrders', 'address', 'addressAr', 'whatsapp', 'hoursWeekdays', 'hoursSaturday', 'metaTitle', 'metaDesc', 'googleAnalyticsId', 'paymentMode',
       'storeNameAr', 'taglineAr', 'logoUrl', 'faviconUrl', 'themeName', 'onlineProvider'];
     const data: Record<string, any> = {};
     for (const k of NUM) if (k in raw) {

@@ -6,7 +6,7 @@ import { formatDate, formatPrice } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import type { Coupon } from '@/types';
 
-const EMPTY = { code: '', type: 'percentage' as 'percentage' | 'fixed', value: '' as any, minOrderAmount: '' as any, maxDiscount: '' as any, usageLimit: '' as any, isActive: true, expiresAt: '' };
+const EMPTY = { code: '', type: 'percentage' as 'percentage' | 'fixed', value: '' as any, minOrderAmount: '' as any, maxDiscount: '' as any, usageLimit: '' as any, perUserLimit: '' as any, isActive: true, expiresAt: '' };
 
 export default function AdminCouponsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -36,6 +36,7 @@ export default function AdminCouponsPage() {
         minOrderAmount: form.minOrderAmount === '' ? 0 : Number(form.minOrderAmount),
         maxDiscount: form.maxDiscount === '' || form.maxDiscount == null ? null : Number(form.maxDiscount),
         usageLimit: form.usageLimit === '' || form.usageLimit == null ? null : Number(form.usageLimit),
+        perUserLimit: form.perUserLimit === '' || form.perUserLimit == null ? null : Number(form.perUserLimit),
         isActive: !!form.isActive, expiresAt: form.expiresAt || null,
       };
       const res = await fetch(form.id ? `/api/coupons/${form.id}` : '/api/coupons', { method: form.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -66,7 +67,7 @@ export default function AdminCouponsPage() {
     } catch { toast.error('Network error'); }
   };
 
-  const edit = (c: Coupon) => setForm({ ...EMPTY, ...c, maxDiscount: c.maxDiscount ?? '', usageLimit: c.usageLimit ?? '', minOrderAmount: c.minOrderAmount || '', expiresAt: c.expiresAt ? String(c.expiresAt).slice(0, 10) : '' });
+  const edit = (c: Coupon) => setForm({ ...EMPTY, ...c, maxDiscount: c.maxDiscount ?? '', usageLimit: c.usageLimit ?? '', perUserLimit: c.perUserLimit ?? '', minOrderAmount: c.minOrderAmount || '', expiresAt: c.expiresAt ? String(c.expiresAt).slice(0, 10) : '' });
   const expired = (c: Coupon) => !!c.expiresAt && new Date(c.expiresAt) < new Date();
 
   return (
@@ -86,6 +87,10 @@ export default function AdminCouponsPage() {
             <div><label className="label">Minimum Order (KWD)</label><NumberInput type="number" min="0" step="0.001" value={form.minOrderAmount} onChange={e => f('minOrderAmount', e.target.value)} className="input-field" placeholder="None" /></div>
             <div><label className="label">Max Discount (KWD)</label><NumberInput type="number" min="0" step="0.001" value={form.maxDiscount} onChange={e => f('maxDiscount', e.target.value)} className="input-field" placeholder="No cap" /></div>
             <div><label className="label">Usage Limit</label><NumberInput type="number" min="0" step="1" value={form.usageLimit} onChange={e => f('usageLimit', e.target.value)} className="input-field" placeholder="Unlimited" /></div>
+            <div><label className="label">Uses per customer</label>
+              <select value={String(form.perUserLimit ?? '')} onChange={e => f('perUserLimit', e.target.value)} className="input-field">
+                <option value="">Unlimited</option><option value="1">Once per customer</option><option value="2">Twice per customer</option><option value="3">3 times per customer</option><option value="5">5 times per customer</option>
+              </select></div>
             <div><label className="label">Valid Through</label><input type="date" value={form.expiresAt} onChange={e => f('expiresAt', e.target.value)} className="input-field" /></div>
             <label className="flex items-center gap-2 pt-6 text-sm font-medium text-gray-700"><input type="checkbox" checked={form.isActive} onChange={e => f('isActive', e.target.checked)} className="w-4 h-4 accent-brand-600" />Active</label>
           </div>
@@ -108,7 +113,7 @@ export default function AdminCouponsPage() {
                   <td className="text-gray-700 text-sm capitalize">{c.type}</td>
                   <td className="font-bold text-gray-900">{c.type === 'percentage' ? `${c.value}%` : formatPrice(c.value)}</td>
                   <td className="text-gray-700 text-sm">{c.minOrderAmount > 0 ? formatPrice(c.minOrderAmount) : 'Any'}</td>
-                  <td className="text-gray-700 text-sm">{c.usedCount || 0}{c.usageLimit ? ` / ${c.usageLimit}` : ''}</td>
+                  <td className="text-gray-700 text-sm">{c.usedCount || 0}{c.usageLimit ? ` / ${c.usageLimit}` : ''}{c.perUserLimit ? <span className="block text-xs text-gray-400">{c.perUserLimit === 1 ? 'once per customer' : `${c.perUserLimit} per customer`}</span> : null}</td>
                   <td><span className={`badge text-xs font-bold ${expired(c) ? 'badge-red' : c.isActive ? 'badge-green' : 'badge-gray'}`}>{expired(c) ? 'Expired' : c.isActive ? 'Active' : 'Inactive'}</span></td>
                   <td className="text-gray-500 text-xs">{c.expiresAt ? formatDate(c.expiresAt) : 'No expiry'}</td>
                   <td className="whitespace-nowrap">

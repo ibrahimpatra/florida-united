@@ -28,8 +28,9 @@ export function SearchModal({ isOpen, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
+  const [bundleHits, setBundleHits] = useState<any[]>([]);
   useEffect(() => {
-    if (!query.trim()) { setResults([]); setLoading(false); return; }
+    if (!query.trim()) { setResults([]); setBundleHits([]); setLoading(false); return; }
     clearTimeout(debounceRef.current);
     setLoading(true);
     const id = ++reqId.current;
@@ -37,7 +38,7 @@ export function SearchModal({ isOpen, onClose }: Props) {
       try {
         const res = await fetch(`/api/products?q=${encodeURIComponent(query)}&limit=6`);
         const data = await res.json();
-        if (id === reqId.current) setResults(data.items || []);
+        if (id === reqId.current) { setResults(data.items || []); setBundleHits(data.bundles || []); }
       } catch {}
       if (id === reqId.current) setLoading(false);
     }, 350);
@@ -80,6 +81,24 @@ export function SearchModal({ isOpen, onClose }: Props) {
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto">
+          {bundleHits.length > 0 && (
+            <div className="p-3 pb-0">
+              <p className={`${label} px-2 mb-2`}>{t('c1_search.bundles')}</p>
+              {bundleHits.map(b => (
+                <Link key={b.id} href="/bundles" onClick={() => { saveSearch(query); onClose(); }} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors group">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">{b.image && <img src={b.image} alt="" className="w-full h-full object-cover" />}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-brand-700">{L(b, 'name')}</p>
+                    <p className="text-xs text-gray-500">{t('c1_search.bundleItems', { n: b.itemCount })}</p>
+                  </div>
+                  <p className="text-sm font-bold text-brand-700 flex-shrink-0">{formatPrice(b.price)}</p>
+                </Link>
+              ))}
+            </div>
+          )}
+          {(results.length > 0 || bundleHits.length > 0) && results.length === 0 && query && (
+            <button onClick={() => handleSearch(query)} className="flex items-center gap-2 w-full p-2.5 mx-3 mb-3 rounded-xl hover:bg-brand-50 text-brand-700 font-semibold text-sm transition-colors"><Search className="w-4 h-4" />{t('c1_search.viewAllFor', { q: query })}</button>
+          )}
           {results.length > 0 && (
             <div className="p-3">
               <p className={`${label} px-2 mb-2`}>{t('c1_search.products')}</p>
@@ -108,7 +127,7 @@ export function SearchModal({ isOpen, onClose }: Props) {
             </div>
           )}
 
-          {query && !loading && results.length === 0 && (
+          {query && !loading && results.length === 0 && bundleHits.length === 0 && (
             <div className="p-8 text-center">
               <Search className="w-10 h-10 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-600 font-medium">{t('c1_search.noResults', { q: query })}</p>

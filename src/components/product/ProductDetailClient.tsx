@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { ShoppingCart, Heart, Share2, MessageCircle, Star, Truck, Shield, RotateCcw, ChevronRight, Plus, Minus, Check, Package, Ruler } from 'lucide-react';
 import Link from 'next/link';
+import { returnWindowDays } from '@/lib/returns';
 import { useCartStore } from '@/store/cartStore';
 import { useWishlistStore } from '@/store/wishlistStore';
 import { useDeals } from '@/lib/useDeals';
@@ -15,6 +16,7 @@ import { ProductCard } from './ProductCard';
 import { AIRecommendations } from './AIRecommendations';
 
 export function ProductDetailClient({ product, relatedProducts }: { product: Product; relatedProducts: Product[] }) {
+  const storeSettings = useStoreSettings();
   const { t, L, isArabic } = useLanguage();
   const { freeShippingThreshold } = useStoreSettings();
   const [qty, setQty] = useState(1);
@@ -200,7 +202,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
             {[
               { icon: Truck, text: freeShippingThreshold ? t('c1_pd.delFree', { amount: formatPrice(freeShippingThreshold) }) : t('c1_pd.delStd'), sub: t('c1_pd.delFreeSub') },
               { icon: Shield, text: t('c1_pd.paySecure'), sub: t('c1_pd.paySub') },
-              { icon: RotateCcw, text: product.isReturnable ? t('c1_pd.ret', { n: product.returnDays ?? 14 }) : t('c1_pd.noRet'), sub: product.isReturnable ? t('c1_pd.retSub') : t('c1_pd.noRetSub') },
+              { icon: RotateCcw, text: product.isReturnable ? t('c1_pd.ret', { n: returnWindowDays(storeSettings.returnWindowDays) }) : t('c1_pd.noRet'), sub: product.isReturnable ? t('c1_pd.retSub') : t('c1_pd.noRetSub') },
             ].map(({ icon: Icon, text, sub }) => (
               <div key={text} className="flex gap-3">
                 <div className="w-8 h-8 bg-brand-50 rounded-lg flex items-center justify-center flex-shrink-0"><Icon className="w-4 h-4 text-brand-600" /></div>

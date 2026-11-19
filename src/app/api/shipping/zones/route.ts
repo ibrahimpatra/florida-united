@@ -8,7 +8,7 @@ import { normalizeZone, findGovernorateConflict, ValidationError } from '@/lib/z
 export const dynamic = 'force-dynamic';
 
 async function __GET() {
-  try { return NextResponse.json(await adminGetShippingZones(), { headers: { 'Cache-Control': 'no-store' } }); }
+  try { return NextResponse.json(await adminGetShippingZones(), { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' } }); }
   catch (e) { console.error('[GET shipping/zones]', e); return NextResponse.json({ error: 'Failed to load zones' }, { status: 500 }); }
 }
 async function __POST(req: NextRequest) {

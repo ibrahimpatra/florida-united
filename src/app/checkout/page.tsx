@@ -113,10 +113,10 @@ export default function CheckoutPage() {
             <div className="space-y-3 mb-4 max-h-72 overflow-y-auto">
               {items.map(item => (
                 <div key={item.id + (item.variantId || '')} className="flex gap-3 items-center">
-                  <div className="w-12 h-12 bg-white rounded-xl overflow-hidden flex-shrink-0 border border-gray-100">
+                  <Link href={`/p/${encodeURIComponent(item.productId || item.id)}`} className="w-12 h-12 bg-white rounded-xl overflow-hidden flex-shrink-0 border border-gray-100 block">
                     {item.image ? <img src={item.image} alt={L(item as any, 'name')} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center"><ShoppingBag className="w-5 h-5 text-gray-300" /></div>}
-                  </div>
+                  </Link>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{L(item as any, 'name')}</p>
                     {item.variantName && <p className="text-xs text-gray-400">{L(item as any, 'variantName')}</p>}

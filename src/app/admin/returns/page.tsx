@@ -33,8 +33,9 @@ export default function AdminReturnsPage() {
     setLoading(true);
     try {
       const res = await fetch('/api/orders/returns');
-      const data = await res.json();
-      setReturns(data.items || []);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { toast.error(data?.error || 'Failed to load returns'); setLoading(false); return; }
+      setReturns(Array.isArray(data) ? data : data?.items || []);
     } catch { toast.error('Failed to load returns'); }
     setLoading(false);
   };
@@ -122,7 +123,7 @@ export default function AdminReturnsPage() {
         <div className="space-y-3">
           {filtered.map(ret => (
             <div key={ret.id} className="bg-white border border-gray-100 rounded-2xl p-4 hover:shadow-sm transition-shadow">
-              <div className="flex items-start gap-4">
+              <div className="flex flex-wrap items-start gap-3 sm:gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="font-bold text-gray-900">#{ret.orderNumber}</span>

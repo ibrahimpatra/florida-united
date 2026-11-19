@@ -51,7 +51,7 @@ export const SITE_CONFIG = {
   defaultShippingCost:    1.500,    // KWD 1.500 flat fee under threshold
 
   taxRate:                0,        // Kuwait has no VAT (0%)
-  defaultReturnDays:      14,
+  defaultReturnDays:      7,
 
   // ── Social Media ───────────────────────────────────────────
   socialFacebook:   '#',

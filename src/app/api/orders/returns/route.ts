@@ -6,10 +6,10 @@ import { authOptions } from '@/lib/auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { restockItems } from '@/lib/orders-server';
 import { refundCardOrder } from '@/lib/stripe';
+import { returnWindowDays, deliveredAtOf, isInReturnWindow } from '@/lib/returns';
 import { adminGetUserReturns, adminGetAllReturns, adminGetOrderById } from '@/lib/firestore-admin';
 
 export const dynamic = 'force-dynamic';
-const RETURN_WINDOW_DAYS = 14;
 const OPEN = ['pending', 'photo_submitted', 'approved'];
 const round3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
@@ -17,8 +17,8 @@ async function __GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    if (session.user.role === 'admin') return NextResponse.json(await adminGetAllReturns());
-    return NextResponse.json(await adminGetUserReturns(session.user.id));
+    const items = String(session.user.role).toLowerCase() === 'admin' ? await adminGetAllReturns() : await adminGetUserReturns(session.user.id);
+    return NextResponse.json({ items }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) { console.error('[GET returns]', e); return NextResponse.json({ error: 'Could not load returns' }, { status: 500 }); }
 }
 
@@ -34,13 +34,13 @@ async function __POST(req: NextRequest) {
     if (order.status !== 'delivered')
       return NextResponse.json({ error: 'Returns can only be requested for delivered orders.' }, { status: 400 });
 
-    const hist = (order.statusHistory || []).filter((h: any) => h.status === 'delivered').pop();
-    const deliveredAt = new Date(order.deliveredAt || hist?.createdAt || order.updatedAt || Date.now());
-    const days = Math.floor((Date.now() - deliveredAt.getTime()) / 86400000);
-    if (days > RETURN_WINDOW_DAYS)
-      return NextResponse.json({ error: `The ${RETURN_WINDOW_DAYS}-day return window for this order has expired.` }, { status: 400 });
-
     const db = getAdminDb();
+    const windowDays = returnWindowDays(((await db.doc('config/storeSettings').get()).data() as any)?.defaultReturnDays);
+    // delivery date unknown (very old order): fall back to the last update so the window still ends
+    const probe = deliveredAtOf(order) ? order : { ...order, deliveredAt: order.updatedAt || order.createdAt };
+    if (!isInReturnWindow(probe, windowDays))
+      return NextResponse.json({ error: `The ${windowDays}-day return window for this order has ended.` }, { status: 400 });
+
     const existing = await db.collection('returnRequests').where('orderId', '==', orderId).get();
     if (existing.docs.some(d => OPEN.includes((d.data() as any).status)))
       return NextResponse.json({ error: 'A return request for this order is already open.' }, { status: 409 });

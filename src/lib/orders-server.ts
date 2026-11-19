@@ -54,6 +54,7 @@ export async function loadShippingSettings(db: Firestore = getAdminDb()): Promis
       localPickupAddress: ship.localPickupAddress,
       codEnabled: ship.codEnabled !== false && store.codEnabled !== false,
       codFee: num(ship.codFee, store.codFee) ?? 0,
+      returnWindowDays: num(store.defaultReturnDays),
     },
   };
 }
@@ -166,7 +167,9 @@ export async function quoteShipping(rawItems: RawItem[], governorate: string | u
   const code = String(couponCode || '').trim().toUpperCase();
   if (code) {
     const cs = await db.collection('coupons').where('code', '==', code).limit(1).get();
-    const r = computeCoupon(cs.empty ? null : (cs.docs[0].data() as any), subtotal);
+    const cd: any = cs.empty ? null : cs.docs[0].data();
+    const uses = cd?.perUserLimit && userId ? Number(((await db.collection('couponUsage').doc(`${cs.docs[0].id}_${userId}`).get()).data() as any)?.count || 0) : 0;
+    const r = computeCoupon(cd, subtotal, new Date(), uses);
     if (r.valid) discount = r.discount; else couponError = r.error || 'Invalid coupon.';
   }
   return { subtotal, lines, dealSaving: totalSaving, discount, ...(couponError ? { couponError } : {}), ...computeShipping({ governorate, lines, zones, settings }) };
@@ -281,7 +284,8 @@ export async function placeOrder(input: PlaceOrderInput) {
         let discount = 0;
         if (couponRef) {
           const cs = await tx.get(couponRef);
-          const res = computeCoupon(cs.exists ? (cs.data() as any) : null, subtotal);
+          const cu = await tx.get(db.collection('couponUsage').doc(`${couponRef.id}_${input.userId}`));
+          const res = computeCoupon(cs.exists ? (cs.data() as any) : null, subtotal, new Date(), Number((cu.data() as any)?.count || 0));
           if (!res.valid) throw new OrderError(400, res.error || 'Invalid coupon.', 'BAD_COUPON');
           discount = res.discount;
         }
@@ -338,7 +342,10 @@ export async function placeOrder(input: PlaceOrderInput) {
           { date: day, revenue: FieldValue.increment(total), orders: FieldValue.increment(1), units: FieldValue.increment(units) }, { merge: true });
         tx.set(db.collection('users').doc(input.userId),
           { totalSpent: FieldValue.increment(total), orderCount: FieldValue.increment(1), lastOrderAt: FieldValue.serverTimestamp() }, { merge: true });
-        if (couponRef) tx.update(couponRef, { usedCount: FieldValue.increment(1) });
+        if (couponRef) {
+          tx.update(couponRef, { usedCount: FieldValue.increment(1) });
+          tx.set(db.collection('couponUsage').doc(`${couponRef.id}_${input.userId}`), { couponId: couponRef.id, userId: input.userId, count: FieldValue.increment(1) }, { merge: true });
+        }
         dealRefs.forEach((r, i) => {
           tx.update(r, { usedCount: FieldValue.increment(1) });
           tx.set(usageRefs[i], { dealId: usedDealIds[i], userId: input.userId, count: FieldValue.increment(1) }, { merge: true });
@@ -427,7 +434,10 @@ export async function cancelOrder(args: { orderId: string; actor: { id: string; 
       tx.set(db.collection('users').doc(o.userId),
         { totalSpent: FieldValue.increment(-o.total), orderCount: FieldValue.increment(-1) }, { merge: true });
     }
-    if (o.couponId) tx.update(db.collection('coupons').doc(o.couponId), { usedCount: FieldValue.increment(-1) });
+    if (o.couponId) {
+      tx.update(db.collection('coupons').doc(o.couponId), { usedCount: FieldValue.increment(-1) });
+      tx.set(db.collection('couponUsage').doc(`${o.couponId}_${o.userId}`), { count: FieldValue.increment(-1) }, { merge: true }); // a cancelled order frees the customer's use
+    }
     for (const dealId of (Array.isArray(o.dealIds) ? o.dealIds : []) as string[]) {
       tx.set(db.collection('flashDeals').doc(dealId), { usedCount: FieldValue.increment(-1) }, { merge: true });
       tx.set(db.collection('flashDealUsage').doc(`${dealId}_${o.userId}`), { count: FieldValue.increment(-1) }, { merge: true });

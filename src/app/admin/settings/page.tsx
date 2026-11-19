@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
   email:                 SITE_CONFIG.email,
   emailOrders:           SITE_CONFIG.emailOrders,
   address:               SITE_CONFIG.addressFull,
+  addressAr:             SITE_CONFIG.addressFullAr,
   whatsapp:              SITE_CONFIG.whatsapp,
   hoursWeekdays:         SITE_CONFIG.hoursWeekdays,
   hoursSaturday:         SITE_CONFIG.hoursSaturday,
@@ -151,6 +152,7 @@ export default function AdminSettingsPage() {
             <Field label="Main Email" type="email" value={settings.email} onChange={v => update('email', v)} hint="Footer and contact page" />
             <Field label="Orders Email" type="email" value={settings.emailOrders} onChange={v => update('emailOrders', v)} hint="'From' address in order confirmation emails" />
           </div>
+          <Field label="Full Address (Arabic)" value={settings.addressAr} onChange={v => update('addressAr', v)} placeholder="قطعة 12، شارع 5، السالمية، الكويت" hint="Shown when the site is in Arabic" />
           <Field label="Full Address" value={settings.address} onChange={v => update('address', v)} placeholder="Block 12, Street 5, Salmiya, Kuwait" hint="Footer, contact page, email footer" />
         </Section>
 
@@ -169,7 +171,7 @@ export default function AdminSettingsPage() {
           <div className="grid sm:grid-cols-3 gap-4">
             <NumField label="Free Shipping Threshold (KWD)" value={settings.freeShippingThreshold} onChange={v => update('freeShippingThreshold', v)} step={0.5} hint="Set to 0 = always free" />
             <NumField label="Default Shipping Cost (KWD)" value={settings.defaultShippingCost} onChange={v => update('defaultShippingCost', v)} step={0.25} hint="Charged below threshold" />
-            <NumField label="Default Return Days" value={settings.defaultReturnDays} onChange={v => update('defaultReturnDays', v)} hint="Override per-product in product form" />
+            <NumField label="Return window (days)" value={settings.defaultReturnDays} onChange={v => update('defaultReturnDays', v)} hint="Customers can request a return this many days after delivery. The Return button disappears after that." />
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
             <NumField label="Tax Rate (%)" value={settings.taxRate} onChange={v => update('taxRate', v)} step={0.1} hint="Kuwait has 0% VAT — change only if regulations require" />

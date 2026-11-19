@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Search, Filter, Download, RefreshCw, Eye, ChevronDown } from 'lucide-react';
 import { formatPrice, formatDateTime, getStatusLabel, ORDER_STATUSES } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
@@ -14,6 +15,12 @@ const STATUS_COLORS: Record<string,string> = {
 };
 
 export default function AdminOrdersPage() {
+  const router = useRouter();
+  // the whole row / card opens the order; Ctrl/Cmd/middle click opens it in a new tab, the status menu keeps working on its own
+  const openOrder = (e: React.MouseEvent, id: string) => {
+    if ((e.target as HTMLElement).closest('select,option,button,a,input')) return;
+    if (e.metaKey || e.ctrlKey) window.open(`/admin/orders/${id}`, '_blank'); else router.push(`/admin/orders/${id}`);
+  };
   const [orders, setOrders] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -60,7 +67,7 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-5 sm:mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Orders</h1>
           <p className="text-gray-500 text-sm mt-0.5">{total} total orders</p>
@@ -78,7 +85,7 @@ export default function AdminOrdersPage() {
             className="input-field pl-9 py-2 text-sm" />
         </div>
         <select value={status} onChange={e=>{ setStatus(e.target.value); setPage(1); }}
-          className="input-field py-2 text-sm w-44">
+          className="input-field py-2 text-sm w-full sm:w-44">
           <option value="all">All Statuses</option>
           {ORDER_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
@@ -86,7 +93,33 @@ export default function AdminOrdersPage() {
 
       {/* Table */}
       <div className="card overflow-hidden">
-        <div className="table-wrapper rounded-none">
+        {/* Phones: one card per order (the table is too wide) */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="p-4"><div className="skeleton h-16 w-full rounded-xl" /></div>)
+            : filtered.length === 0 ? <p className="text-center py-12 text-gray-400">No orders found</p>
+            : filtered.map(o => (
+              <div key={o.id} onClick={e => openOrder(e, o.id)} className="p-4 active:bg-gray-50 cursor-pointer">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono font-bold text-brand-700">#{o.orderNumber}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{o.userName}</p>
+                    <p className="text-xs text-gray-400 truncate">{o.userEmail}</p>
+                  </div>
+                  <p className="font-bold text-gray-900 whitespace-nowrap">{formatPrice(o.total)}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <select value={o.status} onChange={e => updateStatus(o.id, e.target.value)} disabled={updatingId === o.id}
+                    className={`badge ${STATUS_COLORS[o.status] || 'badge-gray'} cursor-pointer font-bold text-xs py-1.5`}>
+                    {ORDER_STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
+                  </select>
+                  <span className={`badge text-xs font-bold ${o.paymentStatus === 'paid' ? 'badge-green' : o.paymentStatus === 'failed' ? 'badge-red' : 'badge-yellow'}`}>{o.paymentStatus}</span>
+                  <span className="text-xs text-gray-400">{o.items?.length} item(s)</span>
+                  <span className="text-xs text-gray-400 ms-auto">{formatDateTime(o.createdAt)}</span>
+                </div>
+              </div>
+            ))}
+        </div>
+        <div className="table-wrapper rounded-none hidden md:block">
           <table className="table">
             <thead>
               <tr>
@@ -102,7 +135,7 @@ export default function AdminOrdersPage() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-12 text-gray-400">No orders found</td></tr>
               ) : filtered.map(o => (
-                <tr key={o.id} className="hover:bg-gray-50">
+                <tr key={o.id} onClick={e => openOrder(e, o.id)} className="hover:bg-brand-50/50 cursor-pointer">
                   <td><Link href={`/admin/orders/${o.id}`} className="font-mono font-bold text-brand-700 hover:underline">#{o.orderNumber}</Link></td>
                   <td>
                     <div>

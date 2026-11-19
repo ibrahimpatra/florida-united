@@ -26,13 +26,21 @@ export function explainGemini(e: any): string {
 
 export const geminiConfigured = () => !!process.env.GEMINI_API_KEY;
 
-async function call(model: string, body: any) {
+export type GenOpts = { fast?: boolean; timeoutMs?: number };
+
+async function call(model: string, body: any, timeoutMs: number): Promise<any> {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY! }, body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs), // a slow model must not hold the shopper: give up and try the next one
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     let detail = text; try { detail = JSON.parse(text)?.error?.message || text; } catch {}
+    // some models reject the "no thinking" setting: repeat once without it instead of failing over
+    if (res.status === 400 && /think/i.test(detail) && body?.generationConfig?.thinkingConfig) {
+      const { thinkingConfig, ...gc } = body.generationConfig;
+      return call(model, { ...body, generationConfig: gc }, timeoutMs);
+    }
     throw new GeminiError(res.status, detail, model);
   }
   return res.json();
@@ -47,8 +55,11 @@ const MODEL_GONE = new Set([404, 400]);                  // retired or wrong nam
  * If a model is overloaded ("high demand", 503/429) or retired, the next model is tried straight away, and the busy one is skipped for a minute.
  * If every model is busy, one more round is tried after a short pause. A bad API key stops immediately (no model will help).
  */
-export async function generate(body: any): Promise<any> {
-  const all = workingModel ? [workingModel, ...geminiModels().filter(m => m !== workingModel)] : geminiModels();
+export async function generate(body: any, opts: GenOpts = {}): Promise<any> {
+  const timeoutMs = opts.timeoutMs ?? (opts.fast ? 12_000 : 25_000);
+  // short jobs (translate, descriptions) go to the lightweight model first: it answers in 1-3 seconds
+  const models = opts.fast ? [...geminiModels().filter(m => /lite/.test(m)), ...geminiModels().filter(m => !/lite/.test(m))] : geminiModels();
+  const all = !opts.fast && workingModel ? [workingModel, ...models.filter(m => m !== workingModel)] : models;
   let last: any;
   for (let round = 0; round < 2; round++) {
     const now = Date.now();
@@ -56,7 +67,7 @@ export async function generate(body: any): Promise<any> {
     const order = round === 0 && ready.length ? ready : all;
     for (const m of order) {
       try {
-        const d = await call(m, body);
+        const d = await call(m, body, timeoutMs);
         if (workingModel !== m) { workingModel = m; log.info('gemini', `using model ${m}`); }
         cooling.delete(m);
         return d;
@@ -71,7 +82,7 @@ export async function generate(body: any): Promise<any> {
         // network error (fetch failed, timeout): fall through to the next model
       }
     }
-    if (round === 0) await new Promise(r => setTimeout(r, 1500));
+    if (round === 0) await new Promise(r => setTimeout(r, 500));
   }
   throw last;
 }
