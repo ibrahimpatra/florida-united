@@ -1,5 +1,5 @@
 'use client';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { Check, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useStoreSettings } from '@/lib/useStoreSettings';
@@ -38,6 +38,21 @@ export function CategoryHero({ cat, fallbackName }: { cat: any | null; fallbackN
       <Crumbs items={[{ label: t('c1_page.home'), href: '/' }, { label: t('c1_page.shop'), href: '/shop' }, { label: name }]} />
       <h1 className="text-3xl font-bold text-gray-900 font-display">{name}</h1>
       {cat && L(cat, 'description') && <p className="text-gray-500 mt-1">{L(cat, 'description')}</p>}
+    </div></div>
+  );
+}
+
+export function BrandHero({ brand }: { brand: any }) {
+  const { t, L } = useLanguage();
+  const name = L(brand, 'name');
+  return (
+    <div className="page-hero"><div className="container-custom">
+      <Crumbs items={[{ label: t('c1_page.home'), href: '/' }, { label: name }]} />
+      <div className="flex items-center gap-4">
+        {brand.image && <img src={brand.image} alt={L(brand, 'imageAlt') || name} className="h-14 w-auto max-w-[140px] object-contain rounded-lg bg-white border p-1" />}
+        <div><h1 className="text-3xl font-bold text-gray-900 font-display">{name}</h1>
+          {L(brand, 'description') && <p className="text-gray-500 mt-1 max-w-2xl">{L(brand, 'description')}</p>}</div>
+      </div>
     </div></div>
   );
 }

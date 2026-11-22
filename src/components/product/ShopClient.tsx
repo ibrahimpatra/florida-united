@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SlidersHorizontal, Grid3X3, List, X, ChevronDown, SearchX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { RecentlyViewed } from './RecentlyViewed';
 import { ProductCard } from './ProductCard';
 import type { Product, ProductFilters, Category } from '@/types';
 
@@ -34,6 +35,7 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
   const [filters,       setFilters]       = useState<ProductFilters>({
     sortBy:      (initialFilters.sort as any) || 'newest',
     categoryId:  initialFilters.categoryId || '',
+    brand:       initialFilters.brand || undefined,
     minPrice:    initialFilters.minPrice ? Number(initialFilters.minPrice) : undefined,
     maxPrice:    initialFilters.maxPrice ? Number(initialFilters.maxPrice) : undefined,
     inStock:     initialFilters.inStock === 'true',
@@ -66,6 +68,7 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
       const params = new URLSearchParams();
       if (filters.sortBy)     params.set('sort',     filters.sortBy);
       if (filters.categoryId) params.set('categoryId', filters.categoryId);
+      if (filters.brand)      params.set('brand',      filters.brand);
       if (filters.minPrice !== undefined) params.set('minPrice', String(filters.minPrice));
       if (filters.maxPrice !== undefined) params.set('maxPrice', String(filters.maxPrice));
       if (filters.inStock)    params.set('inStock',   'true');
@@ -92,7 +95,7 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
     setPage(1);
   };
 
-  const clearFilters = () => { setFilters({ sortBy: 'newest', pageSize: 24 }); setPage(1); };
+  const clearFilters = () => { setFilters({ sortBy: 'newest', pageSize: 24, brand: initialFilters.brand || undefined }); setPage(1); };
 
   const hasFilters = !!(filters.categoryId || filters.minPrice || filters.maxPrice ||
     filters.inStock || filters.isOnSale || filters.isNewArrival || filters.isFeatured);
@@ -246,6 +249,7 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
               {products.map(p => <ProductCard key={p.id} product={p} />)}
             </div>
           )}
+          <RecentlyViewed />
           {totalPages > 1 && (
             <div className="flex justify-center gap-2 mt-10">
               <button disabled={page === 1} onClick={() => setPage(p => p - 1)}

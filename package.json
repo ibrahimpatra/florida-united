@@ -17,6 +17,7 @@
     "@stripe/react-stripe-js": "^2.7.3",
     "@stripe/stripe-js": "^3.5.0",
     "@types/pdfkit": "^0.17.7",
+    "@vercel/functions": "^1.5.0",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",

@@ -1,9 +1,11 @@
 'use client';
+import { HtmlField } from './HtmlField';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
+import { uploadImage as sendImage } from '@/lib/client-upload';
 import { Upload, X, Plus, Save, ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { generateSlug, generateSKU } from '@/lib/utils';
@@ -11,9 +13,15 @@ import type { Category } from '@/types';
 
 interface Props { initialData?: any; productId?: string; }
 
+function AiMini({ onClick, busy, label }: { onClick: () => void; busy: boolean; label: string }) {
+  return <button type="button" onClick={onClick} disabled={busy} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline disabled:opacity-50">{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}{label}</button>;
+}
+
 export function ProductForm({ initialData, productId }: Props) {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [brandNames, setBrandNames] = useState<string[]>([]);
+  useEffect(() => { fetch('/api/brands').then(r => (r.ok ? r.json() : [])).then(d => setBrandNames(Array.isArray(d) ? d.map((b: any) => b.name) : [])).catch(() => {}); }, []);
   const [images, setImages] = useState<string[]>(initialData?.images || []);
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
@@ -73,24 +81,25 @@ export function ProductForm({ initialData, productId }: Props) {
   }, [nameValue]);
 
   /** Writes descriptions (English + Arabic), meta text and tags from the name and the facts typed here. Only empty fields are filled unless "replace" is ticked. */
-  const writeWithAi = async () => {
+  const writeWithAi = async (only?: string[]) => {
     const name = String(watch('name') || '').trim();
     if (name.length < 3) { toast.error('Enter the product name first.'); return; }
     setAiBusy(true);
     try {
       const cat = categories.find((c: any) => c.id === watch('categoryId'));
       const res = await fetch('/api/admin/describe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        name, nameAr: watch('nameAr' as any), brand: watch('brand'), category: (cat as any)?.name, sku: watch('sku'), specs: aiFacts, tags, existing: aiOverwrite ? watch('description') : '',
+        name, nameAr: watch('nameAr' as any), brand: watch('brand'), category: (cat as any)?.name, sku: watch('sku'), specs: aiFacts, tags, existing: (aiOverwrite || only) ? watch('description') : '',
       }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(d.error || 'The writer is unavailable right now.'); return; }
       let n = 0;
       for (const [k, v] of Object.entries(d.fields || {})) {
-        if (!aiOverwrite && String(watch(k as any) || '').trim()) continue;
+        if (only && !only.includes(k)) continue;
+        if (!only && !aiOverwrite && String(watch(k as any) || '').trim()) continue;
         setValue(k as any, v as any, { shouldDirty: true }); n++;
       }
-      if (Array.isArray(d.tags)) setTags(ts => [...ts, ...d.tags.filter((t: string) => !ts.includes(t))].slice(0, 20));
-      toast.success(n ? `Written with ${d.provider === 'claude' ? 'Claude' : 'Gemini'}. Please read it before saving.` : 'Everything was already filled. Tick "Replace" to rewrite.');
+      if (!only && Array.isArray(d.tags)) setTags(ts => [...ts, ...d.tags.filter((t: string) => !ts.includes(t))].slice(0, 20));
+      toast.success(n ? `Written with ${d.provider === 'openai' ? 'OpenAI' : 'Gemini'}. Please read it before saving.` : 'Everything was already filled. Tick "Replace" to rewrite.');
     } catch { toast.error('Network error: check your connection and try again.'); }
     finally { setAiBusy(false); }
   };
@@ -99,15 +108,10 @@ export function ProductForm({ initialData, productId }: Props) {
     if (images.length >= 8) { toast.error('Up to 8 images per product keeps storage small.'); return; }
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('folder', 'products');
-      fd.append('name', String(watch('name') || '')); // the file is saved as <product-name>-xxxx.webp so Google Images can read it
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.url) { setImages(imgs => [...imgs, data.url]); toast.success('Image uploaded'); }
-      else toast.error(data.error || 'Upload failed');
-    } catch { toast.error('Upload error'); }
+      // the name makes the stored file <product-name>-xxxx.webp, which Google Images can read
+      const url = await sendImage(file, { folder: 'products', name: String(watch('name') || '') });
+      setImages(imgs => [...imgs, url]); toast.success('Image uploaded');
+    } catch (e: any) { toast.error(e?.message || 'Upload failed'); }
     setUploading(false);
   };
 
@@ -166,7 +170,7 @@ export function ProductForm({ initialData, productId }: Props) {
             </div>
             <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-3 mb-4">
               <div className="flex flex-wrap items-center gap-3">
-                <button type="button" onClick={writeWithAi} disabled={aiBusy} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-60">
+                <button type="button" onClick={() => writeWithAi()} disabled={aiBusy} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-60">
                   {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Write with AI
                 </button>
                 <label className="flex items-center gap-1.5 text-xs text-gray-600"><input type="checkbox" checked={aiOverwrite} onChange={e => setAiOverwrite(e.target.checked)} className="accent-brand-600" /> Replace what I already wrote</label>
@@ -195,7 +199,7 @@ export function ProductForm({ initialData, productId }: Props) {
                 </div>
               </div>
               <div>
-                <label className="label">Short Description</label>
+                <div className="flex items-center justify-between"><label className="label">Short Description</label><AiMini onClick={() => writeWithAi(['shortDescription', 'shortDescriptionAr'])} busy={aiBusy} label="Fill short text with AI" /></div>
                 <input {...register('shortDescription')} className="input-field" placeholder="One-line summary for product cards"/>
               </div>
               <div>
@@ -203,17 +207,21 @@ export function ProductForm({ initialData, productId }: Props) {
                 <input {...register('shortDescriptionAr' as any)} dir="rtl" lang="ar" className="input-field" placeholder="ملخص من سطر واحد"/>
               </div>
               <div>
-                <label className="label">Full Description *</label>
-                <textarea {...register('description',{required:'Description required'})} rows={5} className="input-field resize-y" placeholder="Detailed product description..."/>
+                <div className="flex items-center justify-between"><label className="label">Full Description *</label><AiMini onClick={() => writeWithAi(['description', 'descriptionAr'])} busy={aiBusy} label="Fill long text with AI" /></div>
+                <input type="hidden" {...register('description',{required:'Description required'})} />
+                <HtmlField value={watch('description') || ''} onChange={v => setValue('description', v, { shouldDirty: true, shouldValidate: true })} rows={8} placeholder="Plain text or simple HTML. Use the toolbar for bold, lists and links." />
+                {(errors as any).description && <p className="text-xs text-red-600 mt-1">{(errors as any).description.message}</p>}
               </div>
               <div>
                 <label className="label">Arabic Full Description <span dir="rtl" className="text-gray-400 font-normal">(الوصف الكامل)</span></label>
-                <textarea {...register('descriptionAr' as any)} dir="rtl" lang="ar" rows={5} className="input-field resize-y" placeholder="وصف تفصيلي للمنتج"/>
+                <input type="hidden" {...register('descriptionAr' as any)} />
+                <HtmlField dir="rtl" value={(watch('descriptionAr' as any) as string) || ''} onChange={v => setValue('descriptionAr' as any, v as any, { shouldDirty: true })} rows={8} placeholder="وصف تفصيلي للمنتج" />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Brand</label>
-                  <input {...register('brand')} className="input-field" placeholder="e.g. Siemens"/>
+                  <input {...register('brand')} list="brand-options" className="input-field" placeholder="Pick a brand or type a new one"/>
+                  <datalist id="brand-options">{brandNames.map(n => <option key={n} value={n} />)}</datalist>
                 </div>
                 <div>
                   <label className="label">Barcode</label>
@@ -309,6 +317,8 @@ export function ProductForm({ initialData, productId }: Props) {
             <div className="space-y-3">
               <div><label className="label">Meta Title</label><input {...register('metaTitle')} className="input-field" placeholder="Appears in Google search results"/></div>
               <div><label className="label">Meta Description</label><textarea {...register('metaDesc')} rows={2} className="input-field resize-none" placeholder="Brief description for search engines (150-160 chars)"/></div>
+              <div><label className="label">Meta Title (Arabic)</label><input {...register('metaTitleAr' as any)} dir="rtl" className="input-field" placeholder="يظهر في نتائج جوجل بالعربية"/></div>
+              <div><label className="label">Meta Description (Arabic)</label><textarea {...register('metaDescAr' as any)} dir="rtl" rows={2} className="input-field resize-none"/></div>
               <div><label className="label">Meta Keywords</label><input {...register('metaKeywords')} className="input-field" placeholder="keyword1, keyword2, keyword3"/></div>
             </div>
           </div>

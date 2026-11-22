@@ -189,6 +189,7 @@ export const p1En = {
     addCart: "Add to cart",
     sku: "SKU",
     onlyLeft: "Only {n} left",
+    inCart: "In cart",
   },
   c1_cart2: {
     title: "Shopping cart",
@@ -318,5 +319,20 @@ export const p1En = {
     errTitle: "Something went wrong",
     errBody: "We hit a snag. Please try again.",
     retry: "Try again",
+  },
+  c4_recent: {
+    title: "Recently viewed",
+  },
+  c4_loy: {
+    title: "Loyalty points",
+    pts: "points",
+    balance: "You have {points} points (worth {value}).",
+    use: "Use {points} points and save {value}",
+    min: "You can use points once you have at least {n}.",
+    willEarn: "You will earn about {n} points when this order is delivered.",
+    worth: "Worth {value} at checkout",
+    how: "Earn {earn} point per 1 KWD. {per} points = 1 KWD. Points can pay up to {pct}% of an order.",
+    next: "Spend up to {amount} in total to reach {name}.",
+    line: "Loyalty points",
   },
 };

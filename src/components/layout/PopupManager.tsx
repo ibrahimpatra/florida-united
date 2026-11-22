@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { X, Gift } from 'lucide-react';
@@ -48,7 +48,7 @@ export function PopupCard({ p, lang, onClose, onClick, preview }: { p: P; lang: 
       {onClose && <button onClick={onClose} aria-label="Close" className="absolute end-2 top-2 p-1.5 rounded-lg opacity-70 hover:opacity-100"><X className="w-4 h-4" /></button>}
       {!bar && (p.image
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={p.image} alt="" className="mx-auto mb-3 h-28 w-full rounded-xl object-cover" />
+        ? <img src={p.image} alt={(lang === 'ar' ? p.imageAltAr : p.imageAlt) || p.title || ''} className="mx-auto mb-3 h-28 w-full rounded-xl object-cover" />
         : <div className="mx-auto mb-3 w-11 h-11 rounded-full bg-black/10 flex items-center justify-center"><Gift className="w-5 h-5" /></div>)}
       <div className={bar ? 'flex-1 min-w-[160px] pe-6' : ''}>
         <h2 className={`font-display font-bold ${bar ? 'text-base' : 'text-xl'}`}>{title}</h2>

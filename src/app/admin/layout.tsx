@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { isSuperSession } from '@/lib/roles';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -8,7 +9,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!session || String(session.user.role).toLowerCase() !== 'admin') redirect('/auth/login');
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <AdminSidebar user={session.user} />
+      <AdminSidebar user={session.user} isSuper={await isSuperSession(session)} />
       {/* pt-14 on mobile to clear the fixed top bar; lg:pt-0 for desktop sidebar */}
       <main className="flex-1 overflow-y-auto pt-14 lg:pt-0">{children}</main>
     </div>

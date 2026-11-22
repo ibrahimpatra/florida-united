@@ -26,7 +26,7 @@ export function explainGemini(e: any): string {
 
 export const geminiConfigured = () => !!process.env.GEMINI_API_KEY;
 
-export type GenOpts = { fast?: boolean; timeoutMs?: number };
+export type GenOpts = { fast?: boolean; timeoutMs?: number; /** stop trying other models after this time (ms since epoch) so the request ends before Vercel's own time limit */ deadline?: number };
 
 async function call(model: string, body: any, timeoutMs: number): Promise<any> {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -66,8 +66,10 @@ export async function generate(body: any, opts: GenOpts = {}): Promise<any> {
     const ready = all.filter(m => (cooling.get(m) || 0) <= now);
     const order = round === 0 && ready.length ? ready : all;
     for (const m of order) {
+      if (opts.deadline && Date.now() > opts.deadline - 2000) throw last || new GeminiError(504, 'out of time: every model was too slow', m);
       try {
-        const d = await call(m, body, timeoutMs);
+        const left = opts.deadline ? Math.max(3000, Math.min(timeoutMs, opts.deadline - Date.now())) : timeoutMs;
+        const d = await call(m, body, left);
         if (workingModel !== m) { workingModel = m; log.info('gemini', `using model ${m}`); }
         cooling.delete(m);
         return d;

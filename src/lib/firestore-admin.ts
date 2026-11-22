@@ -10,6 +10,7 @@
  * For a catalog of up to ~10 000 products this is perfectly fast.
  */
 import { getAdminDb } from './firebase-admin';
+import { queueFill } from './bg';
 import { FieldValue } from 'firebase-admin/firestore';
 import { matchScore, computeCoupon } from './pricing';
 import type {
@@ -79,6 +80,7 @@ export async function adminCreateCategory(data: Omit<Category, 'id' | 'createdAt
     updatedAt: FieldValue.serverTimestamp(),
   });
   invalidateProductCache();
+  queueFill('categories', ref.id);
   return ref.id;
 }
 
@@ -106,6 +108,7 @@ export async function adminUpdateCategory(id: string, data: Partial<Category>): 
     clean.parentName = p?.name || ''; clean.parentNameAr = p?.nameAr || '';
   } else if ('parentId' in clean) { clean.parentId = ''; clean.parentName = ''; clean.parentNameAr = ''; }
   await db.collection('categories').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
+  queueFill('categories', id);
 
   // Keep denormalised names in sync (products + child categories) when renamed.
   if ('name' in clean || 'nameAr' in clean) {
@@ -154,6 +157,12 @@ const PRODUCT_CAP = 3000;
 const PRODUCT_CACHE_MS = 60_000;
 let productCache: { at: number; items: Product[] } | null = null;
 export function invalidateProductCache() { productCache = null; }
+
+/** Checks a saved product for missing SEO text and queues the background job. Runs after the response (waitUntil on Vercel). */
+function queueSeoJob(productId: string) {
+  const work = import('./jobs').then(m => m.enqueueSeoIfMissing(productId)).catch(() => {});
+  import('@vercel/functions').then(v => v.waitUntil(work)).catch(() => {});
+}
 
 async function loadAllProducts(fresh: boolean): Promise<Product[]> {
   if (!fresh && productCache && Date.now() - productCache.at < PRODUCT_CACHE_MS) return productCache.items;
@@ -324,6 +333,8 @@ export async function adminCreateProduct(
     updatedAt: FieldValue.serverTimestamp(),
   });
   invalidateProductCache();
+  if (clean.brand) import('./brands').then(m => m.ensureBrands([clean.brand])).catch(() => {});
+  queueSeoJob(ref.id);
   return ref.id;
 }
 
@@ -343,6 +354,8 @@ export async function adminUpdateProduct(id: string, data: Partial<Product>): Pr
   }
   await getAdminDb().collection('products').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
   invalidateProductCache();
+  if (clean.brand) import('./brands').then(m => m.ensureBrands([clean.brand])).catch(() => {});
+  queueSeoJob(id);
 }
 
 /** True when any order (new or old) contains this product. Orders keep their own copy of name/price, but history must stay linked. */
@@ -555,8 +568,9 @@ function cleanBanner(data: any, partial: boolean) {
   if (!partial || 'title' in d) { if (!String(d.title || '').trim()) throw new ProductError(400, 'Banner title is required.'); d.title = String(d.title).trim(); }
   if (!partial || 'image' in d) { if (!String(d.image || '').trim()) throw new ProductError(400, 'Banner image URL is required.'); d.image = String(d.image).trim(); }
   if ('link' in d && d.link && !/^(\/|https?:\/\/)/.test(String(d.link).trim())) throw new ProductError(400, 'Link must start with "/" or "https://".');
-  for (const k of ['subtitle', 'titleAr', 'subtitleAr', 'buttonText', 'buttonTextAr', 'link']) if (k in d) d[k] = String(d[k] ?? '').trim();
+  for (const k of ['subtitle', 'titleAr', 'subtitleAr', 'buttonText', 'buttonTextAr', 'link', 'imageAlt', 'imageAltAr']) if (k in d) d[k] = String(d[k] ?? '').trim().slice(0, 200);
   if ('sortOrder' in d) d.sortOrder = Number(d.sortOrder) || 0;
+  if (!partial || 'imageMode' in d) d.imageMode = d.imageMode === 'side' ? 'side' : 'background';
   return d;
 }
 
@@ -564,11 +578,13 @@ export async function adminCreateBanner(data: any): Promise<string> {
   const ref = await getAdminDb().collection('banners').add({
     isActive: true, sortOrder: 0, ...cleanBanner(data, false), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
+  queueFill('banners', ref.id);
   return ref.id;
 }
 
 export async function adminUpdateBanner(id: string, data: any): Promise<void> {
   await getAdminDb().collection('banners').doc(id).update({ ...cleanBanner(data, true), updatedAt: FieldValue.serverTimestamp() });
+  queueFill('banners', id);
 }
 
 export async function adminDeleteBanner(id: string): Promise<void> {
@@ -663,12 +679,14 @@ export async function adminCreateBundle(data: any): Promise<string> {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
+  queueFill('bundles', ref.id);
   return ref.id;
 }
 
 export async function adminUpdateBundle(id: string, data: any): Promise<void> {
   const clean = await normaliseBundle(data, true);
   await getAdminDb().collection('bundles').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
+  queueFill('bundles', id);
 }
 
 export async function adminDeleteBundle(id: string): Promise<void> {

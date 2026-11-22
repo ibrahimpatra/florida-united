@@ -271,6 +271,9 @@ export default function OrderDetailPage() {
                   <span>-{formatPrice(order.discount)}</span>
                 </div>
               )}
+              {(order as any).loyaltyDiscount > 0 && (
+                <div className="flex justify-between text-green-600"><span>{t('c4_loy.line')} ({(order as any).loyaltyPoints})</span><span>-{formatPrice((order as any).loyaltyDiscount)}</span></div>
+              )}
               <div className="flex justify-between text-gray-600">
                 <span>{t('orders.shipping')}</span>
                 <span>{order.shippingCost === 0 ? <span className="text-green-600 font-semibold">{t('orders.free')}</span> : formatPrice(order.shippingCost)}</span>

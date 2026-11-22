@@ -1,4 +1,6 @@
 'use client';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { SeoFields, AiFillButton } from '@/components/admin/SeoFields';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect, useCallback } from 'react';
@@ -194,11 +196,7 @@ export default function AdminBundlesPage() {
                 <textarea value={form.descriptionAr || ''} onChange={e => f('descriptionAr', e.target.value)} dir="rtl" lang="ar"
                   className="input-field resize-none h-20 text-sm" />
               </div>
-              <div>
-                <label className="label">Bundle Image URL</label>
-                <input value={form.image} onChange={e => f('image', e.target.value)}
-                  className="input-field text-sm" placeholder="https://..." />
-              </div>
+              <ImageUploadField label="Bundle picture" value={form.image || ''} onChange={v => f('image', v)} folder="bundles" name={form.name} maxSide={1000} />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Bundle Price (KD) *</label>
@@ -295,6 +293,11 @@ export default function AdminBundlesPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <AiFillButton collection="bundles" doc={form} onPatch={p => setForm((x: any) => ({ ...x, ...p }))} label="Fill Arabic + SEO with AI" />
+            <SeoFields value={form} onChange={p => setForm((x: any) => ({ ...x, ...p }))} />
           </div>
 
           <div className="flex gap-3 mt-5 pt-4 border-t border-gray-100">

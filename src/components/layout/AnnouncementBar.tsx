@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useStoreSettings } from '@/lib/useStoreSettings';
 import { formatPrice } from '@/lib/utils';

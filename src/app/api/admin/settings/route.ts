@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { isHex } from '@/lib/brand';
 import { clearBrandCache } from '@/lib/brand-server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { denyUnlessSuper } from '@/lib/api-error';
 
 const SETTINGS_PATH = 'config/storeSettings';
 
@@ -13,6 +14,7 @@ async function __GET() {
   const session = await getServerSession(authOptions);
   if (!session || String(session.user.role).toLowerCase() !== 'admin')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  { const no = await denyUnlessSuper(session); if (no) return no; }
 
   try {
     const db = getAdminDb();
@@ -27,6 +29,7 @@ async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || String(session.user.role).toLowerCase() !== 'admin')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  { const no = await denyUnlessSuper(session); if (no) return no; }
 
   try {
     const raw = await req.json();

@@ -4,6 +4,7 @@ import { Search, Mail, Phone, RefreshCw } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import type { User } from '@/types';
+import { useSession } from 'next-auth/react';
 
 export default function AdminCustomersPage() {
   const [customers, setCustomers] = useState<User[]>([]);
@@ -13,6 +14,14 @@ export default function AdminCustomersPage() {
   const [page, setPage]           = useState(1);
   const [error, setError]         = useState('');
   const [q, setQ]                 = useState('');
+  const { data: sess } = useSession();
+  const isSuper = !!(sess?.user as any)?.isSuper;
+  async function setRole(id: string, role: string) {
+    const r = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, role }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return toast.error(d.error || 'Could not change the role');
+    toast.success(d.note || 'Role changed'); load(page, q);
+  }
 
   const load = useCallback(async (p: number, term = '') => {
     setLoading(true);
@@ -105,9 +114,11 @@ export default function AdminCustomersPage() {
                         : '—'}
                     </td>
                     <td>
-                      <span className={`badge text-xs font-bold ${c.role === 'admin' ? 'badge-red' : 'badge-blue'}`}>
-                        {c.role}
-                      </span>
+                      {isSuper
+                        ? <select value={c.role} onChange={e => setRole(c.uid, e.target.value)} className="input-field py-1 px-2 text-xs w-auto">
+                            <option value="customer">customer</option><option value="admin">admin</option><option value="superadmin">superadmin</option>
+                          </select>
+                        : <span className={`badge text-xs font-bold ${c.role === 'admin' || c.role === 'superadmin' ? 'badge-red' : 'badge-blue'}`}>{c.role}</span>}
                     </td>
                     <td>
                       <span className={`badge text-xs font-bold ${c.isActive !== false ? 'badge-green' : 'badge-gray'}`}>

@@ -1,7 +1,7 @@
 'use client';
 // AI-powered product recommendations — like Amazon / Noon / Carrefour Kuwait
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { Sparkles, Loader2, Package } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatPrice, calculateDiscount } from '@/lib/utils';

@@ -1,4 +1,5 @@
 'use client';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
@@ -6,11 +7,12 @@ import { Plus, Edit2, Trash2, Save, X, Home, Navigation } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { generateSlug } from '@/lib/utils';
 import type { Category } from '@/types';
+import { SeoFields, AiFillButton } from '@/components/admin/SeoFields';
 
 const EMPTY_FORM = {
   name: '', nameAr: '', slug: '', description: '', descriptionAr: '', parentId: '',
   isActive: true, showOnHome: true, showOnNav: true,
-  sortOrder: 0, metaTitle: '', metaDesc: '',
+  sortOrder: 0, metaTitle: '', metaDesc: '', metaTitleAr: '', metaDescAr: '', tags: [] as string[],
   image: '', icon: '', productCount: 0,
 };
 
@@ -39,7 +41,7 @@ export default function AdminCategoriesPage() {
       name: c.name, nameAr: c.nameAr || '', slug: c.slug, description: c.description || '', descriptionAr: c.descriptionAr || '',
       parentId: c.parentId || '', isActive: c.isActive,
       showOnHome: c.showOnHome ?? true, showOnNav: c.showOnNav ?? true,
-      sortOrder: c.sortOrder, metaTitle: c.metaTitle || '', metaDesc: c.metaDesc || '',
+      sortOrder: c.sortOrder, metaTitle: c.metaTitle || '', metaDesc: c.metaDesc || '', metaTitleAr: (c as any).metaTitleAr || '', metaDescAr: (c as any).metaDescAr || '', tags: (c as any).tags || [],
       image: c.image || '', icon: c.icon || '', productCount: c.productCount || 0,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -180,16 +182,7 @@ export default function AdminCategoriesPage() {
             </div>
 
             {/* Image URL */}
-            <div className="sm:col-span-2">
-              <label className="label">
-                Image URL
-                <span className="text-gray-400 font-normal text-xs ml-1">(shows on homepage grid — leave blank to use emoji icon)</span>
-              </label>
-              <input value={form.image} onChange={e => setForm(f => ({ ...f, image: e.target.value }))} className="input-field" placeholder="https://..."/>
-              {form.image && (
-                <img src={form.image} alt="preview" className="mt-2 h-16 w-16 object-cover rounded-xl border border-gray-200 shadow-sm"/>
-              )}
-            </div>
+            <div className="sm:col-span-2"><ImageUploadField label="Category picture (shows on the homepage grid; blank = use the icon)" value={form.image} onChange={v => setForm(f => ({ ...f, image: v }))} folder="categories" name={form.name} maxSide={800} /></div>
 
             {/* Icon + Count */}
             <div>
@@ -205,14 +198,11 @@ export default function AdminCategoriesPage() {
               <NumberInput type="number" value={form.productCount} onChange={e => setForm(f => ({ ...f, productCount: Number(e.target.value) }))} className="input-field" placeholder="0"/>
             </div>
 
-            {/* Meta */}
-            <div>
-              <label className="label">Meta Title <span className="text-gray-400 font-normal text-xs">(SEO)</span></label>
-              <input value={form.metaTitle} onChange={e => setForm(f => ({ ...f, metaTitle: e.target.value }))} className="input-field"/>
-            </div>
-            <div>
-              <label className="label">Meta Description <span className="text-gray-400 font-normal text-xs">(SEO)</span></label>
-              <input value={form.metaDesc} onChange={e => setForm(f => ({ ...f, metaDesc: e.target.value }))} className="input-field"/>
+            {/* SEO + Arabic */}
+            <div className="sm:col-span-2 space-y-3">
+              <AiFillButton collection="categories" doc={form} onPatch={p => setForm(f => ({ ...f, ...p }))} label="Fill Arabic + SEO with AI" />
+              <SeoFields value={form} onChange={p => setForm(f => ({ ...f, ...p }))} alt={false} />
+              <p className="text-xs text-gray-500">Leave Arabic or SEO empty and the background job fills them after you save (see Admin &gt; Jobs).</p>
             </div>
 
             {/* Visibility toggles */}

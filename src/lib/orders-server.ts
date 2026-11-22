@@ -11,6 +11,8 @@
  *    transaction; on collision a new number is drawn.
  *  - Cancel restores stock + rollups exactly once (already-cancelled is a no-op).
  */
+import { loadLoyaltySettings } from './loyalty';
+import { redeemPlan } from './loyalty-core';
 import { randomInt } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import type { Firestore } from 'firebase-admin/firestore';
@@ -200,6 +202,7 @@ export interface PlaceOrderInput {
   userId: string; userEmail: string; userName: string; userPhone?: string;
   idempotencyKey?: string; contactEmail?: string; items: RawItem[]; shippingAddress: any;
   shippingRateId?: string; couponCode?: string; notes?: string; paymentMethod: 'cod' | 'card';
+  redeemPoints?: number;
 }
 
 export async function placeOrder(input: PlaceOrderInput) {
@@ -246,6 +249,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     else need.set(l.productId, (need.get(l.productId) || 0) + l.quantity * (l.unitFactor || 1));
   }
 
+  const loyalty = Number(input.redeemPoints) > 0 ? await loadLoyaltySettings(db) : null;
   const contactEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(input.contactEmail || '').trim()) ? String(input.contactEmail).trim().toLowerCase().slice(0, 120) : '';
   const day = kuwaitDay();
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -289,7 +293,15 @@ export async function placeOrder(input: PlaceOrderInput) {
           if (!res.valid) throw new OrderError(400, res.error || 'Invalid coupon.', 'BAD_COUPON');
           discount = res.discount;
         }
-        const total = computeTotal(subtotal, discount, shippingCost);
+        // Loyalty points: balance read inside the transaction, so two checkouts can never spend the same points.
+        let loyaltyPoints = 0, loyaltyDiscount = 0;
+        const userRef = db.collection('users').doc(input.userId);
+        if (loyalty?.enabled) {
+          const bal = Math.max(0, Math.floor(Number(((await tx.get(userRef)).data() as any)?.loyaltyPoints) || 0));
+          const plan = redeemPlan(loyalty, Number(input.redeemPoints), bal, round3(subtotal - discount));
+          loyaltyPoints = plan.points; loyaltyDiscount = plan.discount;
+        }
+        const total = computeTotal(subtotal, discount + loyaltyDiscount, shippingCost);
 
         // ---------- WRITES ----------
         const orderRef = db.collection('orders').doc();
@@ -312,7 +324,7 @@ export async function placeOrder(input: PlaceOrderInput) {
           userPhone: address.phone, shippingAddress: address, items,
           productIds: [...new Set(items.map((i: any) => i.productId).concat(items.flatMap((i: any) => (i.bundleItems || []).map((b: any) => b.productId))).filter(Boolean))], // lets us tell if a product has order history
           status: 'pending', paymentStatus: 'pending', paymentMethod: method, ...(provider ? { paymentProvider: provider.id } : {}), currency: 'KWD',
-          subtotal, discount, ...(dealDiscount > 0 ? { dealDiscount, dealIds: usedDealIds } : {}), shippingCost, shippingMethod: chosen.name, tax: 0, total,
+          subtotal, discount, ...(loyaltyPoints > 0 ? { loyaltyPoints, loyaltyDiscount } : {}), ...(dealDiscount > 0 ? { dealDiscount, dealIds: usedDealIds } : {}), shippingCost, shippingMethod: chosen.name, tax: 0, total,
           couponCode: code || null, couponId: couponRef?.id || null, notes: String(input.notes || '').slice(0, 500) || null,
           statsDay: day, idempotencyKey: input.idempotencyKey || null,
           statusHistory: [{ status: 'pending', note: 'Order placed', createdAt: nowIso }],
@@ -340,8 +352,9 @@ export async function placeOrder(input: PlaceOrderInput) {
           { name: c.name, revenue: FieldValue.increment(c.revenue), units: FieldValue.increment(c.units) }, { merge: true }));
         tx.set(db.collection('statsDaily').doc(day),
           { date: day, revenue: FieldValue.increment(total), orders: FieldValue.increment(1), units: FieldValue.increment(units) }, { merge: true });
-        tx.set(db.collection('users').doc(input.userId),
-          { totalSpent: FieldValue.increment(total), orderCount: FieldValue.increment(1), lastOrderAt: FieldValue.serverTimestamp() }, { merge: true });
+        tx.set(userRef,
+          { totalSpent: FieldValue.increment(total), orderCount: FieldValue.increment(1), lastOrderAt: FieldValue.serverTimestamp(), ...(loyaltyPoints > 0 ? { loyaltyPoints: FieldValue.increment(-loyaltyPoints) } : {}) }, { merge: true });
+        if (loyaltyPoints > 0) tx.set(db.collection('loyaltyLedger').doc(`${orderRef.id}_redeem`), { userId: input.userId, orderId: orderRef.id, orderNumber, type: 'redeem', points: -loyaltyPoints, note: `Used on order ${orderNumber}`, createdAt: nowIso });
         if (couponRef) {
           tx.update(couponRef, { usedCount: FieldValue.increment(1) });
           tx.set(db.collection('couponUsage').doc(`${couponRef.id}_${input.userId}`), { couponId: couponRef.id, userId: input.userId, count: FieldValue.increment(1) }, { merge: true });
@@ -351,7 +364,7 @@ export async function placeOrder(input: PlaceOrderInput) {
           tx.set(usageRefs[i], { dealId: usedDealIds[i], userId: input.userId, count: FieldValue.increment(1) }, { merge: true });
         });
 
-        const result = { orderId: orderRef.id, orderNumber, total, subtotal, discount, shippingCost };
+        const result = { orderId: orderRef.id, orderNumber, total, subtotal, discount, shippingCost, ...(loyaltyPoints > 0 ? { loyaltyPoints, loyaltyDiscount } : {}) };
         if (lockRef) tx.set(lockRef, { ...result, userId: input.userId, createdAt: FieldValue.serverTimestamp() });
 
         return {
@@ -360,7 +373,7 @@ export async function placeOrder(input: PlaceOrderInput) {
             id: orderRef.id, orderNumber, userId: input.userId, userEmail: input.userEmail, userName: input.userName,
             ...(contactEmail ? { contactEmail } : {}),
             userPhone: address.phone, shippingAddress: address, status: 'pending', paymentStatus: 'pending',
-            paymentMethod: method, currency: 'KWD', items, subtotal, discount, ...(dealDiscount > 0 ? { dealDiscount } : {}), shippingCost, shippingMethod: chosen.name, tax: 0, total,
+            paymentMethod: method, currency: 'KWD', items, subtotal, discount, ...(loyaltyPoints > 0 ? { loyaltyPoints, loyaltyDiscount } : {}), ...(dealDiscount > 0 ? { dealDiscount } : {}), shippingCost, shippingMethod: chosen.name, tax: 0, total,
             couponCode: code || null, notes: String(input.notes || '').slice(0, 500) || null,
             createdAt: nowIso, updatedAt: nowIso,
           },
@@ -443,6 +456,10 @@ export async function cancelOrder(args: { orderId: string; actor: { id: string; 
       tx.set(db.collection('flashDealUsage').doc(`${dealId}_${o.userId}`), { count: FieldValue.increment(-1) }, { merge: true });
     }
 
+    if (Number(o.loyaltyPoints) > 0) { // points used on this order go back to the customer
+      tx.set(db.collection('users').doc(o.userId), { loyaltyPoints: FieldValue.increment(Number(o.loyaltyPoints)) }, { merge: true });
+      tx.set(db.collection('loyaltyLedger').doc(`${args.orderId}_refund`), { userId: o.userId, orderId: args.orderId, orderNumber: o.orderNumber || '', type: 'refund', points: Number(o.loyaltyPoints), note: `Order ${o.orderNumber || ''} cancelled`, createdAt: new Date().toISOString() });
+    }
     const wasPaid = o.paymentStatus === 'paid';
     tx.update(ref, {
       status: 'cancelled', cancelledAt: FieldValue.serverTimestamp(), cancelledBy: isAdmin ? 'admin' : 'customer',

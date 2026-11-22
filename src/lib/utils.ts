@@ -1,3 +1,4 @@
+import { productLink } from './site-url';
 // src/lib/utils.ts
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -86,8 +87,7 @@ export function generateSKU(name: string): string {
 }
 
 export function buildShareUrl(productSlug: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  return `${base}/products/${productSlug}`;
+  return productLink(productSlug);
 }
 
 export const ORDER_STATUSES = [

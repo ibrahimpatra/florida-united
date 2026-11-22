@@ -19,6 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: cat.metaTitle || cat.name,
     description: cat.metaDesc || `Shop ${cat.name}. Best prices on hardware and electrical supplies in Kuwait.`,
+    keywords: (cat as any).tags?.length ? (cat as any).tags : undefined,
     alternates: altLinks(`/shop/${cat.slug}`),
   };
 }
