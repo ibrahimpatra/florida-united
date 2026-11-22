@@ -11,6 +11,7 @@ import { refundCardOrder, expireStripeSession } from './stripe';
 import { getAdminDb } from './firebase-admin';
 import { cancelOrder, OrderError } from './orders-server';
 import { log } from './logger';
+import { awardForDelivered } from './loyalty';
 
 export const VALID_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'return_requested', 'return_approved', 'return_rejected', 'return_picked_up', 'returned', 'refunded'];
 const FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered'];
@@ -73,6 +74,7 @@ export async function changeOrderStatus(i: ChangeInput) {
     return { success: true, orderNumber: order.orderNumber as string, status: 'shipped' };
   }
   await adminUpdateOrderStatus(i.orderId, status!, note);
+  if (status === 'delivered') await awardForDelivered(i.orderId).catch(e => log.error('loyalty', 'could not award points', { order: order.orderNumber, error: e?.message }));
   sendOrderStatusUpdate({ ...order, status }, status!, note).catch(e => log.error('email', 'status email failed', { order: order.orderNumber, error: e?.message }));
   sendWhatsAppStatusUpdate({ ...order, status }, status!).catch(e => log.error('whatsapp', 'status message failed', { order: order.orderNumber, error: e?.message }));
   return { success: true, orderNumber: order.orderNumber as string, status: status! };

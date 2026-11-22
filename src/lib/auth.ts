@@ -14,6 +14,7 @@ declare module 'next-auth' {
       email?: string | null;
       image?: string | null;
       role: string;
+      isSuper?: boolean;
       phone?: string;
     };
   }
@@ -117,12 +118,15 @@ export const authOptions: NextAuthOptions = {
           token.role = 'customer';
         }
       }
+      // A superadmin acts as "admin" everywhere (existing checks keep working) and carries a flag for the 3 super-only tabs.
+      if (token.role === 'superadmin') { token.role = 'admin'; token.isSuper = true; }
       return token;
     },
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.isSuper = !!token.isSuper;
       }
       return session;
     },

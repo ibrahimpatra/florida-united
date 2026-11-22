@@ -113,6 +113,7 @@ export default function AdminOrderDetailPage() {
               <div className="p-4 space-y-1.5 text-sm bg-gray-50">
                 <div className="flex justify-between text-gray-600"><span>Subtotal</span><b>{formatPrice(order.subtotal)}</b></div>
                 {order.discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><b>-{formatPrice(order.discount)}</b></div>}
+                {(order as any).loyaltyDiscount > 0 && <div className="flex justify-between text-green-600"><span>Loyalty points ({(order as any).loyaltyPoints})</span><b>-{formatPrice((order as any).loyaltyDiscount)}</b></div>}
                 <div className="flex justify-between text-gray-600"><span>Shipping</span><b>{order.shippingCost === 0 ? 'FREE' : formatPrice(order.shippingCost)}</b></div>
                 <div className="flex justify-between text-gray-600"><span>Tax</span><b>{formatPrice(order.tax)}</b></div>
                 <div className="flex justify-between text-base font-black text-gray-900 pt-1.5 border-t border-gray-200"><span>TOTAL</span><span className="text-brand-700">{formatPrice(order.total)}</span></div>
@@ -145,6 +146,7 @@ export default function AdminOrderDetailPage() {
               <tfoot>
                 <tr><td colSpan={4} className="text-right text-gray-600">Subtotal</td><td className="text-right font-bold">{formatPrice(order.subtotal)}</td></tr>
                 {order.discount>0 && <tr><td colSpan={4} className="text-right text-green-600">Discount</td><td className="text-right font-bold text-green-600">-{formatPrice(order.discount)}</td></tr>}
+                {(order as any).loyaltyDiscount>0 && <tr><td colSpan={4} className="text-right text-green-600">Loyalty points ({(order as any).loyaltyPoints})</td><td className="text-right font-bold text-green-600">-{formatPrice((order as any).loyaltyDiscount)}</td></tr>}
                 <tr><td colSpan={4} className="text-right text-gray-600">Shipping</td><td className="text-right font-bold">{order.shippingCost===0?'FREE':formatPrice(order.shippingCost)}</td></tr>
                 <tr><td colSpan={4} className="text-right text-gray-600">Tax</td><td className="text-right font-bold">{formatPrice(order.tax)}</td></tr>
                 <tr className="bg-gray-50"><td colSpan={4} className="text-right font-black text-gray-900 text-base">TOTAL</td><td className="text-right font-black text-brand-700 text-lg">{formatPrice(order.total)}</td></tr>

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { Package } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { Category } from '@/types';

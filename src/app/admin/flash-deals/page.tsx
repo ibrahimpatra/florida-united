@@ -4,6 +4,8 @@ import { Zap, Plus, Pencil, Trash2, X, Clock, Percent, Banknote, Gift, Loader2, 
 import { toast } from 'react-hot-toast';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { EntityPicker, categoryWithDescendants } from '@/components/admin/EntityPicker';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { SeoFields, AiFillButton } from '@/components/admin/SeoFields';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { formatPrice } from '@/lib/utils';
 import type { FlashDeal } from '@/lib/shipping';
@@ -223,10 +225,22 @@ export default function AdminFlashDealsPage() {
                   {SWATCHES.map(c => <button key={c} type="button" aria-label={c} onClick={() => set({ bannerColor: c })} className={`w-8 h-8 rounded-full border-2 ${form.bannerColor === c ? 'border-gray-900 scale-110' : 'border-white shadow'}`} style={{ background: c }} />)}
                   <input type="color" value={form.bannerColor || '#b91c1c'} onChange={e => set({ bannerColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer" aria-label="Custom colour" />
                 </div>
-                <div className="rounded-xl p-5 text-white" style={{ background: form.bannerColor }}>
+                <div className="mb-3">
+                  <ImageUploadField label="Banner picture (optional)" value={form.image || ''} onChange={v => set({ image: v })} folder="banners" name={form.title || 'deal'} maxSide={1600} wide hint="Leave empty for a plain coloured banner." />
+                  {form.image ? (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      {[['background', 'Full background'], ['side', 'Small side picture']].map(([v, t]) => (
+                        <button key={v} type="button" onClick={() => set({ imageMode: v as 'background' | 'side' })} className={`rounded-xl border-2 p-2 text-sm font-semibold ${((form.imageMode || 'background') === v) ? 'border-brand-600 bg-brand-50' : 'border-gray-200'}`}>{t}</button>))}
+                    </div>) : null}
+                </div>
+                <div className="rounded-xl p-5 text-white relative overflow-hidden flex items-center gap-4" style={{ background: form.bannerColor }}>
+                  {form.image && (form.imageMode || 'background') === 'background' && <><img src={form.image} alt="" className="absolute inset-0 w-full h-full object-cover" /><div className="absolute inset-0 bg-black/50" /></>}
+                  <div className="relative flex-1 min-w-0">
                   <p className="text-[11px] font-bold tracking-wide opacity-90">{form.badgeText || 'Flash deal'}</p>
                   <p className="text-xl font-extrabold mt-1">{form.title || 'Your deal name'}</p>
                   <p className="text-sm opacity-90">{form.subtitle || offerText(form)}</p>
+                  </div>
+                  {form.image && form.imageMode === 'side' && <img src={form.image} alt="" className="relative w-24 h-24 object-contain rounded-xl bg-white/10 p-1" />}
                 </div>
                 <p className="text-xs text-gray-500 mt-2">The real banner also shows the countdown and a Shop now button, in English and Arabic.</p>
               </section>
@@ -245,6 +259,11 @@ export default function AdminFlashDealsPage() {
                   </div>
                 )}
               </section>
+            </div>
+
+            <div className="px-5 pb-4 space-y-3">
+              <AiFillButton collection="flashDeals" doc={form as any} onPatch={p => set(p as any)} label="Fill Arabic + SEO with AI" />
+              <SeoFields value={form as any} onChange={p => set(p as any)} />
             </div>
 
             <div className="sticky bottom-0 bg-white border-t px-5 py-3 flex items-center justify-end gap-2">

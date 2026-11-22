@@ -1,11 +1,13 @@
 'use client';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { SeoFields, AiFillButton } from '@/components/admin/SeoFields';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Pencil, X, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
-const EMPTY = { title: '', titleAr: '', subtitle: '', subtitleAr: '', image: '', link: '', buttonText: 'Shop Now', buttonTextAr: 'تسوق الآن', isActive: true, sortOrder: 0 };
+const EMPTY = { title: '', titleAr: '', subtitle: '', subtitleAr: '', image: '', link: '', imageMode: 'background', buttonText: 'Shop Now', buttonTextAr: 'تسوق الآن', isActive: true, sortOrder: 0 };
 
 export default function AdminBannersPage() {
   const [banners, setBanners] = useState<any[]>([]);
@@ -83,12 +85,25 @@ export default function AdminBannersPage() {
             <div><label className="label">Arabic Title <span dir="rtl" className="text-gray-400 font-normal">(العنوان بالعربية)</span></label><input value={form.titleAr || ''} onChange={e => f('titleAr', e.target.value)} dir="rtl" lang="ar" className="input-field" placeholder="تخفيضات الصيف" /></div>
             <div><label className="label">Subtitle</label><input value={form.subtitle || ''} onChange={e => f('subtitle', e.target.value)} className="input-field" placeholder="Up to 40% off selected items" /></div>
             <div><label className="label">Arabic Subtitle <span dir="rtl" className="text-gray-400 font-normal">(الوصف بالعربية)</span></label><input value={form.subtitleAr || ''} onChange={e => f('subtitleAr', e.target.value)} dir="rtl" lang="ar" className="input-field" placeholder="خصم يصل إلى 40% على منتجات مختارة" /></div>
-            <div className="sm:col-span-2"><label className="label">Image URL *</label><input value={form.image} onChange={e => f('image', e.target.value)} className="input-field" placeholder="https://..." /></div>
+            <div className="sm:col-span-2"><ImageUploadField label="Banner picture *" value={form.image} onChange={v => f('image', v)} folder="banners" name={form.title} maxSide={1920} wide hint={form.imageMode === 'side' ? 'A small picture (product, logo or offer). It is shown beside the text on a coloured background.' : 'Wide pictures (about 1920×700) work best as a full background.'} /></div>
+            <div className="sm:col-span-2">
+              <label className="label">How to show the picture</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[['background', 'Full background', 'Picture fills the whole banner, text on top'], ['side', 'Small side picture', 'Coloured banner, picture next to the text']].map(([v, t, d]) => (
+                  <button key={v} type="button" onClick={() => f('imageMode', v)} className={`text-start rounded-xl border-2 p-3 ${((form.imageMode || 'background') === v) ? 'border-brand-600 bg-brand-50' : 'border-gray-200'}`}>
+                    <span className="block font-semibold text-sm text-gray-900">{t}</span><span className="block text-xs text-gray-500">{d}</span>
+                  </button>))}
+              </div>
+            </div>
             <div><label className="label">Link</label><input value={form.link || ''} onChange={e => f('link', e.target.value)} className="input-field" placeholder="/shop/electrical" /></div>
             <div><label className="label">Sort Order</label><NumberInput type="number" value={form.sortOrder} onChange={e => f('sortOrder', Number(e.target.value))} className="input-field" /></div>
             <div><label className="label">Button Text</label><input value={form.buttonText || ''} onChange={e => f('buttonText', e.target.value)} className="input-field" /></div>
             <div><label className="label">Arabic Button Text <span dir="rtl" className="text-gray-400 font-normal">(نص الزر)</span></label><input value={form.buttonTextAr || ''} onChange={e => f('buttonTextAr', e.target.value)} dir="rtl" lang="ar" className="input-field" /></div>
             <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={form.isActive} onChange={e => f('isActive', e.target.checked)} className="w-4 h-4 accent-brand-600" />Active</label>
+          </div>
+          <div className="mt-4 space-y-3">
+            <AiFillButton collection="banners" doc={form} onPatch={p => setForm((x: any) => ({ ...x, ...p }))} label="Fill Arabic + picture text with AI" />
+            <SeoFields value={form} onChange={p => setForm((x: any) => ({ ...x, ...p }))} meta={false} />
           </div>
           <div className="flex gap-2 mt-4">
             <button onClick={() => setForm(null)} className="btn-secondary py-2 px-4 text-sm">Cancel</button>

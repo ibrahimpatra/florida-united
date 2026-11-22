@@ -14,7 +14,7 @@ export const maxDuration = 30;
 async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || String(session.user.role).toLowerCase() !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!aiConfigured()) return NextResponse.json({ error: 'Translation needs ANTHROPIC_API_KEY or GEMINI_API_KEY in the server environment.' }, { status: 503 });
+  if (!aiConfigured()) return NextResponse.json({ error: 'Translation needs GEMINI_API_KEY or OPENAI_API_KEY in the server environment.' }, { status: 503 });
 
   const body = await req.json().catch(() => ({}));
   const texts: Record<string, string> = {};

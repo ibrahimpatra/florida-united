@@ -36,6 +36,8 @@ const order = (o: any) => ({
   orderNumber: o.orderNumber, status: o.status, paymentMethod: o.paymentMethod, paymentStatus: o.paymentStatus,
   total: o.total, createdAt: o.createdAt, governorate: o.shippingAddress?.governorate,
   trackingNumber: o.trackingNumber || undefined, carrier: o.carrier || undefined,
+  lastUpdate: [...(o.statusHistory || [])].pop()?.note || undefined, estimatedDelivery: o.estimatedDelivery || undefined,
+  link: o.id ? `/account/orders/${o.id}` : undefined,
   items: (o.items || []).map((i: any) => ({ name: i.productName, nameAr: i.productNameAr || undefined, unit: i.variantName || undefined, qty: i.quantity, lineTotal: i.total })),
 });
 

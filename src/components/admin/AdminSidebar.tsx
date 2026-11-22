@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   AlertTriangle, Megaphone, LayoutDashboard, Package, ShoppingCart, Users, Tag, Percent, Image,
   Settings, LogOut, Menu, X, RotateCcw, Zap, Truck, Ruler, Upload,
-  Gift, BarChart2,
+  Gift, BarChart2, Store, ListChecks, Sparkles, Award, Network,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import { useState, useEffect } from 'react';
@@ -18,6 +18,7 @@ const nav = [
   { href:'/admin/bundles',     icon:Gift,            label:'Bundles' },
   { href:'/admin/import',      icon:Upload,          label:'Bulk Import' },
   { href:'/admin/categories',  icon:Tag,             label:'Categories' },
+  { href:'/admin/brands',      icon:Award,           label:'Brands' },
   { href:'/admin/customers',   icon:Users,           label:'Customers' },
   { href:'/admin/returns',     icon:RotateCcw,       label:'Returns' },
   { href:'/admin/flash-deals', icon:Zap,             label:'Flash Deals' },
@@ -26,11 +27,15 @@ const nav = [
   { href:'/admin/uoms',        icon:Ruler,           label:'Units (UOM)' },
   { href:'/admin/banners',     icon:Image,           label:'Banners' },
   { href:'/admin/popups',      icon:Megaphone,       label:'Popups' },
-  { href:'/admin/issues',      icon:AlertTriangle,   label:'Issues' },
-  { href:'/admin/settings',    icon:Settings,        label:'Settings' },
-];
+  { href:'/admin/loyalty',     icon:Gift,            label:'Loyalty' },
+  { href:'/admin/promo-tiles', icon:Sparkles,        label:'Promo Tiles' },
+  { href:'/admin/jobs',        icon:ListChecks,      label:'Jobs',     superOnly:true },
+  { href:'/admin/issues',      icon:AlertTriangle,   label:'Issues',   superOnly:true },
+  { href:'/admin/graph',       icon:Network,         label:'Code graph', superOnly:true },
+  { href:'/admin/settings',    icon:Settings,        label:'Settings', superOnly:true },
+] as { href:string; icon:any; label:string; superOnly?:boolean }[];
 
-function SidebarContent({ user, onClose }: { user: any; onClose?: () => void }) {
+function SidebarContent({ user, onClose, isSuper }: { user: any; onClose?: () => void; isSuper?: boolean }) {
   const SITE_CONFIG = useBrand();
   const path = usePathname();
   return (
@@ -53,9 +58,14 @@ function SidebarContent({ user, onClose }: { user: any; onClose?: () => void }) 
         )}
       </div>
 
+      <Link href="/" target="_blank" onClick={onClose}
+        className="mx-2 mt-3 flex items-center gap-2 rounded-xl border border-gray-700 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-800 hover:text-white">
+        <Store className="w-4 h-4" /> View store
+      </Link>
+
       {/* Nav */}
       <nav className="flex-1 py-3 space-y-0.5 px-2 overflow-y-auto">
-        {nav.map(({ href, icon: Icon, label }) => {
+        {nav.filter(n => !n.superOnly || isSuper).map(({ href, icon: Icon, label }) => {
           const active = path === href || path.startsWith(href + '/');
           return (
             <Link key={href} href={href} onClick={onClose}
@@ -77,7 +87,7 @@ function SidebarContent({ user, onClose }: { user: any; onClose?: () => void }) 
           </div>
           <div className="min-w-0">
             <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
-            <p className="text-xs text-gray-400">Administrator</p>
+            <p className="text-xs text-gray-400">{isSuper ? "Super admin" : "Administrator"}</p>
           </div>
         </div>
         <button onClick={() => signOut({ callbackUrl: '/' })}
@@ -90,7 +100,7 @@ function SidebarContent({ user, onClose }: { user: any; onClose?: () => void }) 
   );
 }
 
-export function AdminSidebar({ user }: { user: any }) {
+export function AdminSidebar({ user, isSuper }: { user: any; isSuper?: boolean }) {
   const SITE_CONFIG = useBrand();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const path = usePathname();
@@ -102,7 +112,7 @@ export function AdminSidebar({ user }: { user: any }) {
     <>
       {/* ── Desktop sidebar ── */}
       <aside className="hidden lg:flex w-56 bg-gray-900 text-white flex-col flex-shrink-0 h-screen">
-        <SidebarContent user={user} />
+        <SidebarContent user={user} isSuper={isSuper} />
       </aside>
 
       {/* ── Mobile top bar ── */}
@@ -123,7 +133,7 @@ export function AdminSidebar({ user }: { user: any }) {
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
           <aside className="relative w-72 max-w-[85vw] bg-gray-900 text-white flex flex-col h-full shadow-2xl">
-            <SidebarContent user={user} onClose={() => setDrawerOpen(false)} />
+            <SidebarContent user={user} isSuper={isSuper} onClose={() => setDrawerOpen(false)} />
           </aside>
         </div>
       )}

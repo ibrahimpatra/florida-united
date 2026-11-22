@@ -1,4 +1,5 @@
 'use client';
+import { uploadImage } from '@/lib/client-upload';
 import { useRef, useState } from 'react';
 import { Palette, Upload, Download, RotateCcw, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -38,11 +39,7 @@ function ImageField({ label, value, onChange, hint }: { label: string; value: st
     if (!f) return;
     setBusy(true);
     try {
-      const fd = new FormData(); fd.append('file', f); fd.append('folder', 'brand');
-      const r = await fetch('/api/upload', { method: 'POST', body: fd });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.url) throw new Error(d.error || 'Upload failed');
-      onChange(d.url);
+      onChange(await uploadImage(f, { folder: 'brand', maxSide: 1024 }));
     } catch (e: any) { toast.error(e.message || 'Upload failed'); }
     setBusy(false);
   };

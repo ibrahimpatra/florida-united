@@ -1,7 +1,8 @@
 'use client';
+import { productLink, shareLink } from '@/lib/site-url';
 import { useState, useEffect } from 'react';
 import { ShoppingCart, Heart, Share2, MessageCircle, Star, Truck, Shield, RotateCcw, ChevronRight, Plus, Minus, Check, Package, Ruler } from 'lucide-react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { returnWindowDays } from '@/lib/returns';
 import { useCartStore } from '@/store/cartStore';
 import { useWishlistStore } from '@/store/wishlistStore';
@@ -14,12 +15,17 @@ import { useStoreSettings } from '@/lib/useStoreSettings';
 import type { Product } from '@/types';
 import { ProductCard } from './ProductCard';
 import { AIRecommendations } from './AIRecommendations';
+import { renderDescription } from '@/lib/sanitize-html';
+import { RecentlyViewed } from './RecentlyViewed';
+import { useRecentStore } from '@/store/recentStore';
 
 export function ProductDetailClient({ product, relatedProducts }: { product: Product; relatedProducts: Product[] }) {
   const storeSettings = useStoreSettings();
   const { t, L, isArabic } = useLanguage();
   const { freeShippingThreshold } = useStoreSettings();
   const [qty, setQty] = useState(1);
+  const addRecent = useRecentStore(st => st.add);
+  useEffect(() => { addRecent(product.id); }, [product.id, addRecent]);
   const name = L(product, 'name');
   const [liveStock, setLiveStock] = useState(product.stock);
 
@@ -63,10 +69,10 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
     setTimeout(() => setAdding(false), 800);
   };
 
-  const handleShare = () => {
-    const url = window.location.href;
-    if (navigator.share) navigator.share({ title: name, url }).catch(() => {});
-    else { navigator.clipboard.writeText(url); toast.success(t('c1_pd.copied')); }
+  const handleShare = async () => {
+    const url = productLink(product.slug, window.location.pathname.startsWith('/ar'));
+    const r = await shareLink(name, url);
+    if (r === 'copied') toast.success(t('c1_pd.copied')); else if (r === 'failed') toast.error(url);
   };
 
   const handleWhatsApp = async () => {
@@ -225,7 +231,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
         </div>
       </div>
       <div className="mb-16">
-        {tab === 'desc' && <div className="prose prose-sm max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: L(product, 'description') }} />}
+        {tab === 'desc' && <div className="prose prose-sm max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: renderDescription(L(product, 'description')) }} />}
         {tab === 'specs' && (
           <div className="text-sm text-gray-600 space-y-2">
             {product.weight && <div className="flex gap-4 py-2 border-b"><span className="w-32 text-gray-500">{t('c1_pd.weight')}</span><span>{product.weight} {t('c1_pd.kg')}</span></div>}
@@ -238,6 +244,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
 
       {/* AI-powered recommendations */}
       <AIRecommendations productId={product.id} currentCategory={product.categoryId} />
+      <RecentlyViewed exclude={[product.id]} />
 
       {/* Fallback related products (category-based) */}
       {relatedProducts.length > 0 && (

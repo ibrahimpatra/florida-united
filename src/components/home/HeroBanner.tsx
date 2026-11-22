@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { ChevronLeft, ChevronRight, Check, LayoutGrid } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useStoreSettings } from '@/lib/useStoreSettings';
 import { formatPrice } from '@/lib/utils';
 
-interface Slide { id: string; bg?: string; image?: string; badge?: string; title: string; subtitle?: string; description?: string; cta?: string; ctaLink: string; cta2?: string; cta2Link?: string }
+interface Slide { alt?: string; mode?: 'background' | 'side'; id: string; bg?: string; image?: string; badge?: string; title: string; subtitle?: string; description?: string; cta?: string; ctaLink: string; cta2?: string; cta2Link?: string }
 
 const GRADS = ['from-brand-900 to-brand-800', 'from-brand-950 to-brand-800', 'from-brand-800 to-brand-900'];
 
@@ -24,7 +24,7 @@ export function HeroBanner() {
 
   // Banners created in Admin > Banners replace the default slides.
   const slides: Slide[] = banners.length
-    ? banners.map((b, i) => ({ id: b.id, bg: GRADS[i % GRADS.length], image: b.image, title: L(b, 'title'), subtitle: L(b, 'subtitle'),
+    ? banners.map((b, i) => ({ id: b.id, bg: GRADS[i % GRADS.length], image: b.image, alt: L(b, 'imageAlt') || L(b, 'title'), mode: b.imageMode === 'side' ? 'side' as const : 'background' as const, title: L(b, 'title'), subtitle: L(b, 'subtitle'),
         cta: (lang === 'ar' && b.buttonTextAr) ? b.buttonTextAr : (b.buttonText || ''), ctaLink: b.link || '/shop' }))
     : [1, 2, 3].map(n => ({
         id: `s${n}`, bg: GRADS[n - 1], badge: t(`c1_home.s${n}Badge`), title: t(`c1_home.s${n}Title`), subtitle: t(`c1_home.s${n}Sub`), description: t(`c1_home.s${n}Desc`),
@@ -46,9 +46,9 @@ export function HeroBanner() {
 
   return (
     <section className={`hazard-edge relative overflow-hidden bg-gradient-to-r ${slide.bg} transition-colors duration-700`} aria-label={t('c1_home.heroAria')}>
-      {slide.image && (
+      {slide.image && slide.mode !== 'side' && (
         <>
-          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${slide.image}")` }} />
+          <div role="img" aria-label={slide.alt} className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${slide.image}")` }} />
           <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent rtl:bg-gradient-to-l" />
         </>
       )}
@@ -70,6 +70,11 @@ export function HeroBanner() {
             </div>
           </div>
 
+          {slide.image && slide.mode === 'side' && (
+            <div className="flex justify-center md:justify-end">
+              <img src={slide.image} alt={slide.alt || slide.title} className="max-h-64 md:max-h-80 w-auto max-w-full object-contain rounded-2xl bg-white/10 p-3 shadow-2xl" />
+            </div>
+          )}
           {!slide.image && cats.length > 0 && (
             <div className="hidden md:block">
               <div className="bg-white rounded-2xl p-5 border-t-4 border-accent-500">

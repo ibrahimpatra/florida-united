@@ -45,7 +45,7 @@ async function __POST(req: NextRequest) {
     const cents = kwdToUsdCents(o.total, rate);
     if (cents < 50) return NextResponse.json({ error: 'The order total is below the minimum card payment amount.' }, { status: 400 });
 
-    const app = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+    const app = (process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin).replace(/\/$/, '');
     const checkout = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{

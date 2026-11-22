@@ -146,16 +146,15 @@ export default function AdminOrdersPage() {
                   <td className="text-gray-700 text-sm">{o.items?.length} item(s)</td>
                   <td className="font-bold text-gray-900">{formatPrice(o.total)}</td>
                   <td>
-                    <div className="relative group">
-                      <select
-                        value={o.status}
-                        onChange={e => updateStatus(o.id, e.target.value)}
-                        disabled={updatingId === o.id}
-                        className={`badge ${STATUS_COLORS[o.status]||'badge-gray'} cursor-pointer border-0 bg-transparent font-bold text-xs pr-5 appearance-none`}
-                      >
-                        {ORDER_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                    </div>
+                    <select
+                      value={o.status}
+                      onChange={e => updateStatus(o.id, e.target.value)}
+                      disabled={updatingId === o.id}
+                      title="Change status"
+                      className={`badge ${STATUS_COLORS[o.status]||'badge-gray'} cursor-pointer font-bold text-xs py-1.5 pe-2 border border-black/10 hover:border-brand-400 focus:ring-2 focus:ring-brand-300 disabled:opacity-50`}
+                    >
+                      {ORDER_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
                   </td>
                   <td>
                     <span className={`badge text-xs font-bold ${o.paymentStatus==='paid'?'badge-green':o.paymentStatus==='failed'?'badge-red':'badge-yellow'}`}>

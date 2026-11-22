@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { X, Search, ArrowRight, Clock, TrendingUp, LayoutGrid } from 'lucide-react';
-import Link from 'next/link';
+import Link, { localizePath } from '@/components/ui/LocLink';
 import { formatPrice } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { Product } from '@/types';
@@ -57,7 +57,7 @@ export function SearchModal({ isOpen, onClose }: Props) {
   }
   function handleSearch(term: string) {
     saveSearch(term);
-    window.location.href = `/search?q=${encodeURIComponent(term)}`;
+    window.location.href = localizePath(`/search?q=${encodeURIComponent(term)}`, window.location.pathname);
     onClose();
   }
 

@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
     description: b.tagline ? `${b.tagline}. ${b.name} — tools, electrical, plumbing, and building supplies.` : "Tools, electrical, plumbing, and building supplies.",
     keywords: ['hardware store', 'Kuwait', 'tools', 'electrical', 'building supplies'],
     icons: b.faviconUrl ? { icon: b.faviconUrl, apple: b.faviconUrl } : undefined,
-    openGraph: { type: 'website', locale: 'en_KW', url: process.env.NEXT_PUBLIC_APP_URL, siteName: b.name },
+    openGraph: { type: 'website', locale: 'en_KW', url: siteUrl(), siteName: b.name },
     robots: { index: true, follow: true },
   };
 }

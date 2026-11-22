@@ -57,7 +57,33 @@ export interface Category {
   sortOrder: number;
   metaTitle?: string;
   metaDesc?: string;
+  metaTitleAr?: string;
+  metaDescAr?: string;
+  tags?: string[];
   productCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+  nameAr?: string;
+  slug: string;
+  description?: string;
+  descriptionAr?: string;
+  image?: string;           // logo
+  imageAlt?: string;
+  imageAltAr?: string;
+  website?: string;
+  isActive: boolean;
+  showOnHome: boolean;
+  sortOrder: number;
+  metaTitle?: string;
+  metaDesc?: string;
+  metaTitleAr?: string;
+  metaDescAr?: string;
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -115,6 +141,8 @@ export interface Product {
   freeShipping?: boolean;
   metaTitle?: string;
   metaDesc?: string;
+  metaTitleAr?: string;
+  metaDescAr?: string;
   avgRating: number;
   totalReviews: number;
   totalSold: number;
@@ -189,7 +217,7 @@ export interface User {
   name: string;
   email: string;
   phone?: string;
-  role: 'customer' | 'admin' | 'staff';
+  role: 'customer' | 'admin' | 'staff' | 'superadmin';
   addresses?: Address[];
   totalOrders?: number;
   totalSpent?: number;
@@ -235,6 +263,9 @@ export interface Banner {
   subtitle?: string;
   image: string;
   mobileImage?: string;
+  imageAlt?: string; imageAltAr?: string;
+  /** 'background' = picture fills the banner; 'side' = small picture beside the text on a coloured background */
+  imageMode?: 'background' | 'side';
   link?: string;
   isActive: boolean;
   sortOrder: number;

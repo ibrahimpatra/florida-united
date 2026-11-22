@@ -1,7 +1,7 @@
 'use client';
 import { useDealPricing } from '@/lib/useDeals';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Truck, CheckCircle2 } from 'lucide-react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { useCartStore } from '@/store/cartStore';
 import { formatPrice } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';

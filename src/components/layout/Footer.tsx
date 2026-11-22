@@ -1,5 +1,5 @@
 'use client';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { useBrand } from '@/contexts/BrandContext';
 import { BrandMark } from '@/components/layout/BrandMark';
 import { useEffect, useState } from 'react';

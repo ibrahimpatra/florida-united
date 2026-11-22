@@ -3,6 +3,7 @@
  * Use in API routes only. Never import in client components.
  */
 import { getAdminDb } from './firebase-admin';
+import { queueFill } from './bg';
 import { FieldValue } from 'firebase-admin/firestore';
 import type { ShippingZone, ShippingConfig, UOM, FlashDeal } from './shipping';
 
@@ -90,12 +91,13 @@ export function sanitizeDeal(b: any, partial = false): Record<string, any> {
   const bool = (k: string) => { if (k in b) out[k] = !!b[k]; };
   const list = (k: string) => { if (k in b) out[k] = Array.isArray(b[k]) ? [...new Set(b[k].map((x: any) => String(x)).filter(Boolean))].slice(0, 500) : []; };
   ['title', 'titleAr', 'subtitle', 'subtitleAr', 'badgeText', 'badgeTextAr'].forEach(k => str(k));
-  str('bannerColor', 20); str('image', 600);
+  str('bannerColor', 20); str('image', 600); str('metaTitle', 70); str('metaDesc', 170); str('metaTitleAr', 70); str('metaDescAr', 170); str('imageAlt', 120); str('imageAltAr', 120);
+  if ('imageMode' in b) out.imageMode = b.imageMode === 'side' ? 'side' : 'background';
   if ('type' in b) out.type = ['percentage', 'fixed', 'bogo'].includes(b.type) ? b.type : 'percentage';
   if ('scope' in b) out.scope = ['all', 'category', 'products'].includes(b.scope) ? b.scope : 'all';
   ['discountValue', 'minCartAmount', 'maxUsesTotal', 'maxUsesPerUser'].forEach(num);
   ['showCountdown', 'showOnHomepage', 'showOnProductPage', 'isActive', 'isPinned'].forEach(bool);
-  list('categoryIds'); list('productIds');
+  list('categoryIds'); list('productIds'); list('tags');
   if ('startAt' in b) out.startAt = b.startAt ? new Date(b.startAt).toISOString() : '';
   if ('endAt' in b) out.endAt = b.endAt ? new Date(b.endAt).toISOString() : '';
   if (!partial) { out.usedCount = 0; if (!('isActive' in out)) out.isActive = true; }
@@ -106,6 +108,7 @@ export function sanitizeDeal(b: any, partial = false): Record<string, any> {
 
 export async function adminCreateFlashDeal(data: any): Promise<string> {
   const ref = await getAdminDb().collection('flashDeals').add({ ...sanitizeDeal(data), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  queueFill('flashDeals', ref.id);
   return ref.id;
 }
 export async function adminUpdateFlashDeal(id: string, data: Partial<FlashDeal>): Promise<void> {
@@ -113,6 +116,7 @@ export async function adminUpdateFlashDeal(id: string, data: Partial<FlashDeal>)
   const d = sanitizeDeal(data, true);
   const cleared = ['minCartAmount', 'maxUsesTotal', 'maxUsesPerUser'].filter(k => k in (data as any) && (data as any)[k] === null || (data as any)[k] === '').reduce((o: any, k) => ({ ...o, [k]: FieldValue.delete() }), {});
   await ref.update({ ...d, ...cleared, updatedAt: FieldValue.serverTimestamp() }); // usedCount / id / createdAt are never taken from the form
+  queueFill('flashDeals', id);
 }
 /** A deal that was used keeps its record (orders reference it): it is switched off instead of deleted. */
 export async function adminDeleteFlashDeal(id: string): Promise<{ archived?: true; message: string }> {

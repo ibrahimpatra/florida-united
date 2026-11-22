@@ -12,12 +12,16 @@ import { KuwaitCheckoutForm } from '@/components/checkout/KuwaitCheckoutForm';
 import { CheckoutSuggestions } from '@/components/checkout/CheckoutSuggestions';
 import { FreeShippingNudge } from '@/components/cart/FreeShippingNudge';
 import { Lock, ShoppingBag } from 'lucide-react';
+import { useLoyalty as useLoyaltyInfo } from '@/components/loyalty/useLoyalty';
+import { redeemPlan } from '@/lib/loyalty-core';
+import { LoyaltyBox } from '@/components/loyalty/LoyaltyBox';
+import { QtyStepper } from '@/components/cart/QtyStepper';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { ShippingOption } from '@/lib/shipping';
 
 export default function CheckoutPage() {
   const { data: session, status } = useSession();
-  const { items, discountAmount, couponCode } = useCartStore();
+  const { items, discountAmount, couponCode, updateQuantity } = useCartStore();
   const { t, L } = useLanguage();
   const [governorate, setGovernorate] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -61,7 +65,10 @@ export default function CheckoutPage() {
   // Once the server has quoted, its coupon figure is the truth (it is what placeOrder will charge).
   const discount = quote ? (quote.discount ?? 0) : discountAmount;
   const dealSaving = quote ? Number((quote as any).dealSaving || 0) : 0;
-  const total = Math.round(Math.max(0, subtotal - discount + shippingCost) * 1000) / 1000;
+  const [useLoyalty, setUseLoyalty] = useState(false);
+  const goodsAfterDiscount = Math.max(0, subtotal - discount);
+  const loyaltyPlan = useLoyaltyPlan(goodsAfterDiscount, useLoyalty);
+  const total = Math.round(Math.max(0, subtotal - discount - loyaltyPlan.discount + shippingCost) * 1000) / 1000;
   const hasMixedFreeItems = items.some(i => i.freeShipping) && items.some(i => !i.freeShipping);
 
   if (status === 'loading') return <><Header /><div className="container-custom py-20 text-center text-gray-400">{t('c2_chk.loading')}</div><Footer /></>;
@@ -99,6 +106,7 @@ export default function CheckoutPage() {
             codFee={quote?.codFee ?? 0}
             total={total}
             couponCode={couponCode ?? undefined}
+            redeemPoints={loyaltyPlan.points}
             userEmail={session.user.email || ''}
             shippingSlot={
               <ShippingSelector quote={quote} loading={quoteLoading} error={quoteError} hasGovernorate={!!governorate}
@@ -120,7 +128,7 @@ export default function CheckoutPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{L(item as any, 'name')}</p>
                     {item.variantName && <p className="text-xs text-gray-400">{L(item as any, 'variantName')}</p>}
-                    <p className="text-xs text-gray-500">{t('checkout.qty')}: {item.quantity}</p>
+                    <div className="mt-1"><QtyStepper size="sm" qty={item.quantity} max={item.stock || 999} onChange={q => updateQuantity(item.productId, q, item.variantId)} /></div>
                   </div>
                   {(() => {
                     const ql = (quote as any)?.lines?.find((l: any) => l.productId === item.productId && (l.variantId || '') === (item.variantId || ''));
@@ -134,11 +142,13 @@ export default function CheckoutPage() {
             <div className="mb-3"><FreeShippingNudge chargeable={items.filter(i => !i.freeShipping).reduce((a, i) => a + i.price * i.quantity, 0)} hidden={items.length > 0 && items.every(i => i.freeShipping)} /></div>
             <CheckoutSuggestions />
             <div className="mb-4 mt-4"><CouponBox subtotal={subtotal} appliedAmount={discount} /></div>
+            <LoyaltyBox payable={goodsAfterDiscount} use={useLoyalty} onChange={setUseLoyalty} />
             <div className="border-t pt-3 space-y-2 text-sm">
               {dealSaving > 0 && <div className="flex justify-between text-gray-600"><span>{t('c3_ck.listSubtotal')}</span><span>{formatPrice(subtotal + dealSaving)}</span></div>}
               {dealSaving > 0 && <div className="flex justify-between text-green-600"><span>{t('c3_ck.offerSaving')}</span><span>-{formatPrice(dealSaving)}</span></div>}
               <div className="flex justify-between text-gray-600"><span>{t('checkout.subtotal')}</span><span>{formatPrice(subtotal)}</span></div>
               {discount > 0 && <div className="flex justify-between text-green-600"><span>{t('c3_ck.couponLine', { code: couponCode || '' })}</span><span>-{formatPrice(discount)}</span></div>}
+              {loyaltyPlan.discount > 0 && <div className="flex justify-between text-green-600"><span>{t('c4_loy.title')} ({loyaltyPlan.points})</span><span>-{formatPrice(loyaltyPlan.discount)}</span></div>}
               {quote?.couponError && <p className="text-xs text-red-600">{quote.couponError}</p>}
               <div className="flex justify-between text-gray-600">
                 <span>{t('checkout.shipping')}</span>
@@ -156,4 +166,11 @@ export default function CheckoutPage() {
     </div>
     <Footer /></>
   );
+}
+
+/** Points that will be spent (0 when the switch is off), using the same rules as the server. */
+function useLoyaltyPlan(payable: number, on: boolean) {
+  const info = useLoyaltyInfo();
+  if (!on || !info?.enabled || !info.settings) return { points: 0, discount: 0 };
+  return redeemPlan(info.settings, info.points || 0, info.points || 0, payable);
 }

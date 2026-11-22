@@ -113,6 +113,7 @@ export async function buildInvoicePdf(o: any): Promise<Buffer> {
   };
   row('Subtotal', 'المجموع الفرعي', kd(o.subtotal));
   if (o.dealDiscount > 0) row('Offers applied (already in prices)', 'العروض المطبقة (محتسبة في الأسعار)', kd(o.dealDiscount));
+  if (o.loyaltyDiscount > 0) row(`Loyalty points (${o.loyaltyPoints})`, 'نقاط الولاء', `- ${kd(o.loyaltyDiscount)}`);
   if (o.discount > 0) row(`Discount${o.couponCode ? ` (${clean(o.couponCode)})` : ''}`, 'الخصم', `- ${kd(o.discount)}`);
   row('Delivery', 'التوصيل', o.shippingCost > 0 ? kd(o.shippingCost) : 'FREE');
   if (o.codFee > 0) row('COD fee', 'رسوم الدفع عند الاستلام', kd(o.codFee));

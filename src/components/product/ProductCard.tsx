@@ -1,5 +1,5 @@
 'use client';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { Heart, ShoppingCart, Star, Share2, Package, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useState } from 'react';
@@ -7,8 +7,10 @@ import { useCartStore } from '@/store/cartStore';
 import { useWishlistStore } from '@/store/wishlistStore';
 import { useDeals } from '@/lib/useDeals';
 import { bestDealFor } from '@/lib/pricing';
-import { formatPrice, calculateDiscount, buildShareUrl } from '@/lib/utils';
+import { formatPrice, calculateDiscount } from '@/lib/utils';
+import { productLink, shareLink } from '@/lib/site-url';
 import { toast } from 'react-hot-toast';
+import { QtyStepper } from '@/components/cart/QtyStepper';
 import type { Product } from '@/types';
 
 interface Props {
@@ -20,7 +22,8 @@ export function ProductCard({ product, showQuickView = true }: Props) {
   const { t, L, isArabic } = useLanguage();
   const [adding, setAdding] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const { addItem } = useCartStore();
+  const { addItem, updateQuantity } = useCartStore();
+  const inCart = useCartStore(st => st.items.find(i => i.productId === product.id && !i.variantId));
   const { isInWishlist, toggleItem } = useWishlistStore();
 
   const inWishlist = isInWishlist(product.id);
@@ -59,15 +62,11 @@ export function ProductCard({ product, showQuickView = true }: Props) {
     toast.success(added ? t('c1_card.wlAdded') : t('c1_card.wlRemoved'));
   }
 
-  function handleShare(e: React.MouseEvent) {
-    e.preventDefault();
-    const url = buildShareUrl(product.slug);
-    if (navigator.share) {
-      navigator.share({ title: L(product, 'name'), url }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(url);
-      toast.success(t('c1_card.copied'));
-    }
+  async function handleShare(e: React.MouseEvent) {
+    e.preventDefault(); e.stopPropagation();
+    const url = productLink(product.slug, window.location.pathname.startsWith('/ar'));
+    const r = await shareLink(L(product, 'name'), url);
+    if (r === 'copied') toast.success(t('c1_card.copied')); else if (r === 'failed') toast.error(url);
   }
 
   return (
@@ -125,8 +124,8 @@ export function ProductCard({ product, showQuickView = true }: Props) {
             </button>
           </div>
 
-          {/* Quick Add Overlay */}
-          <div className="absolute bottom-0 inset-x-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+          {/* Quick Add Overlay (hidden once the product is in the cart: the stepper below takes over) */}
+          {!inCart && <div className="absolute bottom-0 inset-x-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
             <button
               onClick={handleAddToCart}
               disabled={isOutOfStock || adding}
@@ -143,7 +142,7 @@ export function ProductCard({ product, showQuickView = true }: Props) {
               )}
               {isOutOfStock ? t('c1_card.oos') : adding ? t('c1_card.adding') : t('c1_card.quick')}
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* Content */}
@@ -190,24 +189,31 @@ export function ProductCard({ product, showQuickView = true }: Props) {
         </div>
       </Link>
 
-      {/* Add to Cart button at bottom */}
+      {/* Add to cart, or - 1 + once it is in the cart */}
       <div className="px-4 pb-4">
-        <button
-          onClick={handleAddToCart}
-          disabled={isOutOfStock || adding}
-          className={`w-full py-2 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
-            isOutOfStock
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : 'bg-brand-50 text-brand-700 hover:bg-brand-600 hover:text-white border border-brand-200 hover:border-brand-600'
-          }`}
-        >
-          {adding ? (
-            <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <ShoppingCart className="w-3.5 h-3.5" />
-          )}
-          {isOutOfStock ? t('c1_card.oos') : adding ? t('c1_card.addedBtn') : t('c1_card.addCart')}
-        </button>
+        {inCart ? (
+          <div className="flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-2 py-1">
+            <QtyStepper qty={inCart.quantity} max={inCart.stock || product.stock} onChange={q => updateQuantity(product.id, q)} />
+            <Link href="/cart" className="text-xs font-semibold text-brand-700 hover:underline px-1">{t('c1_card.inCart')}</Link>
+          </div>
+        ) : (
+          <button
+            onClick={handleAddToCart}
+            disabled={isOutOfStock || adding}
+            className={`w-full py-2 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+              isOutOfStock
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-brand-50 text-brand-700 hover:bg-brand-600 hover:text-white border border-brand-200 hover:border-brand-600'
+            }`}
+          >
+            {adding ? (
+              <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <ShoppingCart className="w-3.5 h-3.5" />
+            )}
+            {isOutOfStock ? t('c1_card.oos') : adding ? t('c1_card.addedBtn') : t('c1_card.addCart')}
+          </button>
+        )}
       </div>
     </article>
   );
