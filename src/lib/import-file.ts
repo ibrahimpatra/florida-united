@@ -73,3 +73,14 @@ export async function buildTemplateXlsx(rows: string[][]): Promise<Buffer> {
   help.getRow(1).font = { bold: true }; help.getColumn(1).width = 30; help.getColumn(2).width = 110;
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
+
+/** Any rows -> .xlsx (first row bold and frozen). Used for the "completed sheet" the assistant returns. */
+export async function buildSheetXlsx(rows: string[][], sheetName = 'Sheet1'): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(sheetName);
+  rows.forEach(r => ws.addRow(r));
+  ws.getRow(1).font = { bold: true };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  ws.columns.forEach(c => { c.width = 22; });
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}

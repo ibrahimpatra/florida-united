@@ -1,0 +1,50 @@
+digraph Florida {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=12, labelloc=t, label="Florida Kuwait store: how the parts connect", pad=0.4, nodesep=0.35, ranksep=0.9, splines=spline, bgcolor="white"];
+  node  [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#f8fafc", color="#94a3b8"];
+  edge  [fontname="Helvetica", fontsize=9, color="#64748b"];
+
+  subgraph cluster_clients { label="Who uses it"; style="rounded,dashed"; color="#cbd5e1";
+    shopper [label="Shopper\n(phone or computer)", fillcolor="#dbeafe"];
+    app     [label="Mobile app\n(Android / iOS shell\nof the same site)", fillcolor="#dbeafe"];
+    staff   [label="Admin / super admin\n(/admin)", fillcolor="#fde68a"];
+    google  [label="Google\n(sitemap, JSON-LD, alt text)", fillcolor="#e2e8f0"];
+  }
+
+  subgraph cluster_vercel { label="Vercel (Next.js 14, one project)"; style="rounded"; color="#2563eb"; fontcolor="#1d4ed8";
+    pages  [label="Storefront pages\nhome, shop, product, cart,\ncheckout, account, bundles, deals\n(English + /ar)", fillcolor="#eff6ff"];
+    admin  [label="Admin pages\nproducts, orders, returns, banners,\nflash deals, promo tiles, loyalty,\nimport, [super: Jobs, Issues, Settings]", fillcolor="#fef9c3"];
+    api    [label="API routes /api/*\n(NextAuth sessions, role checks,\nwithLog + Issues)", fillcolor="#eff6ff"];
+    media  [label="/media/*\npicture proxy\n(cached 1 year)", fillcolor="#eff6ff"];
+    engine [label="Order engine\nplaceOrder, cancel, pricing,\ncoupons, flash deals,\nloyalty points\n(Firestore transactions)", fillcolor="#dcfce7"];
+    aihub  [label="AI hub (ai.ts)\nlive: Gemini first\nbulk: OpenAI first\neach backs up the other", fillcolor="#f3e8ff"];
+    jobs   [label="Background jobs\nfill blank Arabic + SEO\nafter every save\n(waitUntil + daily cron)", fillcolor="#f3e8ff"];
+    assist [label="Chat assistant\n(full screen, tools,\nfollow-up questions)", fillcolor="#f3e8ff"];
+    excel  [label="Excel import\n+ \"Complete my sheet\" AI", fillcolor="#f3e8ff"];
+    cron   [label="Vercel Cron\n/api/cron/jobs\n/api/cron/expire-card-orders", fillcolor="#e2e8f0"];
+  }
+
+  subgraph cluster_data { label="Google Cloud / Cloudflare"; style="rounded"; color="#16a34a"; fontcolor="#15803d";
+    fs [shape=cylinder, fillcolor="#dcfce7", label="Firestore (Admin SDK only)\norders, products, users,\ncategories, banners, flashDeals,\nbundles, promoTiles, popups,\ncoupons, returnRequests,\nloyaltyLedger, jobs, errorLog, settings"];
+    r2 [shape=cylinder, fillcolor="#ffedd5", label="Cloudflare R2\n(private bucket,\nWebP pictures)"];
+  }
+
+  subgraph cluster_ext { label="Outside services"; style="rounded"; color="#9333ea"; fontcolor="#7e22ce";
+    gem  [label="Google Gemini", fillcolor="#f3e8ff"];
+    oai  [label="OpenAI", fillcolor="#f3e8ff"];
+    pay  [label="Payments\nStripe, Tap, MyFatoorah\n(or cash on delivery)", fillcolor="#fee2e2"];
+    mail [label="Email (SMTP)\nGmail / Resend / Brevo", fillcolor="#fee2e2"];
+    wa   [label="WhatsApp Cloud API\n(Meta)", fillcolor="#fee2e2"];
+  }
+
+  shopper -> pages; app -> pages [label="same site"]; staff -> admin; google -> pages [style=dashed, label="crawl"];
+  pages -> api; admin -> api; pages -> media [label="pictures"]; admin -> media;
+  api -> engine; api -> assist; api -> excel; api -> aihub [label="Translate,\nWrite with AI"];
+  engine -> fs [label="transactions"]; api -> fs;
+  media -> r2 [label="read with API key"]; api -> r2 [label="upload (shrunk first)"];
+  assist -> aihub; excel -> aihub; jobs -> aihub;
+  aihub -> gem; aihub -> oai;
+  api -> jobs [label="enqueue after save"]; cron -> jobs; jobs -> fs [label="fills blanks only"];
+  engine -> pay [label="card checkout"]; pay -> api [label="webhook / return", style=dashed];
+  engine -> mail [label="order + status emails"]; engine -> wa [label="status messages"];
+  cron -> api;
+}

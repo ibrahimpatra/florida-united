@@ -1,10 +1,13 @@
+import { siteBase } from '@/lib/site-url';
+import { stripHtml } from '@/lib/sanitize-html';
 import { altLinks } from '@/lib/seo';
 import { JsonLd, breadcrumb } from '@/components/seo/JsonLd';
 import { getBrand } from '@/lib/brand-server';
 import type { Metadata } from 'next';
 
 // Revalidate every 60 seconds so stock changes show up quickly
-export const revalidate = 60;
+export const revalidate = 3600; // long cache: the server refreshes the page itself when stock or the product changes (catalog-sync.ts)
+export async function generateStaticParams() { return []; } // render each product page on first visit, then cache it (on-demand ISR)
 import { notFound } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -20,14 +23,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!product) return { title: 'Product Not Found' };
   return {
     title: product.metaTitle || product.name,
-    description: product.metaDesc || product.shortDescription || product.description?.slice(0,160),
+    description: product.metaDesc || product.shortDescription || stripHtml(product.description || '').slice(0,160),
     keywords: (product as any).metaKeywords || product.tags?.join(', '),
     openGraph: {
       title: product.name,
-      description: product.shortDescription || product.description?.slice(0,160) || '',
-      images: product.images?.length ? [{ url: product.images[0], alt: product.name }] : [],
+      description: product.shortDescription || stripHtml(product.description || '').slice(0,160),
+      images: product.images?.length ? [{ url: `${siteBase()}/share-image/${product.slug}`, width: 1200, height: 630, type: 'image/jpeg', alt: product.name }] : [],
       type: 'website',
+      siteName: 'Florida Kuwait',
     },
+    twitter: { card: 'summary_large_image', title: product.name, images: product.images?.length ? [`${siteBase()}/share-image/${product.slug}`] : undefined },
     alternates: altLinks(`/shop/products/${product.slug}`),
   };
 }
@@ -42,15 +47,15 @@ export default async function ProductPage({ params }: Props) {
   if (!product || (product as any).isActive === false) notFound();
   product = publicProduct(product); // the cost price must never reach the browser
 
-  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
+  const siteUrl = siteBase();
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: product.name,
-    description: product.description,
+    description: stripHtml(product.description || ''),
     sku: product.sku,
     brand: product.brand ? { '@type': 'Brand', name: product.brand } : undefined,
-    image: product.images,
+    image: (product.images || []).map((u: string) => (u.startsWith('/') ? `${siteUrl}${u}` : u)), // structured data needs full addresses
     offers: {
       '@type': 'Offer',
       price: product.price,

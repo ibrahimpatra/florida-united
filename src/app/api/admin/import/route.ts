@@ -5,6 +5,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { authOptions } from '@/lib/auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { invalidateProductCache } from '@/lib/firestore-admin';
+import { ensureBrands } from '@/lib/brands';
 import { parseUpload } from '@/lib/import-file';
 import { planImport, slugify, type ImportCtx } from '@/lib/product-import';
 
@@ -88,8 +89,9 @@ async function __POST(req: NextRequest) {
       i += BATCH_SIZE;
     }
     invalidateProductCache();
+    const newBrands = await ensureBrands(work.map(r => String((r.data as any)?.brand || ''))).catch(() => 0);
     const errors = plan.rows.filter(r => r.action === 'error');
-    return NextResponse.json({ success: true, created: createdN, updated: updatedN, createdCategories: created.categories, createdUnits: created.uoms,
+    return NextResponse.json({ success: true, created: createdN, updated: updatedN, createdCategories: created.categories, createdUnits: created.uoms, createdBrands: newBrands,
       skipped: errors.length, errors: errors.slice(0, 100).map(e => `Row ${e.line}: ${e.message}`), moreErrors: Math.max(0, errors.length - 100) });
   } catch (err: any) {
     console.error('Bulk import error:', err);

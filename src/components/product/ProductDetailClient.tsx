@@ -1,7 +1,9 @@
 'use client';
+import { QtyStepper } from '@/components/cart/QtyStepper';
+import { productLink, shareLink } from '@/lib/site-url';
 import { useState, useEffect } from 'react';
 import { ShoppingCart, Heart, Share2, MessageCircle, Star, Truck, Shield, RotateCcw, ChevronRight, Plus, Minus, Check, Package, Ruler } from 'lucide-react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { returnWindowDays } from '@/lib/returns';
 import { useCartStore } from '@/store/cartStore';
 import { useWishlistStore } from '@/store/wishlistStore';
@@ -14,24 +16,20 @@ import { useStoreSettings } from '@/lib/useStoreSettings';
 import type { Product } from '@/types';
 import { ProductCard } from './ProductCard';
 import { AIRecommendations } from './AIRecommendations';
+import { renderDescription } from '@/lib/sanitize-html';
+import { RecentlyViewed } from './RecentlyViewed';
+import { useRecentStore } from '@/store/recentStore';
 
 export function ProductDetailClient({ product, relatedProducts }: { product: Product; relatedProducts: Product[] }) {
   const storeSettings = useStoreSettings();
   const { t, L, isArabic } = useLanguage();
   const { freeShippingThreshold } = useStoreSettings();
   const [qty, setQty] = useState(1);
+  const addRecent = useRecentStore(st => st.add);
+  useEffect(() => { addRecent(product.id); }, [product.id, addRecent]);
   const name = L(product, 'name');
-  const [liveStock, setLiveStock] = useState(product.stock);
-
-  // Fetch live stock on mount to override any stale SSR cache
-  useEffect(() => {
-    fetch(`/api/products/${product.id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(p => { if (p && typeof p.stock === 'number') setLiveStock(p.stock); })
-      .catch(() => {});
-  }, [product.id]);
-
-  // Use liveStock everywhere stock is referenced
+  // No live fetch on every visit: the page is cached and is refreshed by the server when stock changes. The number here is capped (about 10) and never shown.
+  const liveStock = product.stock;
   const [unitId, setUnitId] = useState<string | undefined>(undefined);
   const unit = (product.units || []).find(u => u.id === unitId);
   const factor = unit ? unit.factor : 1;
@@ -41,7 +39,9 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
   const [mainImg, setMainImg] = useState(0);
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<'desc' | 'specs'>('desc');
-  const { addItem } = useCartStore();
+  const { addItem, updateQuantity } = useCartStore();
+  const cartCount = useCartStore(st => st.items.reduce((n, i) => (i.unavailable ? n : n + i.quantity), 0));
+  const cartLine = useCartStore(st => st.items.find(i => i.productId === product.id && (i.variantId || undefined) === (unitId || undefined)));
   const { isInWishlist, toggleItem } = useWishlistStore();
   const inWishlist = isInWishlist(product.id);
   const deals = useDeals();
@@ -63,10 +63,10 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
     setTimeout(() => setAdding(false), 800);
   };
 
-  const handleShare = () => {
-    const url = window.location.href;
-    if (navigator.share) navigator.share({ title: name, url }).catch(() => {});
-    else { navigator.clipboard.writeText(url); toast.success(t('c1_pd.copied')); }
+  const handleShare = async () => {
+    const url = productLink(product.slug, window.location.pathname.startsWith('/ar'));
+    const r = await shareLink(name, url);
+    if (r === 'copied') toast.success(t('c1_pd.copied')); else if (r === 'failed') toast.error(url);
   };
 
   const handleWhatsApp = async () => {
@@ -110,7 +110,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
 
         {/* Info */}
         <div>
-          {product.brand && <p className="text-xs text-brand-600 font-bold uppercase tracking-widest mb-2">{product.brand}</p>}
+          {product.brand && <p className="text-xs text-brand-600 font-bold mb-2">{product.brand}</p>}
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3 font-display leading-tight">{name}</h1>
 
           {/* Rating */}
@@ -157,9 +157,9 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
           {product.shortDescription && <p className="text-gray-600 text-sm leading-relaxed mb-5 border-s-4 border-brand-200 ps-4">{L(product, 'shortDescription')}</p>}
 
           {/* Stock */}
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-5 ${stock > 10 ? 'bg-green-50 text-green-700' : stock > 0 ? 'bg-orange-50 text-orange-700' : 'bg-red-50 text-red-700'}`}>
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-5 ${stock > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
             {stock > 0 && <Check className="w-3 h-3" />}
-            {stock > 10 ? t('c1_pd.inStock', { n: stock }) : stock > 0 ? t('c1_pd.lowStock', { n: stock }) : t('c1_pd.oos')}
+            {stock > 0 ? t('c1_pd.inStockOnly') : t('c1_pd.oos')}
           </div>
 
           {/* Meta */}
@@ -171,8 +171,13 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
           </div>
 
           {/* Qty + Add to cart */}
+          {cartLine ? (
+            <div className="flex items-center justify-center rounded-full border border-brand-100 bg-brand-50 py-2 mb-4">
+              <QtyStepper qty={cartLine.quantity} max={Math.max(stock, 0)} onChange={q => updateQuantity(product.id, q, unitId)} />
+            </div>
+          ) : (
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+            <div className="flex items-center border border-gray-200 bg-white rounded-full overflow-hidden">
               <button onClick={() => setQty(q => Math.max(1, q - 1))} className="px-3 py-3 hover:bg-gray-50 transition-colors"><Minus className="w-4 h-4" /></button>
               <span className="px-4 py-3 font-bold text-gray-800 min-w-[3rem] text-center">{qty}</span>
               <button onClick={() => setQty(q => Math.min(stock, q + 1))} disabled={qty >= stock} className="px-3 py-3 hover:bg-gray-50 transition-colors disabled:opacity-40"><Plus className="w-4 h-4" /></button>
@@ -182,6 +187,24 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
               {adding ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ShoppingCart className="w-5 h-5" />}
               {stock === 0 ? t('c1_pd.oos') : adding ? t('c1_pd.adding') : t('c1_pd.addCart')}
             </button>
+          </div>
+          )}
+          {/* Phones: one bottom bar for this page (replaces the tab bar): price, cart shortcut, Add to cart */}
+          <div className="md:hidden fixed inset-x-3 z-40 no-print" style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+            <div className="flex items-center gap-2 rounded-full bg-brand-900/95 backdrop-blur-md shadow-float ps-2 pe-2 py-2">
+              <Link href="/cart" aria-label={t('bnav.cart')} className="relative shrink-0 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center">
+                <ShoppingCart className="w-5 h-5" />
+                {cartCount > 0 && <span className="absolute -top-0.5 -end-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-accent-500 text-brand-950 text-[10px] font-extrabold flex items-center justify-center">{cartCount > 9 ? '9+' : cartCount}</span>}
+              </Link>
+              <span className="font-extrabold text-white whitespace-nowrap ps-1">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : unitPrice)}</span>
+              {cartLine ? (
+                <Link href="/cart" className="flex-1 inline-flex items-center justify-center h-11 rounded-full bg-accent-500 text-brand-950 font-bold">{t('bnav.cart')} · {cartLine.quantity}</Link>
+              ) : (
+                <button onClick={handleAddToCart} disabled={stock === 0 || adding} className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-full bg-accent-500 text-brand-950 font-bold disabled:opacity-50">
+                  {stock === 0 ? t('c1_pd.oos') : adding ? t('c1_pd.adding') : t('c1_pd.addCart')}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Secondary actions */}
@@ -225,7 +248,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
         </div>
       </div>
       <div className="mb-16">
-        {tab === 'desc' && <div className="prose prose-sm max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: L(product, 'description') }} />}
+        {tab === 'desc' && <div className="prose prose-sm max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: renderDescription(L(product, 'description')) }} />}
         {tab === 'specs' && (
           <div className="text-sm text-gray-600 space-y-2">
             {product.weight && <div className="flex gap-4 py-2 border-b"><span className="w-32 text-gray-500">{t('c1_pd.weight')}</span><span>{product.weight} {t('c1_pd.kg')}</span></div>}
@@ -238,6 +261,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
 
       {/* AI-powered recommendations */}
       <AIRecommendations productId={product.id} currentCategory={product.categoryId} />
+      <RecentlyViewed exclude={[product.id]} />
 
       {/* Fallback related products (category-based) */}
       {relatedProducts.length > 0 && (

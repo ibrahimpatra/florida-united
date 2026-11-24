@@ -131,6 +131,8 @@ export interface FlashDeal {
   startAt: string;
   endAt: string;
   image?: string;
+  imageMode?: 'background' | 'side';
+  metaTitle?: string; metaDesc?: string; metaTitleAr?: string; metaDescAr?: string; tags?: string[]; imageAlt?: string; imageAltAr?: string;
   bannerColor: string;
   showCountdown: boolean;
   showOnHomepage: boolean;
@@ -138,6 +140,8 @@ export interface FlashDeal {
   minCartAmount?: number;
   maxUsesTotal?: number;
   maxUsesPerUser?: number;
+  maxQtyPerOrder?: number;
+  noCoupon?: boolean;
   usedCount: number;
   isActive: boolean;
   isPinned: boolean;

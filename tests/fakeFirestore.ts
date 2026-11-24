@@ -27,7 +27,14 @@ export class FakeDb {
   batch() { const ops: (() => void)[] = []; const b: any = {
     delete: (r: FakeRef) => { ops.push(() => r._delete()); return b; }, update: (r: FakeRef, d: any) => { ops.push(() => r._update(d)); return b; }, set: (r: FakeRef, d: any, o?: any) => { ops.push(() => r._set(d, o)); return b; },
     commit: async () => ops.forEach(f => f()) }; return b; }
-  async runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+  // Real Firestore retries a transaction whose documents changed underneath it; running them one at a time gives the same outcome.
+  private txChain: Promise<unknown> = Promise.resolve();
+  runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+    const run = this.txChain.then(() => this.runTx(fn));
+    this.txChain = run.catch(() => {});
+    return run;
+  }
+  private async runTx<T>(fn: (tx: any) => Promise<T>): Promise<T> {
     const writes: (() => void)[] = []; let wrote = false;
     const guard = () => { if (wrote) throw new Error('Firestore transactions require all reads to be executed before all writes.'); };
     const tx: any = {
@@ -57,6 +64,7 @@ class FakeQuery {
   constructor(protected db: FakeDb, protected c: string, protected filters: [string, any, string][] = [], protected n = Infinity) {}
   where(f: string, op: string, v: any) { if (op !== '==' && op !== 'array-contains') throw new Error('fake: only == and array-contains'); return new FakeQuery(this.db, this.c, [...this.filters, [f, v, op]], this.n); }
   limit(n: number) { return new FakeQuery(this.db, this.c, this.filters, n); }
+  select(..._f: string[]) { return this; }
   async get() {
     const docs = [...(this.db as any).col(this.c).entries()].filter(([, d]) => this.filters.every(([f, v, op]) => op === 'array-contains' ? Array.isArray(d[f]) && d[f].includes(v) : d[f] === v)).slice(0, this.n)
       .map(([id]) => new FakeSnap(new FakeRef(this.db, this.c, id), this.db.read(this.c, id)));

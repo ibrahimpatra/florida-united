@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { ArrowRight, Timer, Percent, Gift, Tag, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatPrice } from '@/lib/utils';
@@ -43,7 +43,7 @@ function bigText(deal: FlashDeal, t: (k: string, v?: any) => string) {
 const Icon = (d: FlashDeal) => (d.type === 'percentage' ? Percent : d.type === 'bogo' ? Gift : Tag);
 
 // /deals lists the products each live deal covers (product pages are addressed by slug, not by the ids stored on a deal)
-function target(_deal: FlashDeal) { return '/deals'; }
+function target(deal: FlashDeal) { return `/deals?deal=${encodeURIComponent(deal.id)}`; }
 
 /**
  * Home-page offer banners. Fully automatic: every live flash deal that is marked "show on homepage" appears here,
@@ -66,6 +66,7 @@ export function FlashDealsSection() {
         {/* Hero offer */}
         <Link href={target(hero)} className="group relative block overflow-hidden rounded-3xl text-white" style={{ backgroundColor: hero.bannerColor || '#b91c1c' }}>
           {/* diagonal hatching + a darker slab on the number side: printed-poster feel instead of a flat gradient */}
+          {hero.image && hero.imageMode !== 'side' && <><img src={hero.image} alt={L(hero as any, 'imageAlt')} className="absolute inset-0 h-full w-full object-cover" /><div className="absolute inset-0 bg-black/55" /></>}
           <div className="absolute inset-y-0 end-0 w-1/2 bg-black/15 [clip-path:polygon(22%_0,100%_0,100%_100%,0_100%)] rtl:[clip-path:polygon(0_0,78%_0,100%_100%,0_100%)]" />
           <div className="relative grid md:grid-cols-[1.3fr_1fr] gap-6 items-center p-6 sm:p-10">
             <div>
@@ -81,7 +82,9 @@ export function FlashDealsSection() {
               </span>
             </div>
             <div className="relative flex flex-col items-center justify-center py-2 text-center">
-              <HI className="mb-1 h-6 w-6 opacity-80" />
+              {hero.image && hero.imageMode === 'side'
+                ? <img src={hero.image} alt={L(hero as any, 'imageAlt') || L(hero as any, 'title')} className="mb-3 h-32 sm:h-40 w-auto max-w-full object-contain rounded-2xl bg-white/10 p-2" />
+                : <HI className="mb-1 h-6 w-6 opacity-80" />}
               <div className="text-7xl sm:text-8xl font-black leading-none tracking-tight">{hb.num}</div>
               <div className="mt-2 text-sm font-bold uppercase tracking-widest opacity-90">{hb.sub}</div>
               {hero.maxUsesTotal ? <div className="mt-3 text-xs rounded-full bg-black/25 px-3 py-1">{t('c2_deal.limited')}</div> : null}
@@ -96,12 +99,14 @@ export function FlashDealsSection() {
               const b = bigText(d, t);
               return (
                 <Link key={d.id} href={target(d)} className="group relative overflow-hidden rounded-2xl p-5 text-white" style={{ backgroundColor: d.bannerColor || '#1d4ed8' }}>
+                  {d.image && d.imageMode !== 'side' && <><img src={d.image} alt={L(d as any, 'imageAlt')} className="absolute inset-0 h-full w-full object-cover" /><div className="absolute inset-0 bg-black/55" /></>}
                   <div className="relative flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <span className="text-[11px] font-bold uppercase tracking-wider opacity-80">{L(d as any, 'badgeText')}</span>
                       <h3 className="mt-1 text-lg font-bold leading-snug">{L(d as any, 'title')}</h3>
                       {d.showCountdown !== false && <p className="mt-2 flex items-center gap-1 text-xs opacity-80"><Timer className="h-3.5 w-3.5" /><MiniLeft endAt={d.endAt} /></p>}
                     </div>
+                    {d.image && d.imageMode === 'side' && <img src={d.image} alt={L(d as any, 'imageAlt')} className="h-16 w-16 shrink-0 rounded-xl bg-white/10 object-contain p-1" />}
                     <div className="shrink-0 text-end"><div className="text-4xl font-black leading-none">{b.num}</div><div className="mt-1 text-[10px] font-bold uppercase tracking-wider opacity-85">{b.sub}</div></div>
                   </div>
                 </Link>

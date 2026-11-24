@@ -1,3 +1,4 @@
+import { siteBase } from './site-url';
 // ============================================================
 //  SITE CONFIG — Edit THIS file to update contact info,
 //  branding, and store settings everywhere at once.
@@ -60,7 +61,7 @@ export const SITE_CONFIG = {
   socialYoutube:    '#',
 
   // ── SEO Defaults ───────────────────────────────────────────
-  siteUrl:    process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com',
+  siteUrl:    siteBase(),
   metaTitle:  'Florida Kuwait | Hardware & Electrical Supplies',
   metaDesc:   "Kuwait's trusted supplier of hardware, electrical, safety, and industrial products. Serving contractors and homeowners across Kuwait.",
 } as const;

@@ -1,4 +1,7 @@
 'use client';
+import { SeoFields } from '@/components/admin/SeoFields';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { AiFillButton } from '@/components/admin/SeoFields';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Pencil, X, Eye, EyeOff, Megaphone } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -7,7 +10,7 @@ import { NumberInput } from '@/components/ui/NumberInput';
 import { PopupCard } from '@/components/layout/PopupManager';
 
 const EMPTY = {
-  name: '', isActive: true, priority: 0, title: '', titleAr: '', body: '', bodyAr: '', image: '', ctaText: 'Shop now', ctaTextAr: 'تسوق الآن', ctaLink: '/shop', couponCode: '',
+  name: '', isActive: true, priority: 0, title: '', titleAr: '', body: '', bodyAr: '', image: '', imageAlt: '', imageAltAr: '', ctaText: 'Shop now', ctaTextAr: 'تسوق الآن', ctaLink: '/shop', couponCode: '',
   layout: 'center', style: 'light', trigger: 'delay', delaySeconds: 6, scrollPercent: 40, audience: 'everyone', pages: [] as string[], frequency: 'once', startsAt: '', endsAt: '',
 };
 const TEMPLATES: { label: string; data: Partial<typeof EMPTY> }[] = [
@@ -101,7 +104,9 @@ export default function AdminPopupsPage() {
                 <div><label className="label">Button goes to</label><input value={form.ctaLink} onChange={e => f('ctaLink', e.target.value)} className="input-field" placeholder="/shop or /deals" /></div>
                 <div><label className="label">Coupon code to show</label><input value={form.couponCode} onChange={e => f('couponCode', e.target.value.toUpperCase().replace(/\s/g, ''))} className="input-field font-mono" placeholder="WELCOME20" />
                   <p className="text-xs text-gray-400 mt-1">Create this code under Coupons first. The popup only displays it.</p></div>
-                <div className="sm:col-span-2"><label className="label">Image link (optional)</label><input value={form.image} onChange={e => f('image', e.target.value)} className="input-field" placeholder="https://..." /></div>
+                <div className="sm:col-span-2"><ImageUploadField label="Picture (optional)" value={form.image || ''} onChange={v => f('image', v)} folder="banners" name={form.title} maxSide={1000} /></div>
+                {form.image && <div className="sm:col-span-2"><SeoFields value={form} onChange={p => setForm((x: any) => ({ ...x, ...p }))} meta={false} /></div>}
+                <div className="sm:col-span-2"><AiFillButton collection="popups" doc={form} onPatch={p => setForm((x: any) => ({ ...x, ...p }))} label="Fill Arabic text with AI" /></div>
               </div>
 
               <div className="border-t border-gray-100 pt-4 grid sm:grid-cols-2 gap-4">

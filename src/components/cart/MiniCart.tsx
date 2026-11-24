@@ -1,7 +1,7 @@
 'use client';
 import { useDealPricing } from '@/lib/useDeals';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Truck, CheckCircle2 } from 'lucide-react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { useCartStore } from '@/store/cartStore';
 import { formatPrice } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -20,7 +20,7 @@ export function MiniCart({ isOpen, onClose }: Props) {
   const allItemsFreeShip = items.length > 0 && items.every(i => (i as any).freeShipping);
   const qualifies = allItemsFreeShip || (th !== null && th !== undefined && subtotal >= th);
   const shipping = qualifies ? 0 : defaultShippingCost;
-  const count = items.reduce((s, i) => s + i.quantity, 0);
+  const count = items.reduce((s, i) => i.unavailable ? s : s + i.quantity, 0);
 
   return (
     <div dir={dir}>

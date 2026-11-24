@@ -14,6 +14,7 @@ declare module 'next-auth' {
       email?: string | null;
       image?: string | null;
       role: string;
+      isSuper?: boolean;
       phone?: string;
     };
   }
@@ -117,12 +118,23 @@ export const authOptions: NextAuthOptions = {
           token.role = 'customer';
         }
       }
+      // Staff roles are re-read every 5 minutes, so removing someone's admin access works without waiting for their login to expire
+      if ((token.role === 'admin' || token.isSuper) && token.id && Date.now() - Number(token.roleAt || 0) > 5 * 60_000) {
+        try {
+          const snap = await getAdminDb().collection('users').doc(token.id as string).get();
+          const r = snap.exists ? String(snap.data()?.role || 'customer').toLowerCase() : 'customer';
+          token.isSuper = r === 'superadmin'; token.role = r === 'superadmin' ? 'admin' : r; token.roleAt = Date.now();
+        } catch { /* keep the current role if the database is unreachable */ }
+      }
+      // A superadmin acts as "admin" everywhere (existing checks keep working) and carries a flag for the 3 super-only tabs.
+      if (token.role === 'superadmin') { token.role = 'admin'; token.isSuper = true; }
       return token;
     },
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.isSuper = !!token.isSuper;
       }
       return session;
     },

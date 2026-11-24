@@ -9,7 +9,7 @@ import { formatPrice } from '@/lib/utils';
 /** Coupon entry for the checkout summary. `subtotal` is the server's deal-aware subtotal. */
 export function CouponBox({ subtotal, appliedAmount }: { subtotal: number; appliedAmount: number }) {
   const { t } = useLanguage();
-  const { couponCode, setCoupon, removeCoupon } = useCartStore();
+  const { couponCode, setCoupon, removeCoupon, items } = useCartStore();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -18,7 +18,7 @@ export function CouponBox({ subtotal, appliedAmount }: { subtotal: number; appli
     if (!c || busy) return;
     setBusy(true);
     try {
-      const res = await fetch('/api/coupons/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c, orderAmount: subtotal }) });
+      const res = await fetch('/api/coupons/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c, orderAmount: subtotal, items: items.map(i => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId, variantName: i.variantName })) }) });
       const d = await res.json();
       if (d.valid) { setCoupon(c, d.discount); setCode(''); toast.success(t('c3_ck.applied', { code: c })); }
       else toast.error(d.error || t('c3_ck.couponBad'));

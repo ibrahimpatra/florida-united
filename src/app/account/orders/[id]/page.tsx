@@ -211,7 +211,7 @@ export default function OrderDetailPage() {
 
           {/* Items */}
           <div className="card p-5">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">{t('orders.orderItems')} ({order.items.length})</h3>
+            <h3 className="text-xs font-bold text-gray-500 mb-4">{t('orders.orderItems')} ({order.items.length})</h3>
             <div className="space-y-3">
               {order.items.map((item, i) => (
                 <div key={i} className="flex items-center gap-3">
@@ -238,7 +238,7 @@ export default function OrderDetailPage() {
 
           {/* Payment */}
           <div className="card p-5">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">{t('c2_pay.method')}</h3>
+            <h3 className="text-xs font-bold text-gray-500 mb-4">{t('c2_pay.method')}</h3>
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="flex items-center gap-2 font-semibold text-gray-800">
                 {o.paymentMethod === 'card' ? <CreditCard className="w-4 h-4 text-brand-600" /> : <Banknote className="w-4 h-4 text-green-600" />}
@@ -259,7 +259,7 @@ export default function OrderDetailPage() {
 
           {/* Price Breakdown */}
           <div className="card p-5">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">{t('orders.priceBreakdown')}</h3>
+            <h3 className="text-xs font-bold text-gray-500 mb-4">{t('orders.priceBreakdown')}</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-gray-600"><span>{t('orders.subtotal')}</span><span>{formatPrice(order.subtotal)}</span></div>
               {(order as any).dealDiscount > 0 && (
@@ -270,6 +270,9 @@ export default function OrderDetailPage() {
                   <span>{t('c2_ord.discount')}{order.couponCode ? ` (${order.couponCode})` : ''}</span>
                   <span>-{formatPrice(order.discount)}</span>
                 </div>
+              )}
+              {(order as any).loyaltyDiscount > 0 && (
+                <div className="flex justify-between text-green-600"><span>{t('c4_loy.line')} ({(order as any).loyaltyPoints})</span><span>-{formatPrice((order as any).loyaltyDiscount)}</span></div>
               )}
               <div className="flex justify-between text-gray-600">
                 <span>{t('orders.shipping')}</span>
@@ -284,7 +287,7 @@ export default function OrderDetailPage() {
           {/* Delivery Address */}
           {order.shippingAddress && (
             <div className="card p-5">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">{t('orders.deliveryAddress')}</h3>
+              <h3 className="text-xs font-bold text-gray-500 mb-3">{t('orders.deliveryAddress')}</h3>
               <div className="text-sm text-gray-700 space-y-0.5">
                 <p className="font-semibold">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
                 {(order.shippingAddress as any).block
@@ -301,7 +304,7 @@ export default function OrderDetailPage() {
           {/* Status History */}
           {(order.statusHistory || []).length > 0 && (
             <div className="card p-5">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">{t('orders.history')}</h3>
+              <h3 className="text-xs font-bold text-gray-500 mb-3">{t('orders.history')}</h3>
               <div className="space-y-3">
                 {[...(order.statusHistory || [])].reverse().map((h, i) => (
                   <div key={i} className="flex gap-3 text-sm">

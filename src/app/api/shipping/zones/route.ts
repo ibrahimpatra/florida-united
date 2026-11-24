@@ -1,3 +1,4 @@
+import { denyUnlessSuper } from '@/lib/api-error';
 import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -14,6 +15,7 @@ async function __GET() {
 async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  { const d = await denyUnlessSuper(session); if (d) return d; }
   try {
     const zone = normalizeZone(await req.json());
     const conflict = findGovernorateConflict(zone, await adminGetShippingZones());

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Truck, Package, CheckCircle, Mail, MessageCircle, Printer } from 'lucide-react';
 import Link from 'next/link';
+import { useBusy } from '@/components/layout/BusyLayer';
+import { nextSteps, STEP_LABEL } from '@/lib/order-flow';
 import { formatPrice, formatDateTime, getStatusLabel, ORDER_STATUSES, getStatusColor } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import type { Order } from '@/types';
@@ -28,9 +30,10 @@ export default function AdminOrderDetailPage() {
     .then(d => { if (d?.id) { setOrder(d); setNewStatus(d.status); } else setOrder(null); setLoading(false); })
     .catch(() => setLoading(false));
 
-  const updateStatus = async () => {
+  const { start: startBusy } = useBusy();
+  const updateStatus = async (newStatus: string) => {
     if (!newStatus) return;
-    setSaving(true);
+    setSaving(true); const stopBusy = startBusy('Updating order…');
     try {
       const res = await fetch(`/api/orders/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: newStatus, note: statusNote }) });
       const d = await res.json().catch(() => ({}));
@@ -41,25 +44,26 @@ export default function AdminOrderDetailPage() {
         setStatusNote(''); await load();
       }
     } catch { toast.error('Network error - status not changed'); }
-    setSaving(false);
+    stopBusy(); setSaving(false);
   };
 
   const updateTracking = async () => {
     if (!tracking.trim()) { toast.error('Enter a tracking number first.'); return; }
-    setSaving(true);
+    setSaving(true); const stopBusy = startBusy('Saving tracking…');
     try {
       const res = await fetch(`/api/orders/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trackingNumber: tracking.trim(), carrier }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) toast.error(d.error || `Failed (${res.status})`);
       else { toast.success('Tracking saved, order marked as shipped'); await load(); }
     } catch { toast.error('Network error - tracking not saved'); }
-    setSaving(false);
+    stopBusy(); setSaving(false);
   };
 
   if (loading) return <div className="p-8"><div className="skeleton h-96 w-full rounded-2xl"/></div>;
   if (!order) return <div className="p-8 text-center text-gray-500">Order not found</div>;
 
   const statusColor: Record<string,string> = { delivered:'green', cancelled:'red', shipped:'blue', pending:'yellow', confirmed:'blue', processing:'purple', refunded:'green' };
+  const steps = nextSteps(order.status);
   const sc = statusColor[order.status] || 'gray';
 
   return (
@@ -113,6 +117,7 @@ export default function AdminOrderDetailPage() {
               <div className="p-4 space-y-1.5 text-sm bg-gray-50">
                 <div className="flex justify-between text-gray-600"><span>Subtotal</span><b>{formatPrice(order.subtotal)}</b></div>
                 {order.discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><b>-{formatPrice(order.discount)}</b></div>}
+                {(order as any).loyaltyDiscount > 0 && <div className="flex justify-between text-green-600"><span>Loyalty points ({(order as any).loyaltyPoints})</span><b>-{formatPrice((order as any).loyaltyDiscount)}</b></div>}
                 <div className="flex justify-between text-gray-600"><span>Shipping</span><b>{order.shippingCost === 0 ? 'FREE' : formatPrice(order.shippingCost)}</b></div>
                 <div className="flex justify-between text-gray-600"><span>Tax</span><b>{formatPrice(order.tax)}</b></div>
                 <div className="flex justify-between text-base font-black text-gray-900 pt-1.5 border-t border-gray-200"><span>TOTAL</span><span className="text-brand-700">{formatPrice(order.total)}</span></div>
@@ -145,6 +150,7 @@ export default function AdminOrderDetailPage() {
               <tfoot>
                 <tr><td colSpan={4} className="text-right text-gray-600">Subtotal</td><td className="text-right font-bold">{formatPrice(order.subtotal)}</td></tr>
                 {order.discount>0 && <tr><td colSpan={4} className="text-right text-green-600">Discount</td><td className="text-right font-bold text-green-600">-{formatPrice(order.discount)}</td></tr>}
+                {(order as any).loyaltyDiscount>0 && <tr><td colSpan={4} className="text-right text-green-600">Loyalty points ({(order as any).loyaltyPoints})</td><td className="text-right font-bold text-green-600">-{formatPrice((order as any).loyaltyDiscount)}</td></tr>}
                 <tr><td colSpan={4} className="text-right text-gray-600">Shipping</td><td className="text-right font-bold">{order.shippingCost===0?'FREE':formatPrice(order.shippingCost)}</td></tr>
                 <tr><td colSpan={4} className="text-right text-gray-600">Tax</td><td className="text-right font-bold">{formatPrice(order.tax)}</td></tr>
                 <tr className="bg-gray-50"><td colSpan={4} className="text-right font-black text-gray-900 text-base">TOTAL</td><td className="text-right font-black text-brand-700 text-lg">{formatPrice(order.total)}</td></tr>
@@ -204,34 +210,44 @@ export default function AdminOrderDetailPage() {
             </div>
           </div>
 
-          {/* Update Status */}
+          {/* Next steps: only what the order flow allows */}
           <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-3">Update Status</h3>
-            <select value={newStatus} onChange={e=>setNewStatus(e.target.value)} className="input-field text-sm py-2 mb-2">
-              {ORDER_STATUSES.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-            <textarea value={statusNote} onChange={e=>setStatusNote(e.target.value)} placeholder="Optional note to customer..." rows={2} className="input-field text-sm py-2 mb-2 resize-none"/>
-            <button onClick={updateStatus} disabled={saving} className="btn-primary w-full py-2 text-sm">
-              {saving?<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>:<><CheckCircle className="w-4 h-4"/>Update & Email Customer</>}
-            </button>
+            <h3 className="font-bold text-gray-800 mb-3">Next step</h3>
+            {steps.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                {order.status === 'delivered' ? 'Delivered. No more steps; if the customer asks for a return it appears here.' : `This order is ${getStatusLabel(order.status).toLowerCase()}. No further changes are possible.`}
+              </p>
+            ) : (<>
+              <textarea value={statusNote} onChange={e=>setStatusNote(e.target.value)} placeholder="Optional note to customer..." rows={2} className="input-field text-sm py-2 mb-3 resize-none"/>
+              <div className="flex flex-col gap-2">
+                {steps.filter(x => x !== 'shipped').map(x => (
+                  <button key={x} disabled={saving} onClick={() => updateStatus(x)}
+                    className={`${x === 'cancelled' || x === 'return_rejected' ? 'btn-outline text-red-600 border-red-200' : 'btn-primary'} w-full py-2 text-sm disabled:opacity-50`}>
+                    {saving ? 'Saving…' : STEP_LABEL[x] || getStatusLabel(x)}
+                  </button>
+                ))}
+              </div>
+            </>)}
           </div>
 
-          {/* Add Tracking */}
+          {/* Shipping: carrier + tracking is what moves Processing → Shipped */}
+          {['processing', 'shipped'].includes(order.status) && (
           <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><Truck className="w-4 h-4 text-brand-600"/>Tracking Info</h3>
+            <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><Truck className="w-4 h-4 text-brand-600"/>{order.status === 'processing' ? 'Ship this order' : 'Tracking info'}</h3>
             {order.trackingNumber && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3 text-sm">
                 <p className="font-bold text-green-700">{order.shippingCarrier}: {order.trackingNumber}</p>
               </div>
             )}
             <select value={carrier} onChange={e=>setCarrier(e.target.value)} className="input-field text-sm py-2 mb-2">
-              {['UPS','FedEx','USPS','DHL','Amazon Logistics'].map(c=><option key={c}>{c}</option>)}
+              {['UPS','FedEx','USPS','DHL','Aramex','Amazon Logistics','Local courier'].map(c=><option key={c}>{c}</option>)}
             </select>
             <input value={tracking} onChange={e=>setTracking(e.target.value)} placeholder="Tracking number" className="input-field text-sm py-2 mb-2"/>
             <button onClick={updateTracking} disabled={saving||!tracking} className="btn-primary w-full py-2 text-sm disabled:opacity-50">
-              {saving?'Saving...':'Save Tracking & Notify'}
+              {saving?'Saving...':order.status === 'processing' ? 'Mark as shipped & notify' : 'Update tracking'}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

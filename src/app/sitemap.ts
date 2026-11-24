@@ -1,7 +1,8 @@
+import { siteBase } from '@/lib/site-url';
 import { MetadataRoute } from 'next';
 import { adminGetCategories, adminGetProducts } from '@/lib/firestore-admin';
 
-const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
+const BASE = siteBase();
 
 type Entry = MetadataRoute.Sitemap[number];
 /** One entry per language, each pointing at the other (hreflang), so Google serves the right one. */
@@ -27,10 +28,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let categoryPages: MetadataRoute.Sitemap = [];
   let productPages: MetadataRoute.Sitemap = [];
+  let brandPages: MetadataRoute.Sitemap = [];
 
   try {
     const categories = await adminGetCategories(true);
     categoryPages = categories.flatMap(c => both(`/shop/${c.slug}`, { lastModified: new Date(c.updatedAt || c.createdAt), changeFrequency: 'weekly', priority: 0.8 }));
+  } catch {}
+
+  try {
+    const { getBrands } = await import('@/lib/brands');
+    brandPages = (await getBrands(true)).flatMap(b => both(`/brands/${b.slug}`, { lastModified: new Date(b.updatedAt || b.createdAt || Date.now()), changeFrequency: 'weekly', priority: 0.6 }));
   } catch {}
 
   try {
@@ -40,5 +47,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
   } catch {}
 
-  return [...staticPages, ...categoryPages, ...productPages];
+  let bundlePages: MetadataRoute.Sitemap = [];
+  try {
+    const { getStorefrontBundles } = await import('@/lib/firestore-admin');
+    const { bundlePath } = await import('@/lib/bundle-path');
+    bundlePages = (await getStorefrontBundles()).flatMap((b: any) => both(bundlePath(b), { lastModified: new Date(b.updatedAt || b.createdAt || Date.now()), changeFrequency: 'weekly', priority: 0.6 }));
+  } catch {}
+
+  return [...staticPages, ...categoryPages, ...brandPages, ...productPages, ...bundlePages];
 }

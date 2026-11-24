@@ -1,4 +1,5 @@
 import { withLog } from '@/lib/logger';
+import { failJson } from '@/lib/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -11,11 +12,11 @@ export const dynamic = 'force-dynamic';
 const MAX_BYTES = 5 * 1024 * 1024;
 const GIF_MAX = 1024 * 1024;
 // Storage is billed by size, so every picture is shrunk to what a screen really needs.
-const SIZES: Record<string, [number, number]> = { products: [1000, 72], bundles: [1000, 72], categories: [800, 74], banners: [1920, 76], brand: [1024, 85], returns: [1000, 68], uploads: [1200, 74] };
+const SIZES: Record<string, [number, number]> = { products: [1000, 72], bundles: [1000, 72], categories: [800, 74], brands: [600, 80], banners: [1920, 76], brand: [1024, 85], returns: [1000, 68], uploads: [1200, 74] };
 const TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
 // Customers may only upload return photos; everything else is admin-only. Folder names are a fixed whitelist.
 const CUSTOMER_FOLDERS = ['returns'];
-const ADMIN_FOLDERS = ['returns', 'products', 'categories', 'banners', 'bundles', 'uploads', 'brand'];
+const ADMIN_FOLDERS = ['returns', 'products', 'categories', 'brands', 'banners', 'bundles', 'uploads', 'brand'];
 
 async function __POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -40,7 +41,9 @@ async function __POST(req: NextRequest) {
     }
 
     if (!TYPES[type]) return NextResponse.json({ error: 'Only JPG, PNG, WebP or GIF images are allowed.' }, { status: 400 });
-    if (buffer.length > MAX_BYTES) return NextResponse.json({ error: 'File too large (max 5 MB).' }, { status: 400 });
+    if (buffer.length > MAX_BYTES) {
+      return NextResponse.json({ error: 'File too large (max 5 MB).' }, { status: 400 });
+    }
     if (!(isAdmin ? ADMIN_FOLDERS : CUSTOMER_FOLDERS).includes(folder))
       return NextResponse.json({ error: 'You are not allowed to upload here.' }, { status: 403 });
 
@@ -71,7 +74,7 @@ async function __POST(req: NextRequest) {
     return NextResponse.json({ success: true, url: `https://storage.googleapis.com/${bucket.name}/${fileName}`, fileName });
   } catch (err) {
     console.error('Upload error:', err);
-    return NextResponse.json({ error: 'Upload failed. Please try again.' }, { status: 500 });
+    return failJson(session, 500, 'Upload failed. Please try again.', err);
   }
 }
 

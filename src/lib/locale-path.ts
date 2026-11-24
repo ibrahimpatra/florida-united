@@ -1,5 +1,5 @@
 /** Arabic pages live under /ar/... and mirror the public English pages. */
-const PUBLIC = [/^\/$/, /^\/shop(\/.*)?$/, /^\/deals$/, /^\/bundles$/, /^\/about$/, /^\/contact$/, /^\/terms$/, /^\/privacy$/, /^\/returns-policy$/, /^\/shipping-info$/, /^\/search$/];
+const PUBLIC = [/^\/$/, /^\/shop(\/.*)?$/, /^\/brands(\/.*)?$/, /^\/deals$/, /^\/bundles$/, /^\/about$/, /^\/contact$/, /^\/terms$/, /^\/privacy$/, /^\/returns-policy$/, /^\/shipping-info$/, /^\/search$/];
 
 export const isArabicPath = (p?: string | null) => !!p && (p === '/ar' || p.startsWith('/ar/'));
 export const stripAr = (p: string) => (isArabicPath(p) ? p.slice(3) || '/' : p);

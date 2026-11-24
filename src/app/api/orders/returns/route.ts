@@ -126,6 +126,8 @@ async function __PATCH(req: NextRequest) {
       status: orderStatus, ...(status === 'refunded' ? { paymentStatus: 'refunded' } : {}), updatedAt: FieldValue.serverTimestamp(),
       statusHistory: FieldValue.arrayUnion({ status: orderStatus, note: note || `Return ${status}`, createdAt: new Date().toISOString() }),
     });
+    if (status === 'refunded') await (await import('@/lib/revenue')).applyRefund(cur.orderId, Number(patch.refundAmount ?? cur.refundAmount ?? 0)).catch(e => console.error('[revenue refund]', e?.message));
+    if (status === 'refunded') await (await import('@/lib/loyalty')).reverseForRefund(cur.orderId, Number(patch.refundAmount ?? cur.refundAmount ?? 0)).catch(e => console.error('[loyalty reverse]', e?.message));
     return NextResponse.json({ success: true });
   } catch (e) { console.error('[PATCH returns]', e); return NextResponse.json({ error: 'Could not update the return.' }, { status: 500 }); }
 }

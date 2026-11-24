@@ -5,6 +5,8 @@ import { toast } from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatPrice } from '@/lib/utils';
+import Link from '@/components/ui/LocLink';
+import { bundlePath } from '@/lib/bundle-path';
 
 export function BundlesClient() {
   const { t, L } = useLanguage();
@@ -23,7 +25,7 @@ export function BundlesClient() {
 
   const add = (b: any) => {
     addItem({
-      id: `bundle:${b.id}`, productId: `bundle:${b.id}`, name: b.name, nameAr: b.nameAr || undefined, slug: 'bundles',
+      id: `bundle:${b.id}`, productId: `bundle:${b.id}`, name: b.name, nameAr: b.nameAr || undefined, slug: bundlePath(b).split('/').pop() as string,
       price: Number(b.bundlePrice), comparePrice: b.comparePrice || undefined,
       image: b.image || '', sku: `BUNDLE-${String(b.id).slice(0, 6).toUpperCase()}`,
       stock: b.available, isReturnable: true, freeShipping: !!b.freeShipping,
@@ -45,14 +47,14 @@ export function BundlesClient() {
           const out = !b.available;
           return (
             <div key={b.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-              <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center">
+              <Link href={bundlePath(b)} className="aspect-[4/3] bg-gray-50 flex items-center justify-center">
                 {b.image || b.items?.[0]?.image
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={b.image || b.items[0].image} alt={L(b, 'name')} className="w-full h-full object-cover" />
                   : <Package className="w-12 h-12 text-gray-300" />}
-              </div>
+              </Link>
               <div className="p-4 flex flex-col flex-1">
-                <h2 className="font-bold text-gray-900">{L(b, 'name')}</h2>
+                <h2 className="font-bold text-gray-900"><Link href={bundlePath(b)} className="hover:text-brand-600">{L(b, 'name')}</Link></h2>
                 {(b.description || b.descriptionAr) && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{L(b, 'description')}</p>}
                 <p className="text-xs font-semibold text-gray-400 uppercase mt-3 mb-1">{t('bundles.includes')}</p>
                 <ul className="text-sm text-gray-600 space-y-0.5 mb-3">

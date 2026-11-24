@@ -10,7 +10,7 @@ const nextConfig = {
   experimental: {
     instrumentationHook: true, // src/instrumentation.ts checks the environment once at server start
     // the invoice PDF reads its Arabic font from disk at runtime
-    outputFileTracingIncludes: { '/api/orders/[id]/invoice': ['./node_modules/pdfkit/js/**/*'] }, // pdfkit's built-in Helvetica metrics
+    outputFileTracingIncludes: { '/api/orders/[id]/invoice': ['./node_modules/pdfkit/js/**/*'], '/admin/graph/view': ['./docs/graphify/graph-3d.html'] }, // pdfkit's built-in Helvetica metrics
     serverComponentsExternalPackages: [
       'pdfkit',
       'firebase-admin',
@@ -60,7 +60,7 @@ const nextConfig = {
       {
         source: '/(.*)',
         headers: [
-          { key: 'X-Frame-Options',           value: 'DENY' },
+          { key: 'X-Frame-Options',           value: 'SAMEORIGIN' },
           { key: 'X-Content-Type-Options',    value: 'nosniff' },
           { key: 'Referrer-Policy',           value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy',        value: 'camera=(), microphone=(), geolocation=()' },

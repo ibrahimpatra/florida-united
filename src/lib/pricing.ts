@@ -178,26 +178,84 @@ export function computeShipping(args: {
 }
 
 // ── Coupons ──────────────────────────────────────────────────
+export type CouponType = 'percentage' | 'fixed' | 'free_shipping' | 'buy_x_get_y';
+export type CouponSegment = 'all' | 'new' | 'returning' | 'vip' | 'inactive';
 export interface CouponLike {
-  code: string; type: 'percentage' | 'fixed'; value: number; minOrderAmount?: number;
+  code: string; type: CouponType; value: number; minOrderAmount?: number;
   maxDiscount?: number; usageLimit?: number; perUserLimit?: number | null; usedCount?: number; isActive: boolean; expiresAt?: string;
+  /** coupon is not valid before this moment */
+  startsAt?: string | null;
+  /** only these products / categories count towards the discount (both empty = whole cart) */
+  productIds?: string[]; categoryIds?: string[];
+  /** only this kind of customer may use it */
+  segment?: CouponSegment;
+  /** buy_x_get_y: buy `buyQty`, get `getQty` of the cheapest eligible units free */
+  buyQty?: number; getQty?: number;
 }
+export interface CouponLine { productId: string; categoryId?: string; quantity: number; total: number; bundle?: boolean }
+export interface CouponCtx { lines?: CouponLine[]; segments?: string[] }
+
+export const VIP_SPENT_KWD = 200;
+export const INACTIVE_DAYS = 90;
+/** Which customer groups a shopper belongs to. A person can be in several (e.g. returning + vip). Pure. */
+export function customerSegments(user: any, now = new Date()): string[] {
+  const orders = Number(user?.orderCount) || 0;
+  const out: string[] = [];
+  out.push(orders === 0 ? 'new' : 'returning');
+  if ((Number(user?.totalSpent) || 0) >= VIP_SPENT_KWD) out.push('vip');
+  const last = user?.lastOrderAt?.toDate ? user.lastOrderAt.toDate() : user?.lastOrderAt ? new Date(user.lastOrderAt) : null;
+  if (orders > 0 && last && !isNaN(last.getTime()) && now.getTime() - last.getTime() > INACTIVE_DAYS * 86400000) out.push('inactive');
+  return out;
+}
+export const SEGMENT_LABEL: Record<string, string> = { new: 'new customers', returning: 'returning customers', vip: 'VIP customers', inactive: 'customers who have not ordered for a while' };
 
 /** `userUses` = how many times THIS customer already used the code (needed only for coupons with a per-customer limit). */
-export function computeCoupon(coupon: CouponLike | null | undefined, subtotal: number, now = new Date(), userUses = 0):
-  { valid: boolean; discount: number; error?: string } {
-  if (!coupon) return { valid: false, discount: 0, error: 'Invalid coupon code' };
-  if (!coupon.isActive) return { valid: false, discount: 0, error: 'This coupon is no longer active' };
-  if (coupon.expiresAt && new Date(coupon.expiresAt) < now) return { valid: false, discount: 0, error: 'This coupon has expired' };
-  if (coupon.usageLimit && (coupon.usedCount || 0) >= coupon.usageLimit)
-    return { valid: false, discount: 0, error: 'This coupon has reached its usage limit' };
+export function computeCoupon(coupon: CouponLike | null | undefined, subtotal: number, now = new Date(), userUses = 0, ctx: CouponCtx = {}):
+  { valid: boolean; discount: number; freeShipping?: boolean; error?: string } {
+  const no = (error: string) => ({ valid: false, discount: 0, error });
+  if (!coupon) return no('Invalid coupon code');
+  if (!coupon.isActive) return no('This coupon is no longer active');
+  if (coupon.startsAt && new Date(coupon.startsAt) > now) return no('This coupon is not active yet');
+  if (coupon.expiresAt && new Date(coupon.expiresAt) < now) return no('This coupon has expired');
+  if (coupon.usageLimit && (coupon.usedCount || 0) >= coupon.usageLimit) return no('This coupon has reached its usage limit');
   if (coupon.perUserLimit && userUses >= coupon.perUserLimit)
-    return { valid: false, discount: 0, error: coupon.perUserLimit === 1 ? 'You have already used this coupon' : 'You have reached the limit for this coupon' };
+    return no(coupon.perUserLimit === 1 ? 'You have already used this coupon' : 'You have reached the limit for this coupon');
+  if (coupon.segment && coupon.segment !== 'all') {
+    if (!ctx.segments) return no('Sign in to use this coupon');
+    if (!ctx.segments.includes(coupon.segment)) return no(`This coupon is only for ${SEGMENT_LABEL[coupon.segment] || 'selected customers'}`);
+  }
   if (coupon.minOrderAmount && subtotal < coupon.minOrderAmount)
-    return { valid: false, discount: 0, error: `Minimum order for this coupon is KD ${coupon.minOrderAmount.toFixed(3)}` };
-  let d = coupon.type === 'percentage' ? (subtotal * coupon.value) / 100 : coupon.value;
+    return no(`Minimum order for this coupon is KD ${coupon.minOrderAmount.toFixed(3)}`);
+
+  if (coupon.type === 'free_shipping') return { valid: true, discount: 0, freeShipping: true };
+
+  // lines that the coupon applies to
+  const pids = coupon.productIds || [], cids = coupon.categoryIds || [];
+  const scoped = pids.length > 0 || cids.length > 0;
+  let eligible = ctx.lines;
+  if (scoped) {
+    if (!ctx.lines) return no('This coupon only applies to selected products');
+    eligible = ctx.lines.filter(l => !l.bundle && (pids.includes(l.productId) || (!!l.categoryId && cids.includes(l.categoryId))));
+    if (!eligible.length) return no('This coupon does not apply to anything in your cart');
+  }
+  const base = eligible ? round3(eligible.reduce((a, l) => a + l.total, 0)) : subtotal;
+
+  if (coupon.type === 'buy_x_get_y') {
+    const buy = Math.floor(Number(coupon.buyQty) || 0), get = Math.floor(Number(coupon.getQty) || 0);
+    if (buy < 1 || get < 1) return no('This coupon is not set up correctly');
+    if (!eligible) return no('This coupon needs your cart items');
+    const units: number[] = [];
+    for (const l of eligible) { if (l.bundle || !(l.quantity > 0)) continue; for (let i = 0; i < l.quantity; i++) units.push(l.total / l.quantity); }
+    const free = Math.floor(units.length / (buy + get)) * get;
+    if (free < 1) return no(`Add ${buy + get} eligible items to use this offer (buy ${buy}, get ${get} free)`);
+    units.sort((x, y) => x - y);
+    const d = round3(units.slice(0, free).reduce((a, x) => a + x, 0));
+    return { valid: true, discount: Math.min(d, base) };
+  }
+
+  let d = coupon.type === 'percentage' ? (base * coupon.value) / 100 : coupon.value;
   if (coupon.type === 'percentage' && coupon.maxDiscount) d = Math.min(d, coupon.maxDiscount);
-  d = Math.min(d, subtotal);
+  d = Math.min(d, base);
   return { valid: true, discount: round3(Math.max(0, d)) };
 }
 
@@ -280,10 +338,40 @@ export function fuzzyScore(haystack: string, query: string): number {
  * as a word start, or inside a word of 3+ letters, or as a one-letter typo of a word of 5+ letters. Returns 0 for no match.
  * `extra` lets the admin pickers add the SKU.
  */
+/** Makes Arabic and English spellings comparable: lower-case, no diacritics/tatweel, one form of alef / ya / ta-marbuta, Arabic digits -> 0-9. */
+export function normSearch(x: unknown): string {
+  return String(x ?? '').toLowerCase()
+    .replace(/[\u064b-\u065f\u0670\u0640]/g, '')
+    .replace(/[\u0623\u0625\u0622\u0671]/g, '\u0627')
+    .replace(/\u0649/g, '\u064a').replace(/\u0629/g, '\u0647')
+    .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x660));
+}
+
+/**
+ * "Did you mean": for every word that matches nothing in the shop's vocabulary, offer the closest known word (one or two letters off).
+ * Returns the corrected sentence, or null when nothing needs fixing / nothing close enough exists. Works for English and Arabic.
+ */
+export function suggestQuery(vocab: Iterable<string>, query: string): string | null {
+  const words = normSearch(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const known = new Set<string>(); const list: string[] = [];
+  for (const w of vocab) { const n = normSearch(w); if (n.length >= 2 && !known.has(n)) { known.add(n); list.push(n); } }
+  let changed = false;
+  const out = words.map(w => {
+    if (w.length < 3 || known.has(w) || list.some(v => v.startsWith(w) || (w.length >= 4 && v.includes(w)))) return w;
+    const tol = w.length <= 5 ? 1 : 2;
+    let best = ''; let bd = tol + 1;
+    for (const v of list) { const dd = editDistance(w, v, tol); if (dd < bd || (dd === bd && best && Math.abs(v.length - w.length) < Math.abs(best.length - w.length))) { bd = dd; best = v; } }
+    if (best && bd <= tol) { changed = true; return best; }
+    return w;
+  });
+  return changed ? out.join(' ') : null;
+}
+
 export function matchScore(fields: { name?: string; nameAr?: string; short?: string; shortAr?: string; extra?: string }, query: string): number {
-  const q = query.toLowerCase().trim();
+  const q = normSearch(query).trim();
   if (!q) return 1;
-  const norm = (x?: string) => String(x || '').toLowerCase();
+  const norm = (x?: string) => normSearch(x);
   const tokenize = (x: string) => x.split(/[^a-z0-9\u0600-\u06ff.]+/).filter(Boolean);
   const names = [norm(fields.name), norm(fields.nameAr), norm(fields.extra)];
   const shorts = [norm(fields.short), norm(fields.shortAr)];
@@ -327,6 +415,10 @@ export interface DealLike {
   categoryIds?: string[]; productIds?: string[];
   startAt?: any; endAt?: any; isActive?: boolean; isPinned?: boolean;
   minCartAmount?: number; maxUsesTotal?: number; usedCount?: number;
+  /** Most units per order that get the offer price; extra units are charged at the normal price. */
+  maxQtyPerOrder?: number;
+  /** When true a coupon code cannot be used on the same order. */
+  noCoupon?: boolean;
 }
 const ms = (v: any) => (v?.toDate ? v.toDate().getTime() : v ? new Date(v).getTime() : NaN);
 
@@ -347,6 +439,13 @@ export function dealCoversProduct(d: DealLike, productId: string, categoryId?: s
 }
 /** What a deal does to ONE unit-priced line: effective unit price and the total for `quantity`. */
 export function priceUnderDeal(d: DealLike, price: number, quantity: number): { price: number; total: number; saving: number } {
+  const cap = Number(d.maxQtyPerOrder) > 0 ? Math.floor(Number(d.maxQtyPerOrder)) : 0;
+  if (cap && quantity > cap) {
+    // only the first `cap` units get the offer; the rest are charged normally (the line price stays the list price, `total` carries the saving)
+    const part = priceUnderDeal({ ...d, maxQtyPerOrder: 0 }, price, cap);
+    const total = round3(part.total + price * (quantity - cap));
+    return { price, total, saving: round3(price * quantity - total) };
+  }
   const list = round3(price * quantity);
   let total = list, unit = price;
   if (d.type === 'percentage') { unit = round3(price * (1 - Math.min(100, Math.max(0, Number(d.discountValue) || 0)) / 100)); total = round3(unit * quantity); }

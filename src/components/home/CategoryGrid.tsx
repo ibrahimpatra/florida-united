@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { Package } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { Category } from '@/types';
@@ -22,7 +22,7 @@ const LIGHT_BG = [
 
 function CategorySkeleton() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-3">
+    <div className="flex gap-3 overflow-hidden md:grid md:grid-cols-4 lg:grid-cols-8">
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="flex flex-col items-center p-4 rounded-2xl border border-gray-100 bg-gray-50 animate-pulse">
           <div className="w-14 h-14 rounded-2xl bg-gray-200 mb-3" />
@@ -60,7 +60,7 @@ export function CategoryGrid() {
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-3">
+    <div className="flex gap-3 overflow-x-auto scrollbar-hide snap-x -mx-4 px-4 pb-2 md:mx-0 md:px-0 md:pb-0 md:grid md:grid-cols-4 lg:grid-cols-8">
       {categories.map((cat, idx) => {
         const gradient = GRADIENTS[idx % GRADIENTS.length];
         const lightBg  = LIGHT_BG[idx % LIGHT_BG.length];
@@ -70,14 +70,14 @@ export function CategoryGrid() {
           <Link
             key={cat.id}
             href={`/shop/${cat.slug}`}
-            className={`group flex flex-col items-center text-center p-4 rounded-2xl border border-gray-100 ${lightBg} transition-all duration-200 hover:shadow-md hover:-translate-y-1`}
+            className="group snap-start shrink-0 w-[6.75rem] md:w-auto flex flex-col items-center text-center p-3 md:p-4 rounded-3xl bg-white border border-gray-100 shadow-soft transition-all duration-200 hover:shadow-hover hover:-translate-y-1"
           >
             {cat.image ? (
-              <div className="w-14 h-14 rounded-2xl overflow-hidden mb-3 shadow-sm group-hover:scale-110 transition-transform duration-200 bg-white">
+              <div className="w-14 h-14 rounded-full overflow-hidden mb-2.5 shadow-sm group-hover:scale-110 transition-transform duration-200 bg-white">
                 <img src={cat.image} alt={L(cat, 'name')} className="w-full h-full object-cover" />
               </div>
             ) : (
-              <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3 shadow-sm group-hover:scale-110 transition-transform duration-200`}>
+              <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center mb-2.5 shadow-sm group-hover:scale-110 transition-transform duration-200`}>
                 <Package className="w-7 h-7 text-white" />
               </div>
             )}

@@ -1,3 +1,4 @@
+import { reportIssue } from './issues';
 /**
  * firestore-admin.ts
  * Server-side only — uses Firebase Admin SDK.
@@ -10,8 +11,9 @@
  * For a catalog of up to ~10 000 products this is perfectly fast.
  */
 import { getAdminDb } from './firebase-admin';
+import { queueFill } from './bg';
 import { FieldValue } from 'firebase-admin/firestore';
-import { matchScore, computeCoupon } from './pricing';
+import { matchScore, computeCoupon, suggestQuery, normSearch } from './pricing';
 import type {
   Product, Category, Order, User, Review, Coupon,
   Banner, ReturnRequest, ProductFilters, PaginatedResponse, DashboardStats
@@ -79,6 +81,7 @@ export async function adminCreateCategory(data: Omit<Category, 'id' | 'createdAt
     updatedAt: FieldValue.serverTimestamp(),
   });
   invalidateProductCache();
+  queueFill('categories', ref.id);
   return ref.id;
 }
 
@@ -106,6 +109,7 @@ export async function adminUpdateCategory(id: string, data: Partial<Category>): 
     clean.parentName = p?.name || ''; clean.parentNameAr = p?.nameAr || '';
   } else if ('parentId' in clean) { clean.parentId = ''; clean.parentName = ''; clean.parentNameAr = ''; }
   await db.collection('categories').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
+  queueFill('categories', id);
 
   // Keep denormalised names in sync (products + child categories) when renamed.
   if ('name' in clean || 'nameAr' in clean) {
@@ -151,15 +155,38 @@ export class ProductError extends Error {
 // Ceiling: PRODUCT_CAP docs. Beyond that, move search/filter to Algolia/Typesense —
 // everything goes through this one function so the swap is local.
 const PRODUCT_CAP = 3000;
-const PRODUCT_CACHE_MS = 60_000;
-let productCache: { at: number; items: Product[] } | null = null;
-export function invalidateProductCache() { productCache = null; }
+const PRODUCT_CACHE_MS = 10 * 60_000;   // the list stays in memory for 10 minutes; changes tell every server to drop it sooner (catalog-sync.ts)
+const VERSION_CHECK_MS = 20_000;
+let productCache: { at: number; items: Product[]; ver: string } | null = null;
+let versionCheckedAt = 0;
+/** Drops the in-memory list. With `broadcast`, only this server is told (the caller already wrote the marker). Without it, every server and the product pages are told too. */
+export function invalidateProductCache(local = false) {
+  productCache = null; versionCheckedAt = 0;
+  if (!local) import('./catalog-sync').then(m => m.catalogChanged([], { delayMs: 0 })).catch(() => {});
+}
+
+/** Checks a saved product for missing SEO text and queues the background job. Runs after the response (waitUntil on Vercel). */
+function queueSeoJob(productId: string) {
+  const work = import('./jobs').then(m => m.enqueueSeoIfMissing(productId)).catch(e => reportIssue('seo job enqueue', e));
+  import('@vercel/functions').then(v => v.waitUntil(work)).catch(() => {});
+}
 
 async function loadAllProducts(fresh: boolean): Promise<Product[]> {
-  if (!fresh && productCache && Date.now() - productCache.at < PRODUCT_CACHE_MS) return productCache.items;
+  if (!fresh && productCache && Date.now() - productCache.at < PRODUCT_CACHE_MS) {
+    // another server may have changed stock or a product: one small read of the marker, at most every 20 seconds
+    if (Date.now() - versionCheckedAt > VERSION_CHECK_MS) {
+      versionCheckedAt = Date.now();
+      try {
+        const v = String(((await getAdminDb().collection('config').doc('catalog').get()).data() as any)?.v || '');
+        if (v !== productCache.ver) productCache = null;
+      } catch { /* keep what we have */ }
+    }
+    if (productCache) return productCache.items;
+  }
+  let ver = ''; try { ver = String(((await getAdminDb().collection('config').doc('catalog').get()).data() as any)?.v || ''); } catch {}
   const snap = await getAdminDb().collection('products').limit(PRODUCT_CAP).get();
   const items = toList<Product>(snap);
-  if (!fresh) productCache = { at: Date.now(), items };
+  if (!fresh) { productCache = { at: Date.now(), items, ver }; versionCheckedAt = Date.now(); }
   return items;
 }
 
@@ -175,9 +202,30 @@ export function categoryFamily(cats: Category[], rootId: string): Set<string> {
 }
 
 /** Fields only the store owner may see. Applied to everything sent to shoppers (API responses and page props). */
+export const SHOPPER_QTY_CAP = 10;
+/**
+ * Shoppers never see the real stock number: it is capped at what they can reasonably order (10 of the largest pack), and the low-stock threshold is removed.
+ * The screens only say "In stock" / "Out of stock"; the exact check happens again on the server when the order is placed.
+ */
 export function publicProduct<T extends Record<string, any>>(p: T): T {
-  const { costPrice, ...rest } = p as any;
+  const { costPrice, lowStockAlert, ...rest } = p as any;
+  const maxFactor = Math.max(1, ...((rest.units || []) as any[]).map(u => Number(u?.factor) || 1));
+  rest.stock = Math.max(0, Math.min(Math.floor(Number(rest.stock) || 0), SHOPPER_QTY_CAP * maxFactor));
   return rest as T;
+}
+
+/** Availability for a handful of products at once, from the in-memory list (no per-product reads). Shoppers get yes/no plus a capped quantity, never the real stock. */
+export async function stockForIds(ids: string[]): Promise<Record<string, { inStock: boolean; cap: number; factors: Record<string, number> }>> {
+  const all = await loadAllProducts(false);
+  const by = new Map(all.map(p => [p.id, p]));
+  const out: Record<string, { inStock: boolean; cap: number; factors: Record<string, number> }> = {};
+  for (const id of ids.slice(0, 40)) {
+    const p: any = by.get(id);
+    if (!p || p.isActive === false) { out[id] = { inStock: false, cap: 0, factors: {} }; continue; }
+    const pub = publicProduct(p);
+    out[id] = { inStock: pub.stock > 0, cap: pub.stock, factors: Object.fromEntries(((p.units || []) as any[]).map(u => [String(u.id), Number(u.factor) || 1])) };
+  }
+  return out;
 }
 
 export async function adminGetProducts(
@@ -196,16 +244,6 @@ export async function adminGetProducts(
     if (catId) { const fam = categoryFamily(cats, catId); items = items.filter(p => p.categoryId && fam.has(p.categoryId)); }
     else items = [];
   }
-  if (filters.brand) items = items.filter(p => p.brand?.toLowerCase() === filters.brand!.toLowerCase());
-  if (filters.inStock) items = items.filter(p => (p.stock ?? 0) > 0);
-  if (filters.stockStatus === 'out') items = items.filter(p => (p.stock ?? 0) <= 0);
-  if (filters.stockStatus === 'low') items = items.filter(p => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= (p.lowStockAlert ?? 5));
-  if (filters.isFeatured)   items = items.filter(p => p.isFeatured);
-  if (filters.isNewArrival) items = items.filter(p => p.isNewArrival);
-  if (filters.isOnSale)     items = items.filter(p => p.isOnSale);
-  if (filters.minPrice !== undefined) items = items.filter(p => p.price >= filters.minPrice!);
-  if (filters.maxPrice !== undefined) items = items.filter(p => p.price <= filters.maxPrice!);
-
   // typo-tolerant, synonym-aware search (see pricing.ts → fuzzyScore)
   let scores: Map<string, number> | null = null;
   if (filters.search?.trim()) {
@@ -217,6 +255,18 @@ export async function adminGetProducts(
       return sc > 0;
     });
   }
+  // brands present in this category/search (before the brand, price and stock filters) so the shop can offer them as filters
+  const brandCount = new Map<string, number>();
+  if (!filters.admin) items.forEach(p => { const b = String(p.brand || '').trim(); if (b) brandCount.set(b, (brandCount.get(b) || 0) + 1); });
+  if (filters.brand) items = items.filter(p => p.brand?.toLowerCase() === filters.brand!.toLowerCase());
+  if (filters.inStock) items = items.filter(p => (p.stock ?? 0) > 0);
+  if (filters.stockStatus === 'out') items = items.filter(p => (p.stock ?? 0) <= 0);
+  if (filters.stockStatus === 'low') items = items.filter(p => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= (p.lowStockAlert ?? 5));
+  if (filters.isFeatured)   items = items.filter(p => p.isFeatured);
+  if (filters.isNewArrival) items = items.filter(p => p.isNewArrival);
+  if (filters.isOnSale)     items = items.filter(p => p.isOnSale);
+  if (filters.minPrice !== undefined) items = items.filter(p => p.price >= filters.minPrice!);
+  if (filters.maxPrice !== undefined) items = items.filter(p => p.price <= filters.maxPrice!);
 
   const num = (v: unknown) => (typeof v === 'number' ? v : 0);
   const by: Record<string, (a: Product, b: Product) => number> = {
@@ -234,7 +284,23 @@ export async function adminGetProducts(
   const total = items.length;
   const offset = (page - 1) * pageSize;
   const pageItems = items.slice(offset, offset + pageSize);
-  return { items: filters.admin ? pageItems : pageItems.map(publicProduct), total, page, pageSize, hasMore: offset + pageSize < total };
+  const out: any = { items: filters.admin ? pageItems : pageItems.map(publicProduct), total, page, pageSize, hasMore: offset + pageSize < total };
+  if (!filters.admin) {
+    if (brandCount.size) out.brands = [...brandCount.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, 30).map(([name, count]) => ({ name, count }));
+    // nothing found for what was typed: offer the closest spelling that does match products
+    if (total === 0 && filters.search?.trim() && page === 1) {
+      const vocab: string[] = [];
+      (await loadAllProducts(false)).filter(p => p.isActive !== false).forEach(p => {
+        for (const t of [p.name, p.nameAr, p.brand]) if (t) vocab.push(...String(t).toLowerCase().split(/[^a-z0-9\u0600-\u06ff]+/).filter(w => w.length >= 3));
+      });
+      const sug = suggestQuery(vocab, filters.search.trim());
+      if (sug && sug !== normSearch(filters.search.trim())) {
+        const hit = (await loadAllProducts(false)).some(p => p.isActive !== false && matchScore({ name: p.name, nameAr: p.nameAr, short: p.shortDescription, shortAr: p.shortDescriptionAr }, sug) > 0);
+        if (hit) out.didYouMean = sug;
+      }
+    }
+  }
+  return out;
 }
 
 export async function adminGetProductById(id: string): Promise<Product | null> {
@@ -324,6 +390,8 @@ export async function adminCreateProduct(
     updatedAt: FieldValue.serverTimestamp(),
   });
   invalidateProductCache();
+  if (clean.brand) import('./brands').then(m => m.ensureBrands([clean.brand])).catch(e => reportIssue('brand auto-create', e));
+  queueSeoJob(ref.id);
   return ref.id;
 }
 
@@ -343,6 +411,8 @@ export async function adminUpdateProduct(id: string, data: Partial<Product>): Pr
   }
   await getAdminDb().collection('products').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
   invalidateProductCache();
+  if (clean.brand) import('./brands').then(m => m.ensureBrands([clean.brand])).catch(e => reportIssue('brand auto-create', e));
+  queueSeoJob(id);
 }
 
 /** True when any order (new or old) contains this product. Orders keep their own copy of name/price, but history must stay linked. */
@@ -525,7 +595,7 @@ export async function adminDeleteAddress(userId: string, addressId: string): Pro
 export { adminGetDashboardStats, adminRebuildStats } from './stats-server';
 
 // ── COUPONS ──────────────────────────────────────────────────
-export async function adminValidateCoupon(code: string, orderAmount: number, userId?: string) {
+export async function adminValidateCoupon(code: string, orderAmount: number, userId?: string, items?: Array<{ productId: string; quantity: number; variantId?: string; variantName?: string }>) {
   const c = String(code || '').trim().toUpperCase();
   if (!c) return { valid: false, error: 'Enter a coupon code' };
   const snap = await getAdminDb().collection('coupons').where('code', '==', c).limit(1).get();
@@ -533,9 +603,22 @@ export async function adminValidateCoupon(code: string, orderAmount: number, use
   // same rules placeOrder() applies, so the cart preview and the final charge always agree
   let uses = 0;
   if (coupon?.perUserLimit && userId) uses = Number((await getAdminDb().collection('couponUsage').doc(`${coupon.id}_${userId}`).get()).data()?.count || 0);
-  const r = computeCoupon(coupon, Number(orderAmount) || 0, new Date(), uses);
+  // rules that depend on the cart (scope, buy-X-get-Y) or on the customer (group) are worked out from the real cart lines
+  let subtotal = Number(orderAmount) || 0; let ctx: any = {};
+  const db = getAdminDb();
+  if (coupon && Array.isArray(items) && items.length) {
+    const { resolveLinesWithDeals, couponCtx } = await import('./orders-server');
+    const { lines } = await resolveLinesWithDeals(db, items.slice(0, 100), { userId });
+    subtotal = Math.round(lines.reduce((a, l) => a + l.total, 0) * 1000) / 1000;
+    const { customerSegments } = await import('./pricing');
+    ctx = couponCtx(lines, coupon.segment && coupon.segment !== 'all' && userId ? customerSegments((await db.collection('users').doc(userId).get()).data()) : undefined);
+  } else if (coupon?.segment && coupon.segment !== 'all' && userId) {
+    const { customerSegments } = await import('./pricing');
+    ctx = { segments: customerSegments((await db.collection('users').doc(userId).get()).data()) };
+  }
+  const r = computeCoupon(coupon, subtotal, new Date(), uses, ctx);
   if (!r.valid) return { valid: false, error: r.error };
-  return { valid: true, discount: r.discount, coupon: { code: coupon.code, type: coupon.type, value: coupon.value } };
+  return { valid: true, discount: r.discount, ...(r.freeShipping ? { freeShipping: true } : {}), coupon: { code: coupon.code, type: coupon.type, value: coupon.value } };
 }
 
 // ── BANNERS ──────────────────────────────────────────────────
@@ -555,8 +638,9 @@ function cleanBanner(data: any, partial: boolean) {
   if (!partial || 'title' in d) { if (!String(d.title || '').trim()) throw new ProductError(400, 'Banner title is required.'); d.title = String(d.title).trim(); }
   if (!partial || 'image' in d) { if (!String(d.image || '').trim()) throw new ProductError(400, 'Banner image URL is required.'); d.image = String(d.image).trim(); }
   if ('link' in d && d.link && !/^(\/|https?:\/\/)/.test(String(d.link).trim())) throw new ProductError(400, 'Link must start with "/" or "https://".');
-  for (const k of ['subtitle', 'titleAr', 'subtitleAr', 'buttonText', 'buttonTextAr', 'link']) if (k in d) d[k] = String(d[k] ?? '').trim();
+  for (const k of ['subtitle', 'titleAr', 'subtitleAr', 'buttonText', 'buttonTextAr', 'link', 'imageAlt', 'imageAltAr']) if (k in d) d[k] = String(d[k] ?? '').trim().slice(0, 200);
   if ('sortOrder' in d) d.sortOrder = Number(d.sortOrder) || 0;
+  if (!partial || 'imageMode' in d) d.imageMode = d.imageMode === 'side' ? 'side' : 'background';
   return d;
 }
 
@@ -564,11 +648,13 @@ export async function adminCreateBanner(data: any): Promise<string> {
   const ref = await getAdminDb().collection('banners').add({
     isActive: true, sortOrder: 0, ...cleanBanner(data, false), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
+  queueFill('banners', ref.id);
   return ref.id;
 }
 
 export async function adminUpdateBanner(id: string, data: any): Promise<void> {
   await getAdminDb().collection('banners').doc(id).update({ ...cleanBanner(data, true), updatedAt: FieldValue.serverTimestamp() });
+  queueFill('banners', id);
 }
 
 export async function adminDeleteBanner(id: string): Promise<void> {
@@ -610,6 +696,26 @@ export async function getStorefrontBundles() {
     }
     return { ...b, available: valid && Number.isFinite(available) ? available : 0, freeShipping: allFree };
   });
+}
+
+/** One active bundle for its own page: its parts (name, picture, link) and how many can be sold, from the parts' stock. Null when missing or switched off. */
+export async function getStorefrontBundle(id: string) {
+  if (!id) return null;
+  const db = getAdminDb();
+  const b: any = toData<any>(await db.collection('bundles').doc(id).get());
+  if (!b || b.isActive === false) return null;
+  const comps = (b.items || []) as any[];
+  const snaps = comps.length ? await db.getAll(...comps.map(c => db.collection('products').doc(c.productId))) : [];
+  const prods = new Map(snaps.filter(x => x.exists).map(x => [x.id, x.data() as any]));
+  let available = comps.length ? Infinity : 0, allFree = comps.length > 0, valid = comps.length > 0;
+  const items = comps.map(c => {
+    const p = prods.get(c.productId);
+    if (!p || p.isActive === false) valid = false;
+    else { available = Math.min(available, Math.floor(Number(p.stock || 0) / (Number(c.quantity) || 1))); if (!p.freeShipping) allFree = false; }
+    return { ...c, slug: p?.slug || '', image: p?.images?.[0] || c.image || '', price: Number(c.price ?? p?.price ?? 0) };
+  });
+  const cap = SHOPPER_QTY_CAP;   // shoppers never see the real number
+  return { ...b, items, available: valid && Number.isFinite(available) ? Math.max(0, Math.min(available, cap)) : 0, freeShipping: allFree };
 }
 
 export async function adminGetBundleById(id: string) {
@@ -663,12 +769,14 @@ export async function adminCreateBundle(data: any): Promise<string> {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
+  queueFill('bundles', ref.id);
   return ref.id;
 }
 
 export async function adminUpdateBundle(id: string, data: any): Promise<void> {
   const clean = await normaliseBundle(data, true);
   await getAdminDb().collection('bundles').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
+  queueFill('bundles', id);
 }
 
 export async function adminDeleteBundle(id: string): Promise<void> {
@@ -729,11 +837,32 @@ async function normaliseCoupon(data: any, partial: boolean, selfId?: string) {
     const dup = await getAdminDb().collection('coupons').where('code', '==', d.code).limit(3).get();
     if (dup.docs.some(x => x.id !== selfId)) throw new ProductError(409, `The code "${d.code}" already exists.`);
   }
-  if (!partial || 'type' in d) { if (!['percentage', 'fixed'].includes(d.type)) throw new ProductError(400, 'Choose a coupon type.'); }
-  if (!partial || 'value' in d) {
+  if (!partial || 'type' in d) { if (!['percentage', 'fixed', 'free_shipping', 'buy_x_get_y'].includes(d.type)) throw new ProductError(400, 'Choose a coupon type.'); }
+  const typeChanged = !partial || 'type' in d || 'value' in d || 'buyQty' in d || 'getQty' in d;
+  let type = d.type;
+  if (typeChanged && !type) type = ((await getAdminDb().collection('coupons').doc(String(selfId)).get()).data() as any)?.type;
+  if (!typeChanged) { /* a plain on/off or limits edit: leave the discount rules alone */ }
+  else if (type === 'free_shipping' || type === 'buy_x_get_y') d.value = 0;
+  else if (!partial || 'value' in d) {
     d.value = Number(d.value);
     if (!(d.value > 0)) throw new ProductError(400, 'Discount value must be greater than zero.');
     if (d.type === 'percentage' && d.value > 100) throw new ProductError(400, 'A percentage discount cannot exceed 100.');
+  }
+  if (typeChanged && type === 'buy_x_get_y') {
+    for (const k of ['buyQty', 'getQty']) { d[k] = Math.floor(Number(d[k])); if (!(d[k] >= 1) || d[k] > 100) throw new ProductError(400, 'Enter how many items to buy and how many come free (1 or more).'); }
+  }
+  for (const k of ['productIds', 'categoryIds']) if (k in d) d[k] = (Array.isArray(d[k]) ? d[k] : []).map((x: any) => String(x)).filter(Boolean).slice(0, 100);
+  if ('showInAccount' in d) d.showInAccount = !!d.showInAccount;
+  if ('segment' in d) { if (!d.segment) d.segment = 'all'; if (!['all', 'new', 'returning', 'vip', 'inactive'].includes(d.segment)) throw new ProductError(400, 'Choose who can use this coupon.'); }
+  if ('startsAt' in d) {
+    if (!d.startsAt) d.startsAt = null;
+    else {
+      const raw = String(d.startsAt);
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00+03:00`).toISOString() : raw;   // a plain date starts at midnight Kuwait time
+      if (isNaN(new Date(iso).getTime())) throw new ProductError(400, 'Invalid start date.');
+      d.startsAt = iso;
+    }
+    if (d.startsAt && d.expiresAt && new Date(d.startsAt) > new Date(d.expiresAt)) throw new ProductError(400, 'The start date must be before the expiry date.');
   }
   for (const k of ['minOrderAmount', 'maxDiscount', 'usageLimit', 'perUserLimit']) if (k in d) {
     if (d[k] === '' || d[k] === null || d[k] === undefined) { d[k] = k === 'minOrderAmount' ? 0 : null; continue; }

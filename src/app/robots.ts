@@ -1,5 +1,6 @@
+import { siteBase } from '@/lib/site-url';
 import { MetadataRoute } from 'next';
-const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://floridakuwait.com';
+const BASE = siteBase();
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [

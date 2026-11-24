@@ -1,5 +1,5 @@
 'use client';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { Check, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useStoreSettings } from '@/lib/useStoreSettings';
@@ -24,7 +24,7 @@ export function ShopHero() {
   return (
     <div className="page-hero"><div className="container-custom">
       <Crumbs items={[{ label: t('c1_page.home'), href: '/' }, { label: t('c1_page.shop') }]} />
-      <h1 className="text-3xl font-bold text-gray-900 font-display">{t('c1_page.allProducts')}</h1>
+      <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 font-display">{t('c1_page.allProducts')}</h1>
       <p className="text-gray-500 mt-1">{t('c1_page.allSub')}</p>
     </div></div>
   );
@@ -36,8 +36,23 @@ export function CategoryHero({ cat, fallbackName }: { cat: any | null; fallbackN
   return (
     <div className="page-hero"><div className="container-custom">
       <Crumbs items={[{ label: t('c1_page.home'), href: '/' }, { label: t('c1_page.shop'), href: '/shop' }, { label: name }]} />
-      <h1 className="text-3xl font-bold text-gray-900 font-display">{name}</h1>
+      <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 font-display">{name}</h1>
       {cat && L(cat, 'description') && <p className="text-gray-500 mt-1">{L(cat, 'description')}</p>}
+    </div></div>
+  );
+}
+
+export function BrandHero({ brand }: { brand: any }) {
+  const { t, L } = useLanguage();
+  const name = L(brand, 'name');
+  return (
+    <div className="page-hero"><div className="container-custom">
+      <Crumbs items={[{ label: t('c1_page.home'), href: '/' }, { label: name }]} />
+      <div className="flex items-center gap-4">
+        {brand.image && <img src={brand.image} alt={L(brand, 'imageAlt') || name} className="h-14 w-auto max-w-[140px] object-contain rounded-2xl bg-white border p-1.5 shadow-soft" />}
+        <div><h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 font-display">{name}</h1>
+          {L(brand, 'description') && <p className="text-gray-500 mt-1 max-w-2xl">{L(brand, 'description')}</p>}</div>
+      </div>
     </div></div>
   );
 }
@@ -47,8 +62,8 @@ export function DealsHero() {
   const { freeShippingThreshold } = useStoreSettings();
   const chips = [freeShippingThreshold ? t('c1_page.dealsShip', { amount: formatPrice(freeShippingThreshold) }) : '', t('c1_page.dealsRet'), t('c1_page.dealsQ')].filter(Boolean);
   return (
-    <div className="bg-gradient-to-r from-brand-700 to-brand-600 text-white py-14">
-      <div className="container-custom text-center">
+    <div className="container-custom pt-3 md:pt-6">
+      <div className="rounded-3xl md:rounded-[2rem] bg-gradient-to-br from-brand-800 to-brand-600 text-white py-10 md:py-14 px-5 text-center shadow-card">
         <h1 className="text-3xl md:text-4xl font-black font-display mb-2">{t('c1_page.dealsTitle')}</h1>
         <p className="text-brand-100 text-lg mb-6">{t('c1_page.dealsSub')}</p>
         <div className="flex flex-wrap justify-center gap-3 text-sm">

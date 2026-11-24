@@ -15,7 +15,8 @@ import type { DashboardStats } from '@/types';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#f59e0b', confirmed: '#3b82f6', processing: '#8b5cf6',
-  shipped: '#06b6d4', delivered: '#10b981', cancelled: '#ef4444', returned: '#f97316',
+  out_for_delivery: '#0ea5e9', shipped: '#06b6d4', delivered: '#10b981', cancelled: '#ef4444', returned: '#f97316',
+  return_requested: '#f59e0b', return_approved: '#fb923c', return_picked_up: '#f97316', return_rejected: '#64748b', refunded: '#dc2626',
 };
 const PIE_COLORS = ['#1a56db','#7e3af2','#10b981','#f97316','#ef4444','#06b6d4'];
 
@@ -70,14 +71,15 @@ export default function AdminDashboard() {
   );
 
   const statCards = [
-    { icon: Banknote,     label: 'Revenue (30d)',     value: formatPrice(stats?.totalRevenue || 0),   change: stats?.revenueChange || 0,  color: 'text-green-600 bg-green-50',  href: '/admin/orders' },
-    { icon: ShoppingCart, label: 'Total Orders',      value: stats?.totalOrders || 0,                change: stats?.ordersChange  || 0,  color: 'text-brand-600 bg-brand-50',  href: '/admin/orders' },
+    { icon: Banknote,     label: 'Revenue earned (30d)', value: formatPrice(stats?.recognized?.last30 ?? stats?.totalRevenue ?? 0),   change: stats?.revenueChange || 0,  color: 'text-green-600 bg-green-50',  href: '/admin/orders' },
+    { icon: ShoppingCart, label: 'All orders',      value: stats?.totalOrders || 0,                change: stats?.ordersChange  || 0,  color: 'text-brand-600 bg-brand-50',  href: '/admin/orders' },
     { icon: Package,      label: 'Active Products',   value: stats?.totalProducts || 0,              change: 0,                          color: 'text-purple-600 bg-purple-50', href: '/admin/products' },
     { icon: Users,        label: 'Customers',         value: stats?.totalCustomers || 0,             change: 0,                          color: 'text-orange-600 bg-orange-50', href: '/admin/customers' },
   ];
 
   const avgOrderValue = stats?.avgOrderValue || 0;
   const pendingCount  = stats?.ordersByStatus?.['pending'] || 0;
+  const returnsOpen   = ['return_requested', 'return_approved', 'return_picked_up'].reduce((a, k) => a + (stats?.ordersByStatus?.[k] || 0), 0);
 
   return (
     <div className="p-4 lg:p-8">
@@ -95,6 +97,11 @@ export default function AdminDashboard() {
           <Link href="/admin/orders?status=pending"
             className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm font-semibold hover:bg-amber-100 transition-colors">
             <Clock className="w-4 h-4" /> {pendingCount} Pending Orders
+          </Link>
+        )}
+        {returnsOpen > 0 && (
+          <Link href="/admin/returns" className="flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-200 text-orange-700 rounded-xl text-sm font-semibold hover:bg-orange-100 transition-colors">
+            {returnsOpen} open returns
           </Link>
         )}
       </div>
@@ -126,16 +133,50 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* AOV Banner */}
-      {avgOrderValue > 0 && (
-        <div className="card p-4 mb-6 bg-gradient-to-r from-brand-600 to-brand-700 text-white flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-brand-100">Average Order Value (30 days)</p>
-            <p className="text-2xl font-black mt-0.5">{formatPrice(avgOrderValue)}</p>
-          </div>
-          <BarChart2 className="w-10 h-10 text-brand-300" />
+      {/* Revenue — only money that is really earned */}
+      <div className="card p-4 lg:p-5 mb-6">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+          <h2 className="font-bold text-gray-900">Revenue</h2>
+          <p className="text-xs text-gray-500">Counted once an order is delivered and its return period has ended. Cancelled, returned and refunded orders are never counted.</p>
         </div>
-      )}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            ['Today', stats?.recognized?.today || 0, ''],
+            ['Last 7 days', stats?.recognized?.last7 || 0, ''],
+            ['This month', stats?.recognized?.thisMonth || 0, stats?.revenueChange ? `${stats.revenueChange > 0 ? '+' : ''}${stats.revenueChange}% vs last month` : `Last month ${formatPrice(stats?.recognized?.lastMonth || 0)}`],
+            ['Avg. order (30d)', avgOrderValue, `${stats?.recognized?.orders30 || 0} orders earned`],
+          ].map(([l, v, sub]) => (
+            <div key={String(l)} className="rounded-2xl bg-green-50/70 p-3">
+              <p className="text-xs text-gray-500">{l}</p>
+              <p className="text-lg font-black text-gray-900">{formatPrice(Number(v))}</p>
+              {sub ? <p className="text-[11px] text-gray-500 mt-0.5">{sub}</p> : null}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+          <div className="rounded-2xl bg-amber-50 p-3">
+            <p className="text-xs text-gray-500">On its way (not earned yet)</p>
+            <p className="text-lg font-black text-gray-900">{formatPrice(stats?.pendingRevenue?.inProgress || 0)}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{stats?.pendingRevenue?.inProgressCount || 0} orders not delivered</p>
+          </div>
+          <div className="rounded-2xl bg-blue-50 p-3">
+            <p className="text-xs text-gray-500">Return period open</p>
+            <p className="text-lg font-black text-gray-900">{formatPrice(stats?.pendingRevenue?.held || 0)}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{stats?.pendingRevenue?.heldCount || 0} delivered orders waiting</p>
+          </div>
+          <div className="rounded-2xl bg-red-50 p-3">
+            <p className="text-xs text-gray-500">Refunded (30d)</p>
+            <p className="text-lg font-black text-gray-900">{formatPrice(stats?.refunds?.last30 || 0)}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{stats?.refunds?.count30 || 0} refunds</p>
+          </div>
+          <div className="rounded-2xl bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">Orders placed (30d)</p>
+            <p className="text-lg font-black text-gray-900">{formatPrice(stats?.placed?.last30 || 0)}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{stats?.placed?.orders30 || 0} orders, before returns</p>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400 mt-3">Shipping included in earned revenue (30d): {formatPrice(stats?.recognized?.shipping30 || 0)} · Discounts given on earned orders (30d): {formatPrice(stats?.recognized?.discount30 || 0)}</p>
+      </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl mb-6 w-fit">
@@ -153,7 +194,7 @@ export default function AdminDashboard() {
           {/* Revenue Chart */}
           <div className="card p-5">
             <h3 className="font-bold text-gray-800 mb-5 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-brand-600" /> Revenue & Orders (Last 14 Days)
+              <TrendingUp className="w-4 h-4 text-brand-600" /> Earned revenue vs orders placed (14 days)
             </h3>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={stats?.revenueByDay || []}>
@@ -163,7 +204,7 @@ export default function AdminDashboard() {
                 <YAxis yAxisId="rev" tick={{ fontSize: 11 }} tickFormatter={v => `KD${v}`} />
                 <YAxis yAxisId="ord" orientation="right" tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v: any, n: string) =>
-                  n === 'revenue' ? [formatPrice(Number(v)), 'Revenue'] : [v, 'Orders']} />
+                  n === 'revenue' ? [formatPrice(Number(v)), 'Revenue earned'] : [v, 'Orders placed']} />
                 <Legend />
                 <Line yAxisId="rev" type="monotone" dataKey="revenue" stroke="#1a56db" strokeWidth={2.5} dot={false} name="revenue" />
                 <Line yAxisId="ord" type="monotone" dataKey="orders"  stroke="#f97316" strokeWidth={2}   dot={false} name="orders" />
@@ -174,9 +215,9 @@ export default function AdminDashboard() {
           <div className="grid lg:grid-cols-2 gap-5">
             {/* Order Status Pie */}
             <div className="card p-5">
-              <h3 className="font-bold text-gray-800 mb-4">Orders by Status (14 days)</h3>
+              <h3 className="font-bold text-gray-800 mb-4">Orders by status (all time)</h3>
               {Object.keys(stats?.ordersByStatus || {}).length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">No orders in last 14 days</p>
+                <p className="text-center text-gray-400 py-8 text-sm">No orders yet</p>
               ) : (
                 <div className="flex items-center gap-4">
                   <PieChart width={130} height={130}>
@@ -243,7 +284,7 @@ export default function AdminDashboard() {
         <div className="space-y-5">
           <div className="card p-5">
             <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <Star className="w-4 h-4 text-amber-500" /> Top Products by Revenue (Last 30 Days)
+              <Star className="w-4 h-4 text-amber-500" /> Top products by earned revenue
             </h3>
             {(stats?.topProducts || []).length === 0 ? (
               <p className="text-center text-gray-400 py-8 text-sm">No sales data yet</p>
@@ -267,7 +308,7 @@ export default function AdminDashboard() {
                       {p.image && <img src={p.image} alt="" className="w-8 h-8 rounded-lg object-cover border border-gray-200 flex-shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <Link href={`/p/${encodeURIComponent(p.id)}`} target="_blank" className="text-sm font-semibold text-gray-800 truncate block hover:text-brand-700 hover:underline">{p.name}</Link>
-                        <p className="text-xs text-gray-400">{p.units} units sold</p>
+                        <p className="text-xs text-gray-400">{p.units} units</p>
                       </div>
                       <p className="font-black text-gray-900 flex-shrink-0">{formatPrice(p.revenue)}</p>
                     </div>
@@ -291,7 +332,7 @@ export default function AdminDashboard() {
                 </Link>))}
           </div>
           <div className="card p-4">
-            <h3 className="font-bold text-gray-800 mb-3">Top customers <span className="text-xs font-normal text-gray-400">(lifetime value)</span></h3>
+            <h3 className="font-bold text-gray-800 mb-3">Top customers <span className="text-xs font-normal text-gray-400">(value of orders placed)</span></h3>
             {(stats?.topCustomers || []).length === 0 ? <p className="text-sm text-gray-400">No data yet</p> :
               (stats?.topCustomers || []).map((c: any) => (
                 <div key={c.id} className="flex items-center justify-between py-2 border-b border-gray-50 text-sm">
@@ -306,13 +347,12 @@ export default function AdminDashboard() {
         <div className="space-y-5">
           <div className="card p-5">
             <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <BarChart2 className="w-4 h-4 text-brand-600" /> Category Performance (Last 30 Days)
+              <BarChart2 className="w-4 h-4 text-brand-600" /> Category performance (earned revenue)
             </h3>
             {(stats?.categoryPerformance || []).length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">No sales data yet — place some test orders to see category stats here.</p>
-                <p className="text-xs mt-1 text-gray-300">Tip: make sure order items include a categoryName field.</p>
+                <p className="text-sm">No earned revenue yet. Sales appear here once orders are delivered and their return period has ended.</p>
               </div>
             ) : (
               <>

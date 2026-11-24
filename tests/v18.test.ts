@@ -6,14 +6,18 @@ import { placeOrder, cancelOrder, quoteShipping, OrderError } from '../src/lib/o
 import { fixImageUrl, publicBase } from '../src/lib/image-url';
 import { matchScore, computeCoupon, applyFlashDeals } from '../src/lib/pricing';
 import { scoreRecommendations, tokens } from '../src/lib/recommend';
-import { toClaudeTools, claudeAgent } from '../src/lib/claude';
+import { toOpenAITools, openaiAgent } from '../src/lib/openai';
 import { aiText, parseJsonLoose } from '../src/lib/ai';
 import { searchBundles } from '../src/lib/firestore-admin';
 import { buildInvoicePdf } from '../src/lib/invoice-pdf';
 
 // ── image links ───────────────────────────────────────────────
 test('image links without https:// are repaired, good ones untouched', () => {
-  assert.equal(fixImageUrl('img.yourdomain.com/products/hello-l66pay.webp'), 'https://img.yourdomain.com/products/hello-l66pay.webp');
+  assert.equal(fixImageUrl('img.yourdomain.com/products/hello-l66pay.webp'), '/media/products/hello-l66pay.webp');     // the placeholder from your env
+  assert.equal(fixImageUrl('https://pub-1a2b.r2.dev/banners/sale.webp'), '/media/banners/sale.webp');
+  assert.equal(fixImageUrl('https://shop.example.com/cdn/shop/files/a.jpg'), 'https://shop.example.com/cdn/shop/files/a.jpg'); // someone else's picture is left alone
+  assert.equal(fixImageUrl('https://random.com/products/a.webp'), 'https://random.com/products/a.webp');
+  assert.equal(fixImageUrl('/media/products/a.webp'), '/media/products/a.webp');
   assert.equal(fixImageUrl('https://pub-1.r2.dev/a.webp'), 'https://pub-1.r2.dev/a.webp');
   assert.equal(fixImageUrl('/logo.svg'), '/logo.svg');
   assert.equal(fixImageUrl('data:image/png;base64,AAA'), 'data:image/png;base64,AAA');
@@ -144,45 +148,47 @@ test('recommendations: several seeds (the cart) are combined, cart items are exc
 
 // ── Claude + fallback ─────────────────────────────────────────
 const realFetch = globalThis.fetch;
-afterEach(() => { globalThis.fetch = realFetch; delete process.env.ANTHROPIC_API_KEY; delete process.env.GEMINI_API_KEY; });
+afterEach(() => { globalThis.fetch = realFetch; delete process.env.OPENAI_API_KEY; delete process.env.GEMINI_API_KEY; });
 const json = (body: any, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-test('Gemini tool declarations convert to Claude tools', () => {
-  const t = toClaudeTools([{ name: 'x', description: 'd', parameters: { type: 'OBJECT', properties: { q: { type: 'STRING' }, n: { type: 'INTEGER' }, l: { type: 'ARRAY', items: { type: 'NUMBER' } } }, required: ['q'] } }]);
-  assert.equal(t[0].input_schema.type, 'object'); assert.equal(t[0].input_schema.properties.q.type, 'string');
-  assert.equal(t[0].input_schema.properties.l.items.type, 'number'); assert.deepEqual(t[0].input_schema.required, ['q']);
+test('Gemini tool declarations convert to OpenAI tools', () => {
+  const t = toOpenAITools([{ name: 'x', description: 'd', parameters: { type: 'OBJECT', properties: { q: { type: 'STRING' }, l: { type: 'ARRAY', items: { type: 'NUMBER' } } }, required: ['q'] } }]);
+  assert.equal(t[0].type, 'function'); assert.equal(t[0].function.parameters.type, 'object'); assert.equal(t[0].function.parameters.properties.q.type, 'string');
+  assert.equal(t[0].function.parameters.properties.l.items.type, 'number'); assert.deepEqual(t[0].function.parameters.required, ['q']);
 });
-test('Claude assistant: runs the tool, sends the result back, returns the final text and proposals', async () => {
-  process.env.ANTHROPIC_API_KEY = 'k';
+test('OpenAI assistant: runs the tool, sends the result back, returns the final text and proposals', async () => {
+  process.env.OPENAI_API_KEY = 'k';
   const sent: any[] = [];
   globalThis.fetch = (async (_u: any, init: any) => {
     const body = JSON.parse(init.body); sent.push(body);
-    if (sent.length === 1) return json({ stop_reason: 'tool_use', content: [{ type: 'text', text: 'Let me check.' }, { type: 'tool_use', id: 't1', name: 'search_products', input: { query: 'cable' } }] });
-    return json({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Cable is 10 KWD.' }] });
+    if (sent.length === 1) return json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'search_products', arguments: '{"query":"cable"}' } }] } }] });
+    return json({ choices: [{ message: { role: 'assistant', content: 'Cable is 10 KWD.' } }] });
   }) as any;
-  const r = await claudeAgent({
+  const r = await openaiAgent({
     system: 'sys', tools: [{ name: 'search_products', description: 'd', parameters: { type: 'OBJECT', properties: {} } }],
-    history: [{ role: 'assistant', text: 'old' }, { role: 'user', text: 'price of cable?' }],
-    runTool: async (n, a) => ({ data: { found: [{ name: 'Cable', price: 10 }], args: a }, pending: { name: 'admin_x', args: {}, summary: 'do x' } }),
+    history: [{ role: 'user', text: 'price of cable?' }],
+    runTool: async (_n, a) => ({ data: { found: [{ name: 'Cable', price: 10 }], args: a }, pending: { name: 'admin_x', args: {}, summary: 'do x' } }),
   });
   assert.equal(r.text, 'Cable is 10 KWD.'); assert.equal(r.pending.length, 1);
-  assert.equal(sent[0].messages[0].role, 'user');                                     // leading assistant turn dropped
-  const back = sent[1].messages.at(-1); assert.equal(back.role, 'user'); assert.equal(back.content[0].type, 'tool_result'); assert.equal(back.content[0].tool_use_id, 't1');
-  assert.match(back.content[0].content, /Cable/);
+  const back = sent[1].messages.at(-1); assert.equal(back.role, 'tool'); assert.equal(back.tool_call_id, 't1'); assert.match(back.content, /Cable/);
 });
-test('aiText prefers Claude, and falls back to Gemini when Claude is down', async () => {
-  process.env.ANTHROPIC_API_KEY = 'k'; process.env.GEMINI_API_KEY = 'g';
+test('aiText: Gemini first for every job, OpenAI is only the backup (or first if AI_BULK_PROVIDER=openai for bulk)', async () => {
+  process.env.OPENAI_API_KEY = 'k'; process.env.GEMINI_API_KEY = 'g';
   const hits: string[] = [];
   globalThis.fetch = (async (u: any) => {
     hits.push(String(u));
-    if (String(u).includes('anthropic')) return json({ error: { message: 'overloaded' } }, 529);
+    if (String(u).includes('openai')) return json({ error: { message: 'down' } }, 500);
     return json({ candidates: [{ content: { parts: [{ text: '{"a":"مرحبا"}' }] } }] });
   }) as any;
-  const r = await aiText({ system: 's', user: 'u', json: true, fast: true });
+  const r = await aiText({ system: 's', user: 'u', json: true, fast: true, job: 'bulk' });
   assert.equal(r.provider, 'gemini'); assert.deepEqual(parseJsonLoose(r.text), { a: 'مرحبا' });
-  assert.ok(hits[0].includes('anthropic'));
-  globalThis.fetch = (async () => json({ content: [{ type: 'text', text: 'hello' }] })) as any;
-  assert.equal((await aiText({ system: 's', user: 'u' })).provider, 'claude');
+  assert.ok(hits[0].includes('generativelanguage'), 'Gemini is asked first even for background work');
+  assert.ok(!hits.some(h => h.includes('openai')), 'OpenAI is not touched when Gemini answers');
+  globalThis.fetch = (async (u: any) => String(u).includes('openai') ? json({ choices: [{ message: { content: 'hello' } }] }) : json({ error: {} }, 500)) as any;
+  assert.equal((await aiText({ system: 's', user: 'u', job: 'bulk' })).provider, 'openai');
+  process.env.AI_BULK_PROVIDER = 'openai'; const seen: string[] = [];
+  globalThis.fetch = (async (u: any) => { seen.push(String(u)); return json({ choices: [{ message: { content: 'x' } }] }); }) as any;
+  await aiText({ system: 's', user: 'u', job: 'bulk' }); assert.ok(seen[0].includes('openai')); delete process.env.AI_BULK_PROVIDER;
 });
 test('parseJsonLoose copes with fences and chatter', () => {
   assert.deepEqual(parseJsonLoose('```json\n{"a":1}\n```'), { a: 1 });

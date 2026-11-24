@@ -39,6 +39,7 @@ export async function placeOrderHandler(req: NextRequest) {
       items: Array.isArray(body.items) ? body.items.map((i: any) => ({
         productId: i.productId, quantity: i.quantity, variantId: i.variantId, variantName: i.variantName,
       })) : [],
+      redeemPoints: Math.max(0, Math.floor(Number(body.redeemPoints) || 0)),
       shippingAddress: body.shippingAddress,
       shippingRateId: body.shippingRateId,
       couponCode: body.couponCode, notes: body.notes,

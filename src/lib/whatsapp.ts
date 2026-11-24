@@ -1,3 +1,4 @@
+import { siteBase } from './site-url';
 // ─────────────────────────────────────────────────────────────
 //  WhatsApp Business Cloud API (Meta)
 //  Docs: https://developers.facebook.com/docs/whatsapp/cloud-api
@@ -102,7 +103,7 @@ export async function sendWhatsAppOrderConfirmation(order: Order): Promise<void>
     `*Delivering to:* ${order.shippingAddress.city}, Kuwait`,
     ``,
     `You'll receive updates as your order is processed.`,
-    `Track your order: ${process.env.NEXT_PUBLIC_APP_URL}/order-tracking?q=${order.orderNumber}`,
+    `Track your order: ${siteBase()}/order-tracking?q=${order.orderNumber}`,
     ``,
     `Questions? Reply to this message or call us +965 2222 5050`,
   ].join('\n');
@@ -140,7 +141,7 @@ export async function sendWhatsAppStatusUpdate(order: Order, newStatus: string):
     ``,
     `*Order:* #${order.orderNumber}` + trackingLine,
     ``,
-    `Track your order: ${process.env.NEXT_PUBLIC_APP_URL}/order-tracking?q=${order.orderNumber}`,
+    `Track your order: ${siteBase()}/order-tracking?q=${order.orderNumber}`,
     ``,
     `Questions? Reply here or call +965 2222 5050`,
   ].join('\n');

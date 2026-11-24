@@ -1,7 +1,7 @@
 'use client';
 // AI-powered product recommendations — like Amazon / Noon / Carrefour Kuwait
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { Sparkles, Loader2, Package } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatPrice, calculateDiscount } from '@/lib/utils';
@@ -99,7 +99,7 @@ function RecommendationGrid({ items }: { items: ProductRecommendation[] }) {
               </div>
             </div>
             <div className="p-3">
-              {product.brand && <p className="text-[10px] text-brand-600 font-bold uppercase tracking-wider mb-0.5">{product.brand}</p>}
+              {product.brand && <p className="text-[10px] text-brand-600 font-bold mb-0.5">{product.brand}</p>}
               <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug mb-2">{L(product as any, 'name')}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-base font-black text-brand-700">{formatPrice(product.price)}</span>

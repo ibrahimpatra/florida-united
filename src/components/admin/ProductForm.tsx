@@ -1,19 +1,33 @@
 'use client';
+import { HtmlField } from './HtmlField';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
+import { uploadImage as sendImage } from '@/lib/client-upload';
 import { Upload, X, Plus, Save, ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { generateSlug, generateSKU } from '@/lib/utils';
 import type { Category } from '@/types';
+import { PillSelect } from './PillSelect';
+import { Collapsible } from './Collapsible';
+import { useBusy } from '@/components/layout/BusyLayer';
 
 interface Props { initialData?: any; productId?: string; }
+
+function AiMini({ onClick, busy, label }: { onClick: () => void; busy: boolean; label: string }) {
+  return <button type="button" onClick={onClick} disabled={busy} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline disabled:opacity-50">{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}{label}</button>;
+}
 
 export function ProductForm({ initialData, productId }: Props) {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [brandNames, setBrandNames] = useState<string[]>([]);
+  useEffect(() => { fetch('/api/brands').then(r => (r.ok ? r.json() : [])).then(d => setBrandNames(Array.isArray(d) ? d.map((b: any) => b.name) : [])).catch(() => {}); }, []);
+  const { start: startBusy } = useBusy();
+  const [parentCat, setParentCat] = useState<string | null>(null);   // Category pill
+  const [subCat, setSubCat] = useState<string | null>(null);         // Sub-category pill (optional)
   const [images, setImages] = useState<string[]>(initialData?.images || []);
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
@@ -34,6 +48,27 @@ export function ProductForm({ initialData, productId }: Props) {
   });
 
   const nameValue = watch('name');
+  // Draft memory (new products only): what you typed survives a refresh or an accidental close, and is dropped once saved.
+  const DRAFT_KEY = 'admin-draft-product';
+  const [draftNote, setDraftNote] = useState('');
+  useEffect(() => {
+    if (productId) return;
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      if (d?.values?.name) {
+        Object.entries(d.values).forEach(([k, v]) => setValue(k as any, v as any));
+        if (Array.isArray(d.images)) setImages(d.images); if (Array.isArray(d.tags)) setTags(d.tags);
+        if (d.parentCat) setParentCat(d.parentCat); if (d.subCat) setSubCat(d.subCat);
+        setDraftNote('Draft restored');
+      }
+    } catch { /* no draft */ }
+  }, []);                                    // eslint-disable-line react-hooks/exhaustive-deps
+  const allValues = watch();
+  useEffect(() => {
+    if (productId) return;
+    const t = setTimeout(() => { try { if (String(allValues?.name || '').trim()) localStorage.setItem(DRAFT_KEY, JSON.stringify({ values: allValues, images, tags, parentCat, subCat })); } catch { /* storage is optional */ } }, 800);
+    return () => clearTimeout(t);
+  }, [JSON.stringify(allValues), images, tags, parentCat, subCat]);   // eslint-disable-line react-hooks/exhaustive-deps
   const uomId = watch('uomId' as any) as string | undefined;
   const units = (watch('units' as any) as any[] | undefined) || [];
   const setUnits = (u: any[]) => setValue('units' as any, u as any, { shouldDirty: true });
@@ -62,8 +97,28 @@ export function ProductForm({ initialData, productId }: Props) {
   // fetch callback ran BEFORE React rendered the options, so it silently stayed on
   // "Select Category". Apply it in an effect that runs AFTER the options are committed.
   useEffect(() => {
-    if (categories.length && initialData?.categoryId) setValue('categoryId', initialData.categoryId, { shouldDirty: false });
+    if (!categories.length || !initialData?.categoryId) return;
+    const c = categories.find(x => x.id === initialData.categoryId);
+    if (c?.parentId && categories.some(x => x.id === c.parentId)) { setParentCat(c.parentId); setSubCat(c.id); }
+    else if (c) setParentCat(c.id);
+    setValue('categoryId', initialData.categoryId, { shouldDirty: false });
   }, [categories, initialData?.categoryId]);
+  // the product stores ONE category id: the sub-category when chosen, else the category
+  const chooseCategory = (id: string | null) => { setParentCat(id); setSubCat(null); setValue('categoryId', (id || '') as any, { shouldDirty: true, shouldValidate: true }); };
+  const chooseSub = (id: string | null) => { setSubCat(id); setValue('categoryId', (id || parentCat || '') as any, { shouldDirty: true, shouldValidate: true }); };
+  const createCategory = (parentId?: string) => async (name: string) => {
+    const res = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(parentId ? { parentId } : {}) }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.id) { toast.error(d.error || 'Could not add it.'); return null; }
+    const cat = { id: d.id, name, parentId: parentId || undefined, isActive: true } as any as Category;
+    setCategories(cs => [...cs, cat]); toast.success(`Added "${name}"`); return { id: d.id, label: name };
+  };
+  const createBrand = async (name: string) => {
+    const res = await fetch('/api/brands', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok && res.status !== 409) { toast.error(d.error || 'Could not add the brand.'); return null; }
+    setBrandNames(b => b.includes(name) ? b : [...b, name]); if (res.ok) toast.success(`Added brand "${name}"`); return { id: name, label: name };
+  };
 
   useEffect(() => {
     if (nameValue && !productId) {
@@ -73,24 +128,25 @@ export function ProductForm({ initialData, productId }: Props) {
   }, [nameValue]);
 
   /** Writes descriptions (English + Arabic), meta text and tags from the name and the facts typed here. Only empty fields are filled unless "replace" is ticked. */
-  const writeWithAi = async () => {
+  const writeWithAi = async (only?: string[]) => {
     const name = String(watch('name') || '').trim();
     if (name.length < 3) { toast.error('Enter the product name first.'); return; }
     setAiBusy(true);
     try {
       const cat = categories.find((c: any) => c.id === watch('categoryId'));
       const res = await fetch('/api/admin/describe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        name, nameAr: watch('nameAr' as any), brand: watch('brand'), category: (cat as any)?.name, sku: watch('sku'), specs: aiFacts, tags, existing: aiOverwrite ? watch('description') : '',
+        name, nameAr: watch('nameAr' as any), brand: watch('brand'), category: (cat as any)?.name, sku: watch('sku'), specs: aiFacts, tags, existing: (aiOverwrite || only) ? watch('description') : '',
       }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(d.error || 'The writer is unavailable right now.'); return; }
       let n = 0;
       for (const [k, v] of Object.entries(d.fields || {})) {
-        if (!aiOverwrite && String(watch(k as any) || '').trim()) continue;
+        if (only && !only.includes(k)) continue;
+        if (!only && !aiOverwrite && String(watch(k as any) || '').trim()) continue;
         setValue(k as any, v as any, { shouldDirty: true }); n++;
       }
-      if (Array.isArray(d.tags)) setTags(ts => [...ts, ...d.tags.filter((t: string) => !ts.includes(t))].slice(0, 20));
-      toast.success(n ? `Written with ${d.provider === 'claude' ? 'Claude' : 'Gemini'}. Please read it before saving.` : 'Everything was already filled. Tick "Replace" to rewrite.');
+      if (!only && Array.isArray(d.tags)) setTags(ts => [...ts, ...d.tags.filter((t: string) => !ts.includes(t))].slice(0, 20));
+      toast.success(n ? `Written with ${d.provider === 'openai' ? 'OpenAI' : 'Gemini'}. Please read it before saving.` : 'Everything was already filled. Tick "Replace" to rewrite.');
     } catch { toast.error('Network error: check your connection and try again.'); }
     finally { setAiBusy(false); }
   };
@@ -99,15 +155,10 @@ export function ProductForm({ initialData, productId }: Props) {
     if (images.length >= 8) { toast.error('Up to 8 images per product keeps storage small.'); return; }
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('folder', 'products');
-      fd.append('name', String(watch('name') || '')); // the file is saved as <product-name>-xxxx.webp so Google Images can read it
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.url) { setImages(imgs => [...imgs, data.url]); toast.success('Image uploaded'); }
-      else toast.error(data.error || 'Upload failed');
-    } catch { toast.error('Upload error'); }
+      // the name makes the stored file <product-name>-xxxx.webp, which Google Images can read
+      const url = await sendImage(file, { folder: 'products', name: String(watch('name') || '') });
+      setImages(imgs => [...imgs, url]); toast.success('Image uploaded');
+    } catch (e: any) { toast.error(e?.message || 'Upload failed'); }
     setUploading(false);
   };
 
@@ -121,6 +172,7 @@ export function ProductForm({ initialData, productId }: Props) {
   const onSubmit = async (data: any) => {
     if (saving) return;
     setSaving(true);
+    const stopBusy = startBusy(productId ? 'Saving product…' : 'Creating product…');
     try {
       const { id, createdAt, updatedAt, categoryName, categoryPath, avgRating, totalReviews, totalSold, totalRevenue, ...rest } = data;
       const payload = {
@@ -139,16 +191,25 @@ export function ProductForm({ initialData, productId }: Props) {
       try { result = await res.json(); } catch { /* non-JSON error page */ }
       if (res.ok && (result?.success || result?.id)) {
         toast.success(productId ? 'Product updated!' : 'Product created!');
+        try { localStorage.removeItem(DRAFT_KEY); } catch {}
         router.push('/admin/products');
         return;
       }
       toast.error(result?.error || `Save failed (server error ${res.status}). Nothing was changed.`);
     } catch { toast.error('Network error — check your connection and try again.'); }
-    setSaving(false);
+    stopBusy(); setSaving(false);
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
+      {/* Save and Cancel stay at the top while you scroll */}
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2.5 mb-5 bg-gray-50/95 backdrop-blur border-b border-gray-200 flex items-center gap-2">
+        <h1 className="flex-1 min-w-0 text-base sm:text-lg font-bold text-gray-900 font-display truncate">{productId ? 'Edit product' : 'New product'}{draftNote && <span className="ms-2 text-xs font-normal text-amber-700">{draftNote}</span>}</h1>
+        <button type="button" onClick={() => router.push('/admin/products')} className="btn-secondary py-2 px-3 text-sm"><ArrowLeft className="w-4 h-4"/>Cancel</button>
+        <button type="submit" disabled={saving} className="btn-primary py-2 px-4 text-sm">
+          {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <><Save className="w-4 h-4"/>{productId?'Save':'Create'}</>}
+        </button>
+      </div>
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main */}
         <div className="lg:col-span-2 space-y-6">
@@ -166,7 +227,7 @@ export function ProductForm({ initialData, productId }: Props) {
             </div>
             <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-3 mb-4">
               <div className="flex flex-wrap items-center gap-3">
-                <button type="button" onClick={writeWithAi} disabled={aiBusy} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-60">
+                <button type="button" onClick={() => writeWithAi()} disabled={aiBusy} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-60">
                   {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Write with AI
                 </button>
                 <label className="flex items-center gap-1.5 text-xs text-gray-600"><input type="checkbox" checked={aiOverwrite} onChange={e => setAiOverwrite(e.target.checked)} className="accent-brand-600" /> Replace what I already wrote</label>
@@ -195,7 +256,7 @@ export function ProductForm({ initialData, productId }: Props) {
                 </div>
               </div>
               <div>
-                <label className="label">Short Description</label>
+                <div className="flex items-center justify-between"><label className="label">Short Description</label><AiMini onClick={() => writeWithAi(['shortDescription', 'shortDescriptionAr'])} busy={aiBusy} label="Fill short text with AI" /></div>
                 <input {...register('shortDescription')} className="input-field" placeholder="One-line summary for product cards"/>
               </div>
               <div>
@@ -203,17 +264,22 @@ export function ProductForm({ initialData, productId }: Props) {
                 <input {...register('shortDescriptionAr' as any)} dir="rtl" lang="ar" className="input-field" placeholder="ملخص من سطر واحد"/>
               </div>
               <div>
-                <label className="label">Full Description *</label>
-                <textarea {...register('description',{required:'Description required'})} rows={5} className="input-field resize-y" placeholder="Detailed product description..."/>
+                <div className="flex items-center justify-between"><label className="label">Full Description *</label><AiMini onClick={() => writeWithAi(['description', 'descriptionAr'])} busy={aiBusy} label="Fill long text with AI" /></div>
+                <input type="hidden" {...register('description',{required:'Description required'})} />
+                <HtmlField value={watch('description') || ''} onChange={v => setValue('description', v, { shouldDirty: true, shouldValidate: true })} rows={8} placeholder="Plain text or simple HTML. Use the toolbar for bold, lists and links." />
+                {(errors as any).description && <p className="text-xs text-red-600 mt-1">{(errors as any).description.message}</p>}
               </div>
               <div>
                 <label className="label">Arabic Full Description <span dir="rtl" className="text-gray-400 font-normal">(الوصف الكامل)</span></label>
-                <textarea {...register('descriptionAr' as any)} dir="rtl" lang="ar" rows={5} className="input-field resize-y" placeholder="وصف تفصيلي للمنتج"/>
+                <input type="hidden" {...register('descriptionAr' as any)} />
+                <HtmlField dir="rtl" value={(watch('descriptionAr' as any) as string) || ''} onChange={v => setValue('descriptionAr' as any, v as any, { shouldDirty: true })} rows={8} placeholder="وصف تفصيلي للمنتج" />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Brand</label>
-                  <input {...register('brand')} className="input-field" placeholder="e.g. Siemens"/>
+                  <input type="hidden" {...register('brand')} />
+                  <PillSelect value={(watch('brand') as string) || null} onChange={id => setValue('brand', (id || '') as any, { shouldDirty: true })} onCreate={createBrand}
+                    placeholder="Search or add a brand" options={[...new Set([...brandNames, ...(initialData?.brand ? [initialData.brand] : [])])].map(n => ({ id: n, label: n }))} />
                 </div>
                 <div>
                   <label className="label">Barcode</label>
@@ -304,38 +370,34 @@ export function ProductForm({ initialData, productId }: Props) {
           </div>
 
           {/* SEO */}
-          <div className="card p-6">
-            <h3 className="font-bold text-gray-800 mb-4">SEO</h3>
+          <Collapsible title="SEO (Google)" hint="Optional. Filled automatically in the background if left empty.">
             <div className="space-y-3">
               <div><label className="label">Meta Title</label><input {...register('metaTitle')} className="input-field" placeholder="Appears in Google search results"/></div>
               <div><label className="label">Meta Description</label><textarea {...register('metaDesc')} rows={2} className="input-field resize-none" placeholder="Brief description for search engines (150-160 chars)"/></div>
+              <div><label className="label">Meta Title (Arabic)</label><input {...register('metaTitleAr' as any)} dir="rtl" className="input-field" placeholder="يظهر في نتائج جوجل بالعربية"/></div>
+              <div><label className="label">Meta Description (Arabic)</label><textarea {...register('metaDescAr' as any)} dir="rtl" rows={2} className="input-field resize-none"/></div>
               <div><label className="label">Meta Keywords</label><input {...register('metaKeywords')} className="input-field" placeholder="keyword1, keyword2, keyword3"/></div>
             </div>
-          </div>
+          </Collapsible>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-5">
-          {/* Category */}
-          <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-3">Category *</h3>
-            <select {...register('categoryId',{required:'Category required'})} className="input-field">
-              <option value="">Select Category</option>
-              {categories.filter(c => !c.parentId).map(root => {
-                const kids = categories.filter(c => c.parentId === root.id);
-                return kids.length ? (
-                  <optgroup key={root.id} label={`${root.name}${root.nameAr ? ` / ${root.nameAr}` : ''}`}>
-                    <option value={root.id}>{root.name} (general)</option>
-                    {kids.map(k => <option key={k.id} value={k.id}>- {k.name}{k.nameAr ? ` / ${k.nameAr}` : ''}</option>)}
-                  </optgroup>
-                ) : <option key={root.id} value={root.id}>{root.name}</option>;
-              })}
-              {/* orphaned sub-categories (parent missing/inactive) must still be selectable */}
-              {categories.filter(c => c.parentId && !categories.some(p => p.id === c.parentId)).map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            {errors.categoryId && <p className="text-red-500 text-xs mt-1">Category required</p>}
+          {/* Category + sub-category: one pill each */}
+          <div className="card p-5 space-y-4">
+            <div>
+              <h3 className="font-bold text-gray-800 mb-2">Category *</h3>
+              <input type="hidden" {...register('categoryId',{required:'Category required'})} />
+              <PillSelect value={parentCat} onChange={chooseCategory} onCreate={createCategory()} placeholder="Search or add a category"
+                options={categories.filter(c => !c.parentId || !categories.some(p => p.id === c.parentId)).map(c => ({ id: c.id, label: c.name, sub: (c as any).nameAr }))} />
+              {errors.categoryId && <p className="text-red-500 text-xs mt-1">Category required</p>}
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-800 mb-2">Sub-category <span className="text-xs font-normal text-gray-400">(optional)</span></h3>
+              <PillSelect value={subCat} onChange={chooseSub} onCreate={parentCat ? createCategory(parentCat) : undefined} disabled={!parentCat}
+                placeholder={parentCat ? 'Search or add a sub-category' : 'Pick a category first'}
+                options={categories.filter(c => c.parentId && c.parentId === parentCat).map(c => ({ id: c.id, label: c.name, sub: (c as any).nameAr }))} />
+            </div>
           </div>
 
           {/* Unit of measure */}
@@ -349,8 +411,7 @@ export function ProductForm({ initialData, productId }: Props) {
           </div>
 
           {/* Extra selling units */}
-          <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-1">Extra Selling Units</h3>
+          <Collapsible title="Extra selling units" hint="Optional: boxes, cartons, packs" defaultOpen={units.length > 0}>
             <p className="text-xs text-gray-500 mb-3">Optional. The product price above is for one base unit. Add boxes, cartons or packs here; stock is always tracked in base units.</p>
             <div className="space-y-3">
               {units.map((u, i) => (
@@ -371,7 +432,7 @@ export function ProductForm({ initialData, productId }: Props) {
             </div>
             <button type="button" onClick={() => setUnits([...units, { id: `u${Date.now().toString(36)}`, name: '', nameAr: '', factor: 12, price: Math.round(basePrice * 12 * 1000) / 1000 }])}
               className="mt-3 text-sm font-semibold text-brand-600 hover:underline">+ Add a unit</button>
-          </div>
+          </Collapsible>
 
           {/* Status */}
           <div className="card p-5">
@@ -393,24 +454,16 @@ export function ProductForm({ initialData, productId }: Props) {
           </div>
 
           {/* Returns */}
-          <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-3">Returns Policy</h3>
+          <Collapsible title="Returns policy" hint="Returnable by default">
+            <div>
             <label className="flex items-center gap-3 cursor-pointer mb-3">
               <input type="checkbox" {...register('isReturnable')} className="w-4 h-4 accent-brand-600 rounded"/>
               <span className="text-sm text-gray-700">Item is returnable</span>
             </label>
             <p className="text-xs text-gray-500">The return window (days after delivery) is set once for the whole store in Settings.</p>
-          </div>
+            </div>
+          </Collapsible>
 
-          {/* Save */}
-          <div className="flex gap-2">
-            <button type="button" onClick={()=>router.push('/admin/products')} className="btn-secondary flex-1 py-2.5 text-sm">
-              <ArrowLeft className="w-4 h-4"/>Cancel
-            </button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1 py-2.5 text-sm">
-              {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <><Save className="w-4 h-4"/>{productId?'Save Changes':'Create Product'}</>}
-            </button>
-          </div>
         </div>
       </div>
     </form>

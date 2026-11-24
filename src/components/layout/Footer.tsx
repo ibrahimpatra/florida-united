@@ -1,5 +1,5 @@
 'use client';
-import Link from 'next/link';
+import Link from '@/components/ui/LocLink';
 import { useBrand } from '@/contexts/BrandContext';
 import { BrandMark } from '@/components/layout/BrandMark';
 import { useEffect, useState } from 'react';
@@ -17,14 +17,14 @@ export function Footer() {
     fetch('/api/categories').then(r => (r.ok ? r.json() : [])).then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
   }, []);
   return (
-    <footer dir={dir} className="bg-gray-900 text-gray-300">
+    <footer dir={dir} className="bg-brand-950 text-gray-300 rounded-t-[2rem] md:rounded-t-[2.5rem] mt-10 overflow-hidden">
       {/* Main Footer */}
-      <div className="container-custom py-14">
+      <div className="container-custom py-10 md:py-14">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Brand */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-11 h-11 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-11 h-11 bg-brand-600 rounded-2xl flex items-center justify-center shadow-lg">
                 <span className="text-white font-bold text-lg font-display"><BrandMark /></span>
               </div>
               <div>
@@ -53,7 +53,7 @@ export function Footer() {
 
           {/* Quick Links */}
           <div>
-            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">{t('c1_foot.shop')}</h3>
+            <h3 className="text-white font-bold text-sm mb-4">{t('c1_foot.shop')}</h3>
             <ul className="space-y-2.5 text-sm">
               {[
                 { k: 'allProducts', href: '/shop' }, { k: 'newArrivals', href: '/shop?new=true' },
@@ -69,7 +69,7 @@ export function Footer() {
 
           {/* Account */}
           <div>
-            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">{t('c1_foot.account')}</h3>
+            <h3 className="text-white font-bold text-sm mb-4">{t('c1_foot.account')}</h3>
             <ul className="space-y-2.5 text-sm">
               {[
                 { k: 'myAccount', href: '/account' }, { k: 'myOrders', href: '/account/orders' }, { k: 'track', href: '/order-tracking' },
@@ -82,7 +82,7 @@ export function Footer() {
 
           {/* Info */}
           <div>
-            <h3 className="text-white font-bold text-sm uppercase tracking-wider mb-4">{t('c1_foot.info')}</h3>
+            <h3 className="text-white font-bold text-sm mb-4">{t('c1_foot.info')}</h3>
             <ul className="space-y-2.5 text-sm">
               {[{ k: 'about', href: '/about' }, { k: 'shipPolicy', href: '/shipping-info' }, { k: 'returnPolicy', href: '/returns-policy' },
                 { k: 'terms', href: '/terms' }, { k: 'privacy', href: '/privacy' }, { k: 'contact', href: '/contact' }].map(({ k, href }) => (
@@ -94,7 +94,7 @@ export function Footer() {
       </div>
 
       {/* Trust Badges Row */}
-      <div className="border-t border-gray-800">
+      <div className="border-t border-white/10">
         <div className="container-custom py-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
@@ -104,7 +104,7 @@ export function Footer() {
               { Icon: CreditCard, title: t('c1_foot.pay'), desc: t('c1_foot.payD') },
             ].map(({ Icon, title, desc }) => (
               <div key={title} className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-gray-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center flex-shrink-0">
                   <Icon className="w-4 h-4 text-brand-400" />
                 </div>
                 <div>
@@ -118,14 +118,14 @@ export function Footer() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="border-t border-gray-800 py-5">
+      <div className="border-t border-white/10 py-5">
         <div className="container-custom flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-gray-500">
           <p>© {new Date().getFullYear()} {isArabic ? SITE_CONFIG.fullNameAr : SITE_CONFIG.fullName}. {t('footer.rights')}.</p>
           <div className="flex items-center gap-4">
             <span>{t('c1_foot.accept')}:</span>
             <div className="flex gap-2">
               {[t('c1_foot.card'), t('c1_foot.cod')].map((p) => (
-                <span key={p} className="px-2 py-0.5 bg-gray-800 rounded text-gray-400 font-medium text-xs">{p}</span>
+                <span key={p} className="px-2.5 py-0.5 bg-white/10 rounded-full text-gray-300 font-medium text-xs">{p}</span>
               ))}
             </div>
           </div>

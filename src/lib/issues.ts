@@ -4,10 +4,19 @@
  * Same problem repeated = one row with a counter. Writes are throttled and can never break a request.
  */
 import { getAdminDb } from './firebase-admin';
+import { keepAlive } from './bg';
+
+export const ISSUE_RETENTION_DAYS = 30;
 
 export interface Issue { id: string; route: string; method: string; status: number; message: string; user: string; count: number; firstAt: string; lastAt: string }
 const recent = new Map<string, number>();
 const idOf = (route: string, message: string) => Buffer.from(`${route}|${message}`.slice(0, 300)).toString('base64url').slice(0, 90);
+
+/** Records a technical problem from anywhere (catch blocks, background jobs, webhooks). Fire and forget: it finishes after the response via waitUntil and never throws. */
+export function reportIssue(scope: string, err: any, extra: { status?: number; method?: string; user?: string; note?: string } = {}) {
+  const msg = String(err?.message || err || 'Unknown error');
+  return keepAlive(recordIssue({ route: scope, method: extra.method || 'APP', status: extra.status ?? 500, message: extra.note ? `${extra.note}: ${msg}` : msg, user: extra.user }));
+}
 
 export async function recordIssue(i: { route: string; method: string; status: number; message: string; user?: string }) {
   try {
@@ -27,7 +36,12 @@ export async function recordIssue(i: { route: string; method: string; status: nu
 
 export async function listIssues(limit = 200): Promise<Issue[]> {
   const snap = await getAdminDb().collection('errorLog').get();
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Issue)).sort((a, b) => b.lastAt.localeCompare(a.lastAt)).slice(0, limit);
+  const all = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Issue));
+  // 30-day retention: old rows are deleted whenever the list is opened (no extra cron needed)
+  const cutoff = new Date(Date.now() - ISSUE_RETENTION_DAYS * 86400_000).toISOString();
+  const old = all.filter(i => (i.lastAt || '') < cutoff);
+  if (old.length) { try { const b = getAdminDb().batch(); old.slice(0, 400).forEach(i => b.delete(getAdminDb().collection('errorLog').doc(i.id))); await b.commit(); } catch { /* try again next time */ } }
+  return all.filter(i => (i.lastAt || '') >= cutoff).sort((a, b) => b.lastAt.localeCompare(a.lastAt)).slice(0, limit);
 }
 export async function clearIssues(id?: string) {
   const col = getAdminDb().collection('errorLog');

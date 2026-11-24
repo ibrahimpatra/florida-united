@@ -7,13 +7,16 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { HeroBanner } from '@/components/home/HeroBanner';
 import { CategoryGrid } from '@/components/home/CategoryGrid';
+import { DealsProducts } from '@/components/home/DealsProducts';
 import { FeaturedProducts } from '@/components/home/FeaturedProducts';
 import { NewArrivals } from '@/components/home/NewArrivals';
 import { FlashDealsSection } from '@/components/home/FlashDealsSection';
 import { BrandsSection } from '@/components/home/BrandsSection';
 import { TrustBadges } from '@/components/home/TrustBadges';
+import { PromoTiles } from '@/components/home/PromoTiles';
+import { RecentlyViewed } from '@/components/product/RecentlyViewed';
 import { SectionHeader } from '@/components/home/SectionHeader';
-import { getTopBrands } from '@/lib/firestore-admin';
+import { getHomeBrands } from '@/lib/brands';
 import { NewsletterSection } from '@/components/home/NewsletterSection';
 import { ProductSkeleton } from '@/components/product/ProductSkeleton';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
@@ -31,7 +34,7 @@ export const revalidate = 300;
 
 export default async function HomePage() {
   const SITE_CONFIG = await getBrand();
-  const brands = await getTopBrands(12).catch(() => [] as string[]);
+  const brands = await getHomeBrands(12).catch(() => []);
   return (
     <>
       <AnnouncementBar/>
@@ -39,6 +42,8 @@ export default async function HomePage() {
       <main>
         <HeroBanner/>
         <FlashDealsSection/>
+        <PromoTiles/>
+        <DealsProducts/>
         <TrustBadges/>
         <section className="section bg-gray-50">
           <div className="container-custom">
@@ -58,6 +63,7 @@ export default async function HomePage() {
             <Suspense fallback={<ProductSkeleton count={4}/>}><NewArrivals/></Suspense>
           </div>
         </section>
+        <div className="container-custom"><RecentlyViewed/></div>
         <BrandsSection brands={brands}/>
         <NewsletterSection/>
       </main>

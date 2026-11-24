@@ -5,7 +5,8 @@
  */
 import { log } from './logger';
 
-const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+// Names confirmed against the key's own model list. The *-latest names are last: Google keeps them pointing at a current model if a named one is retired.
+const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
 export const geminiModels = () => [...new Set([process.env.GEMINI_MODEL, ...FALLBACK_MODELS].filter(Boolean) as string[])];
 let workingModel: string | null = null;
 
@@ -26,7 +27,7 @@ export function explainGemini(e: any): string {
 
 export const geminiConfigured = () => !!process.env.GEMINI_API_KEY;
 
-export type GenOpts = { fast?: boolean; timeoutMs?: number };
+export type GenOpts = { fast?: boolean; /** background work: the cheap, quick lite models go first so the free quota lasts */ bulk?: boolean; timeoutMs?: number; /** stop trying other models after this time (ms since epoch) so the request ends before Vercel's own time limit */ deadline?: number };
 
 async function call(model: string, body: any, timeoutMs: number): Promise<any> {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -58,16 +59,18 @@ const MODEL_GONE = new Set([404, 400]);                  // retired or wrong nam
 export async function generate(body: any, opts: GenOpts = {}): Promise<any> {
   const timeoutMs = opts.timeoutMs ?? (opts.fast ? 12_000 : 25_000);
   // short jobs (translate, descriptions) go to the lightweight model first: it answers in 1-3 seconds
-  const models = opts.fast ? [...geminiModels().filter(m => /lite/.test(m)), ...geminiModels().filter(m => !/lite/.test(m))] : geminiModels();
-  const all = !opts.fast && workingModel ? [workingModel, ...models.filter(m => m !== workingModel)] : models;
+  const models = opts.fast || opts.bulk ? [...geminiModels().filter(m => /lite/.test(m)), ...geminiModels().filter(m => !/lite/.test(m))] : geminiModels();
+  const all = !opts.fast && !opts.bulk && workingModel ? [workingModel, ...models.filter(m => m !== workingModel)] : models;
   let last: any;
   for (let round = 0; round < 2; round++) {
     const now = Date.now();
     const ready = all.filter(m => (cooling.get(m) || 0) <= now);
     const order = round === 0 && ready.length ? ready : all;
     for (const m of order) {
+      if (opts.deadline && Date.now() > opts.deadline - 2000) throw last || new GeminiError(504, 'out of time: every model was too slow', m);
       try {
-        const d = await call(m, body, timeoutMs);
+        const left = opts.deadline ? Math.max(3000, Math.min(timeoutMs, opts.deadline - Date.now())) : timeoutMs;
+        const d = await call(m, body, left);
         if (workingModel !== m) { workingModel = m; log.info('gemini', `using model ${m}`); }
         cooling.delete(m);
         return d;

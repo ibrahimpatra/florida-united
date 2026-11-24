@@ -6,6 +6,8 @@ import { signOut } from 'next-auth/react';
 import { formatPrice, formatDate, statusText } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { LoyaltyCard } from '@/components/loyalty/LoyaltyCard';
+import { OffersCard } from '@/components/account/OffersCard';
 import type { Order } from '@/types';
 
 export function AccountClient({ user }: { user: any }) {
@@ -34,6 +36,8 @@ export function AccountClient({ user }: { user: any }) {
       </div>
 
       <div className="container-custom py-8">
+        <LoyaltyCard />
+        <OffersCard />
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
