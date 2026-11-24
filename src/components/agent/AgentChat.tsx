@@ -75,7 +75,7 @@ export function AgentChat() {
   return (
     <>
       <button onClick={() => setOpen(o => !o)} aria-label={tx('Chat assistant', 'مساعد المحادثة')}
-        className="fixed bottom-4 end-3 sm:end-4 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg flex items-center justify-center">
+        className="fixed bottom-24 md:bottom-4 end-3 sm:end-4 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg flex items-center justify-center">
         <MessageSquare className="w-6 h-6" />
       </button>
       {open && (

@@ -140,6 +140,8 @@ export interface FlashDeal {
   minCartAmount?: number;
   maxUsesTotal?: number;
   maxUsesPerUser?: number;
+  maxQtyPerOrder?: number;
+  noCoupon?: boolean;
   usedCount: number;
   isActive: boolean;
   isPinned: boolean;

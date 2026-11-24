@@ -20,6 +20,7 @@ export interface CartItem {
   isReturnable: boolean;
   freeShipping?: boolean;
   categoryId?: string;   // lets category-scoped flash deals be shown in the cart
+  unavailable?: boolean; // sold out (found by the stock check): shown greyed out, not counted, not ordered
 }
 
 interface CartStore {
@@ -30,6 +31,7 @@ interface CartStore {
   removeItem: (productId: string, variantId?: string) => void;
   updateQuantity: (productId: string, quantity: number, variantId?: string) => void;
   clearCart: () => void;
+  applyStock: (map: Record<string, { inStock: boolean; cap: number; factors?: Record<string, number> }>) => void;
   getTotal: () => number;
   getSubtotal: () => number;
   getCount: () => number;
@@ -97,12 +99,28 @@ export const useCartStore = create<CartStore>()(
 
       clearCart: () => set({ items: [], discountAmount: 0, couponCode: null }),
 
+      // Result of the one batched stock check: mark sold-out lines, refresh the order limit (never above ~10), keep everything else.
+      applyStock: (map) => set((state) => {
+        let changed = false;
+        const items = state.items.map((i) => {
+          const s = map[i.productId]; if (!s) return i;
+          const factor = i.variantId ? (s.factors?.[i.variantId] || 1) : 1;
+          const units = Math.floor(s.cap / factor);
+          const unavailable = !s.inStock || units <= 0;
+          const stock = unavailable ? 0 : units;
+          const quantity = unavailable ? i.quantity : Math.min(i.quantity, stock);
+          if (i.unavailable === unavailable && i.stock === stock && i.quantity === quantity) return i;
+          changed = true; return { ...i, unavailable, stock, quantity };
+        });
+        return changed ? { items } : state;
+      }),
+
       getSubtotal: () => {
-        return get().items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        return get().items.reduce((sum, item) => item.unavailable ? sum : sum + item.price * item.quantity, 0);
       },
 
       getTotal: () => {
-        const items = get().items;
+        const items = get().items.filter(i => !i.unavailable);
         const subtotal = get().getSubtotal();
         const discount = get().discountAmount;
         // Shipping is free if: cart meets threshold, OR all items have freeShipping flag
@@ -114,7 +132,7 @@ export const useCartStore = create<CartStore>()(
       },
 
       getCount: () => {
-        return get().items.reduce((sum, item) => sum + item.quantity, 0);
+        return get().items.reduce((sum, item) => item.unavailable ? sum : sum + item.quantity, 0);
       },
 
       applyDiscount: (amount) => set({ discountAmount: amount }),

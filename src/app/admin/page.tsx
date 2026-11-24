@@ -1,6 +1,10 @@
-import { redirect } from 'next/navigation';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { isSuperSession } from '@/lib/roles';
+import { AdminHome } from '@/components/admin/AdminHome';
 
-// /admin has no page of its own; send people to the dashboard (the admin layout checks the admin role).
-export default function AdminIndex() {
-  redirect('/admin/dashboard');
+// The admin home is the full-page menu. (The admin layout already checks the admin role.)
+export default async function AdminIndex() {
+  const session = await getServerSession(authOptions);
+  return <AdminHome isSuper={await isSuperSession(session)} />;
 }

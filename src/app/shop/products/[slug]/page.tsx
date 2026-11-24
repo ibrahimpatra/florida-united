@@ -6,7 +6,8 @@ import { getBrand } from '@/lib/brand-server';
 import type { Metadata } from 'next';
 
 // Revalidate every 60 seconds so stock changes show up quickly
-export const revalidate = 60;
+export const revalidate = 3600; // long cache: the server refreshes the page itself when stock or the product changes (catalog-sync.ts)
+export async function generateStaticParams() { return []; } // render each product page on first visit, then cache it (on-demand ISR)
 import { notFound } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -27,9 +28,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       title: product.name,
       description: product.shortDescription || stripHtml(product.description || '').slice(0,160),
-      images: product.images?.length ? [{ url: product.images[0], alt: product.name }] : [],
+      images: product.images?.length ? [{ url: `${siteBase()}/share-image/${product.slug}`, width: 1200, height: 630, type: 'image/jpeg', alt: product.name }] : [],
       type: 'website',
+      siteName: 'Florida Kuwait',
     },
+    twitter: { card: 'summary_large_image', title: product.name, images: product.images?.length ? [`${siteBase()}/share-image/${product.slug}`] : undefined },
     alternates: altLinks(`/shop/products/${product.slug}`),
   };
 }

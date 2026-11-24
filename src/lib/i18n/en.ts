@@ -106,6 +106,10 @@ const baseEn = {
     privacy: 'Privacy Policy', terms: 'Terms of Service',
     about: 'About Us', careers: 'Careers', blog: 'Blog',
   },
+  offers: {
+    title: 'Offers for you', code: 'Use code', pct: '{n}% off', fixed: 'KD {n} off', freeShip: 'Free delivery', bxgy: 'Buy {b}, get {g} free', minOrder: 'Min. order KD {n}', until: 'Until {date}', copied: 'Code copied',
+  },
+  bnav: { home: 'Home', shop: 'Shop', cart: 'Cart', saved: 'Saved', account: 'Account' },
   addr: {
     title: 'Address Book', subtitle: 'Save your Kuwait delivery addresses for faster checkout.',
     addNew: 'Add New Address', edit: 'Edit Address', new: 'New Address', label: 'Label',
@@ -121,10 +125,13 @@ const baseEn = {
     bundle: 'Bundle',
   },
   bundles: {
+    freeShipping: 'Free shipping',
+    returns: 'Easy returns',
     title: 'Bundles & Kits', subtitle: 'Save more when you buy complete kits.', empty: 'No bundles available right now.',
     includes: 'Includes', addBundle: 'Add Bundle to Cart', youSave: 'You save', added: 'Bundle added to cart!', outOfStock: 'Unavailable',
   },
   common: {
+    error: 'Something went wrong. Please try again.',
     loading: 'Loading...', save: 'Save', cancel: 'Cancel',
     delete: 'Delete', edit: 'Edit', view: 'View', confirm: 'Confirm',
     back: 'Back', next: 'Next', search: 'Search', filter: 'Filter',

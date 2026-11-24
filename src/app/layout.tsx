@@ -38,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Archivo:wdth,wght@100,700;112,800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
         {css && <style dangerouslySetInnerHTML={{ __html: css }} />}
@@ -53,7 +53,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           /* Smooth language switch */
           body { transition: opacity 0.1s ease; }
 
-          /* Arabic: IBM Plex Sans Arabic everywhere, headings included (Archivo has no Arabic glyphs) */
+          /* Arabic: IBM Plex Sans Arabic everywhere, headings included (Plus Jakarta Sans has no Arabic glyphs) */
           html.arabic-active body,
           html.arabic-active .font-display,
           html.arabic-active h1, html.arabic-active h2, html.arabic-active h3,

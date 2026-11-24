@@ -172,7 +172,7 @@ test('OpenAI assistant: runs the tool, sends the result back, returns the final 
   assert.equal(r.text, 'Cable is 10 KWD.'); assert.equal(r.pending.length, 1);
   const back = sent[1].messages.at(-1); assert.equal(back.role, 'tool'); assert.equal(back.tool_call_id, 't1'); assert.match(back.content, /Cable/);
 });
-test('aiText: bulk jobs go to OpenAI first, live jobs to Gemini first, and each covers for the other', async () => {
+test('aiText: Gemini first for every job, OpenAI is only the backup (or first if AI_BULK_PROVIDER=openai for bulk)', async () => {
   process.env.OPENAI_API_KEY = 'k'; process.env.GEMINI_API_KEY = 'g';
   const hits: string[] = [];
   globalThis.fetch = (async (u: any) => {
@@ -182,9 +182,13 @@ test('aiText: bulk jobs go to OpenAI first, live jobs to Gemini first, and each 
   }) as any;
   const r = await aiText({ system: 's', user: 'u', json: true, fast: true, job: 'bulk' });
   assert.equal(r.provider, 'gemini'); assert.deepEqual(parseJsonLoose(r.text), { a: 'مرحبا' });
-  assert.ok(hits[0].includes('openai'));
+  assert.ok(hits[0].includes('generativelanguage'), 'Gemini is asked first even for background work');
+  assert.ok(!hits.some(h => h.includes('openai')), 'OpenAI is not touched when Gemini answers');
   globalThis.fetch = (async (u: any) => String(u).includes('openai') ? json({ choices: [{ message: { content: 'hello' } }] }) : json({ error: {} }, 500)) as any;
   assert.equal((await aiText({ system: 's', user: 'u', job: 'bulk' })).provider, 'openai');
+  process.env.AI_BULK_PROVIDER = 'openai'; const seen: string[] = [];
+  globalThis.fetch = (async (u: any) => { seen.push(String(u)); return json({ choices: [{ message: { content: 'x' } }] }); }) as any;
+  await aiText({ system: 's', user: 'u', job: 'bulk' }); assert.ok(seen[0].includes('openai')); delete process.env.AI_BULK_PROVIDER;
 });
 test('parseJsonLoose copes with fences and chatter', () => {
   assert.deepEqual(parseJsonLoose('```json\n{"a":1}\n```'), { a: 1 });

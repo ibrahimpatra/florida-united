@@ -6,6 +6,7 @@
  *
  * Secrets are never printed: passwords, tokens, keys, card data and image data are masked.
  */
+import { reportIssue } from './issues';
 import { reqStore, type ReqStore } from './request-context';
 type Level = 'debug' | 'info' | 'warn' | 'error';
 const RANK: Record<string, number> = { debug: 10, info: 20, warn: 30, error: 40, silent: 99 };
@@ -33,6 +34,11 @@ export function redact(v: any, depth = 0): any {
 const ts = () => new Date().toISOString().slice(11, 23);
 
 function emit(level: Level, scope: string, msg: string, data?: any) {
+  // Every error-level log is a technical problem: save it to Admin > Issues too (grouped, throttled, finished after the response).
+  if (level === 'error' && scope !== 'api' && scope !== 'firebase' && process.env.ISSUES_OFF !== '1') {   // 'firebase' is skipped: saving an issue needs the database, so it would loop
+    let extra = ''; try { extra = data?.error ? ` - ${String(data.error?.message || data.error).slice(0, 200)}` : ''; } catch {}
+    void reportIssue(scope, msg + extra, { method: 'LOG' });
+  }
   if (RANK[level] < threshold()) return;
   const useColor = process.env.NODE_ENV !== 'production' && !process.env.NO_COLOR;
   const head = `${ts()} ${level.toUpperCase().padEnd(5)} [${scope}] ${msg}`;
@@ -102,8 +108,9 @@ export function withLog<H extends (...args: any[]) => any>(method: string, path:
           if (j && typeof j === 'object' && !Array.isArray(j) && ('error' in j || status >= 500)) {
             const who = await adminDetailFor(req);
             const reason = store.notes.filter(n => !n.includes('← #') && !n.includes('→ #')).slice(-3).join(' | ') || (typeof j.error === 'string' ? j.error : '');
-            if (status >= 500) void import('./issues').then(m => m.recordIssue({ route: path, method, status, message: reason || `HTTP ${status}`, user: who.email }));
-            if (who.admin && !j.adminDetail && reason) res = jsonResponse({ ...j, adminDetail: reason.slice(0, 500) }, res);
+            if (status >= 500) void reportIssue(path, reason || `HTTP ${status}`, { method, status, user: who.email });
+            // Admin-only technical detail: only for real server errors, and only when it says something the public message does not.
+            if (who.admin && status >= 500 && !j.adminDetail && reason && reason.trim() !== String(j.error || '').trim()) res = jsonResponse({ ...j, adminDetail: reason.slice(0, 500) }, res);
           }
         }
       } else emit('info', 'api', `← #${id} ${method} ${path} ${status} ${ms}ms`);
@@ -114,7 +121,7 @@ export function withLog<H extends (...args: any[]) => any>(method: string, path:
       if (d === 'DYNAMIC_SERVER_USAGE' || d.startsWith('NEXT_') || e?.code === 'DYNAMIC_SERVER_USAGE' || /Dynamic server usage|Bail out/i.test(String(e?.message))) throw e;
       emit('error', 'api', `✖ #${id} ${method} ${path} threw after ${Date.now() - t0}ms: ${e?.message || e}`, { stack: String(e?.stack || '').split('\n').slice(0, 6) });
       const who = await adminDetailFor(req);
-      void import('./issues').then(m => m.recordIssue({ route: path, method, status: 500, message: String(e?.message || e), user: who.email }));
+      void reportIssue(path, e, { method, status: 500, user: who.email });
       return new Response(JSON.stringify({ error: 'Something went wrong on our side. Please try again.', ...(who.admin ? { adminDetail: String(e?.message || e).slice(0, 500) } : {}) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
   };

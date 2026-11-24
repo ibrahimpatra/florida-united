@@ -43,7 +43,7 @@ function bigText(deal: FlashDeal, t: (k: string, v?: any) => string) {
 const Icon = (d: FlashDeal) => (d.type === 'percentage' ? Percent : d.type === 'bogo' ? Gift : Tag);
 
 // /deals lists the products each live deal covers (product pages are addressed by slug, not by the ids stored on a deal)
-function target(_deal: FlashDeal) { return '/deals'; }
+function target(deal: FlashDeal) { return `/deals?deal=${encodeURIComponent(deal.id)}`; }
 
 /**
  * Home-page offer banners. Fully automatic: every live flash deal that is marked "show on homepage" appears here,

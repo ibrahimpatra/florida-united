@@ -1,4 +1,5 @@
 'use client';
+import { bundlePath } from '@/lib/bundle-path';
 import { useState, useEffect, useRef } from 'react';
 import { X, Search, ArrowRight, Clock, TrendingUp, LayoutGrid } from 'lucide-react';
 import Link, { localizePath } from '@/components/ui/LocLink';
@@ -62,7 +63,7 @@ export function SearchModal({ isOpen, onClose }: Props) {
   }
 
   if (!isOpen) return null;
-  const label = 'text-xs font-semibold text-gray-400 uppercase tracking-wider';
+  const label = 'text-xs font-semibold text-gray-400';
 
   return (
     <div dir={dir} className="fixed inset-0 z-[100] flex items-start justify-center pt-16 px-4" role="dialog" aria-label={t('c1_search.dialog')}>
@@ -85,7 +86,7 @@ export function SearchModal({ isOpen, onClose }: Props) {
             <div className="p-3 pb-0">
               <p className={`${label} px-2 mb-2`}>{t('c1_search.bundles')}</p>
               {bundleHits.map(b => (
-                <Link key={b.id} href="/bundles" onClick={() => { saveSearch(query); onClose(); }} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors group">
+                <Link key={b.id} href={bundlePath(b)} onClick={() => { saveSearch(query); onClose(); }} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors group">
                   <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">{b.image && <img src={b.image} alt="" className="w-full h-full object-cover" />}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-brand-700">{L(b, 'name')}</p>

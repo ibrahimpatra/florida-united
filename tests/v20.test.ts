@@ -4,7 +4,7 @@ import { FakeDb } from './fakeFirestore';
 import { __setAdminDbForTests } from '../src/lib/firebase-admin';
 import { placeOrder, cancelOrder } from '../src/lib/orders-server';
 import { earnPoints, redeemPlan, sanitizeLoyalty, DEFAULT_LOYALTY, tierFor } from '../src/lib/loyalty-core';
-import { awardForDelivered, reverseForRefund, adjustPoints, saveLoyaltySettings } from '../src/lib/loyalty';
+import { awardForDelivered, reverseForRefund, adjustPoints, saveLoyaltySettings, releaseDue, pendingFor, joinLoyalty, isMember } from '../src/lib/loyalty';
 import { missingSeo, runJob, enqueueSeoIfMissing, runQueued } from '../src/lib/jobs';
 import { isSuperSession, __resetRolesCache } from '../src/lib/roles';
 import { cleanTile } from '../src/lib/promo-tiles';
@@ -71,18 +71,40 @@ test('cancelling gives the used points back', async () => {
   await cancelOrder({ orderId: r.orderId, actor: { id: 'u1', role: 'customer' } });
   assert.equal(db.read('users', 'u1').loyaltyPoints, 1500); assert.equal(db.read('loyaltyLedger', `${r.orderId}_refund`).points, 1000);
 });
-test('delivered: points earned once, even if called twice', async () => {
-  const r = await order();                                                         // goods 20 KWD x 2 = 40 points
+const deliver = async (id: string, daysAgo = 0) => { db.seed('orders', id, { ...db.read('orders', id), status: 'delivered', deliveredAt: new Date(Date.now() - daysAgo * 86400000).toISOString() }); };
+test('delivered: points are held as pending, counted once, and not in the balance yet', async () => {
+  const r = await order(); await deliver(r.orderId);                              // goods 20 KWD x 2 = 40 points
   assert.equal(await awardForDelivered(r.orderId), 40); assert.equal(await awardForDelivered(r.orderId), 0);
+  assert.equal(db.read('users', 'u1').loyaltyPoints, 1500); assert.equal(db.read('orders', r.orderId).loyaltyPending, 40);
+  assert.equal((await pendingFor('u1')).total, 40);
+});
+test('points reach the balance only after the return window, only for members, and not while a return is open', async () => {
+  const r = await order(); await deliver(r.orderId, 1); await awardForDelivered(r.orderId);
+  assert.equal(await releaseDue('u1'), 0);                                         // still inside the 7-day window
+  const later = Date.now() + 8 * 86400000;
+  db.seed('orders', r.orderId, { ...db.read('orders', r.orderId), status: 'return_requested' });
+  assert.equal(await releaseDue('u1', later), 0);                                  // return in progress holds them
+  db.seed('orders', r.orderId, { ...db.read('orders', r.orderId), status: 'delivered' });
+  assert.equal(await releaseDue('u1', later), 40); assert.equal(await releaseDue('u1', later), 0);
   assert.equal(db.read('users', 'u1').loyaltyPoints, 1540);
 });
-test('refund takes back the earned share, never below zero and never twice for the same amount', async () => {
-  const r = await order(); await awardForDelivered(r.orderId);
-  const o = db.read('orders', r.orderId);
-  const back = await reverseForRefund(r.orderId, o.total / 2);
+test('nobody is enrolled automatically: a non-member keeps pending points until they join', async () => {
+  db.seed('users', 'u2', { email: 'z@b.com' });
+  assert.equal(isMember(db.read('users', 'u2')), false);
+  db.seed('orders', 'oo', { userId: 'u2', status: 'delivered', loyaltyPending: 10, loyaltyReleaseAt: '2020-01-01T00:00:00.000Z', orderNumber: 'X', items: [] });
+  assert.equal(await releaseDue('u2'), 0);
+  await joinLoyalty('u2'); assert.equal(await releaseDue('u2'), 10); assert.equal(db.read('users', 'u2').loyaltyPoints, 10);
+});
+test('refund before release just cancels the pending points; after release it takes back the share, never below zero', async () => {
+  const r = await order(); await deliver(r.orderId); await awardForDelivered(r.orderId);
+  assert.equal(await reverseForRefund(r.orderId, 99), 0);
+  assert.equal(db.read('orders', r.orderId).loyaltyPending, 0); assert.equal(db.read('users', 'u1').loyaltyPoints, 1500);
+  const r2 = await order(); await deliver(r2.orderId, 30); await awardForDelivered(r2.orderId); await releaseDue('u1');
+  const o = db.read('orders', r2.orderId);
+  const back = await reverseForRefund(r2.orderId, o.total / 2);
   assert.ok(back > 0 && back <= 20, `took back ${back}`);
   db.seed('users', 'u1', { email: 'a@b.com', loyaltyPoints: 1 });
-  assert.ok(await reverseForRefund(r.orderId, o.total) <= 1);
+  assert.ok(await reverseForRefund(r2.orderId, o.total) <= 1);
 });
 test('manual adjustment cannot make a balance negative', async () => {
   await adjustPoints('u1', 100, 'gift', 'admin'); assert.equal(db.read('users', 'u1').loyaltyPoints, 1600);
@@ -94,13 +116,20 @@ test('saving settings sanitises them', async () => {
 });
 
 // ── superadmin ────────────────────────────────────────────────
-test('super admin: flagged admin yes, plain admin no once a superadmin exists, everyone while none exists', async () => {
-  const plain = { user: { role: 'admin' } }, sup = { user: { role: 'admin', isSuper: true } };
-  assert.equal(await isSuperSession(plain), true);                                 // no superadmin yet: nobody is locked out
-  db.seed('users', 'boss', { role: 'superadmin' }); __resetRolesCache();
-  assert.equal(await isSuperSession(plain), false); assert.equal(await isSuperSession(sup), true);
-  assert.equal(await isSuperSession({ user: { role: 'customer', isSuper: true } }), false);
+test('super admin: only the stored superadmin; with none, the oldest admin becomes owner and others stay plain', async () => {
+  db.seed('users', 'old', { role: 'admin', createdAt: '2020-01-01T00:00:00.000Z' });
+  db.seed('users', 'new', { role: 'admin', createdAt: '2024-01-01T00:00:00.000Z' });
+  db.seed('users', 'cust', { role: 'customer' });
+  __resetRolesCache();
+  assert.equal(await isSuperSession({ user: { id: 'new', role: 'admin' } }), false);   // newer admin is never promoted
+  assert.equal(await isSuperSession({ user: { id: 'old', role: 'admin' } }), true);    // the owner is
+  assert.equal(db.read('users', 'old').role, 'superadmin');
+  assert.equal(await isSuperSession({ user: { id: 'new', role: 'admin', isSuper: true } }), false); // a stale flag in the login cannot grant it
+  assert.equal(await isSuperSession({ user: { id: 'cust', role: 'customer', isSuper: true } }), false);
   assert.equal(await isSuperSession(null), false);
+  db.seed('users', 'old', { role: 'admin', createdAt: '2020-01-01T00:00:00.000Z' }); db.seed('users', 'boss', { role: 'superadmin' }); __resetRolesCache();
+  assert.equal(await isSuperSession({ user: { id: 'old', role: 'admin' } }), false);   // demotion applies
+  assert.equal(await isSuperSession({ user: { id: 'boss', role: 'admin' } }), true);
 });
 
 // ── background SEO jobs ───────────────────────────────────────

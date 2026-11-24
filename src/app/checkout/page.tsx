@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { useCartStockCheck } from '@/lib/useCartStockCheck';
 import { useCartStore } from '@/store/cartStore';
 import { formatPrice } from '@/lib/utils';
 import { Header } from '@/components/layout/Header';
@@ -21,7 +22,10 @@ import type { ShippingOption } from '@/lib/shipping';
 
 export default function CheckoutPage() {
   const { data: session, status } = useSession();
-  const { items, discountAmount, couponCode, updateQuantity } = useCartStore();
+  const { items: allItems, discountAmount, couponCode, updateQuantity, removeItem } = useCartStore();
+  useCartStockCheck();
+  const items = useMemo(() => allItems.filter(i => !i.unavailable), [allItems]);   // sold-out lines are never counted or ordered
+  const soldOut = allItems.filter(i => i.unavailable);
   const { t, L } = useLanguage();
   const [governorate, setGovernorate] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -82,6 +86,15 @@ export default function CheckoutPage() {
     </div><Footer /></>
   );
 
+  if (!items.length && soldOut.length) return (
+    <><Header />
+    <div className="container-custom py-20 text-center">
+      <ShoppingBag className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+      <h2 className="text-xl font-bold text-gray-800 mb-2">{t('c1_pd.oos')}</h2>
+      <Link href="/cart" className="btn-primary mt-2">{t('cart.title') || 'Cart'}</Link>
+    </div><Footer /></>
+  );
+
   if (!items.length) return (
     <><Header />
     <div className="container-custom py-20 text-center">
@@ -118,6 +131,16 @@ export default function CheckoutPage() {
         <div className="lg:sticky lg:top-24 space-y-4 h-fit order-first lg:order-none">
           <div className="bg-gray-50 rounded-2xl p-5">
             <h3 className="font-bold text-gray-900 mb-4">{t('checkout.orderSummary')} ({items.length})</h3>
+            {soldOut.length > 0 && (
+              <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                {soldOut.map(i => (
+                  <div key={i.id + (i.variantId || '')} className="flex items-center justify-between gap-2 py-0.5">
+                    <span className="line-clamp-1">{L(i as any, 'name')} - {t('c1_pd.oos')}</span>
+                    <button onClick={() => removeItem(i.productId, i.variantId)} className="underline font-semibold shrink-0">{t('c1_cart2.removeAria')}</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="space-y-3 mb-4 max-h-72 overflow-y-auto">
               {items.map(item => (
                 <div key={item.id + (item.variantId || '')} className="flex gap-3 items-center">

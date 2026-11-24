@@ -10,6 +10,9 @@ import { Upload, X, Plus, Save, ArrowLeft, Sparkles, Loader2 } from 'lucide-reac
 import { toast } from 'react-hot-toast';
 import { generateSlug, generateSKU } from '@/lib/utils';
 import type { Category } from '@/types';
+import { PillSelect } from './PillSelect';
+import { Collapsible } from './Collapsible';
+import { useBusy } from '@/components/layout/BusyLayer';
 
 interface Props { initialData?: any; productId?: string; }
 
@@ -22,6 +25,9 @@ export function ProductForm({ initialData, productId }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [brandNames, setBrandNames] = useState<string[]>([]);
   useEffect(() => { fetch('/api/brands').then(r => (r.ok ? r.json() : [])).then(d => setBrandNames(Array.isArray(d) ? d.map((b: any) => b.name) : [])).catch(() => {}); }, []);
+  const { start: startBusy } = useBusy();
+  const [parentCat, setParentCat] = useState<string | null>(null);   // Category pill
+  const [subCat, setSubCat] = useState<string | null>(null);         // Sub-category pill (optional)
   const [images, setImages] = useState<string[]>(initialData?.images || []);
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
@@ -42,6 +48,27 @@ export function ProductForm({ initialData, productId }: Props) {
   });
 
   const nameValue = watch('name');
+  // Draft memory (new products only): what you typed survives a refresh or an accidental close, and is dropped once saved.
+  const DRAFT_KEY = 'admin-draft-product';
+  const [draftNote, setDraftNote] = useState('');
+  useEffect(() => {
+    if (productId) return;
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      if (d?.values?.name) {
+        Object.entries(d.values).forEach(([k, v]) => setValue(k as any, v as any));
+        if (Array.isArray(d.images)) setImages(d.images); if (Array.isArray(d.tags)) setTags(d.tags);
+        if (d.parentCat) setParentCat(d.parentCat); if (d.subCat) setSubCat(d.subCat);
+        setDraftNote('Draft restored');
+      }
+    } catch { /* no draft */ }
+  }, []);                                    // eslint-disable-line react-hooks/exhaustive-deps
+  const allValues = watch();
+  useEffect(() => {
+    if (productId) return;
+    const t = setTimeout(() => { try { if (String(allValues?.name || '').trim()) localStorage.setItem(DRAFT_KEY, JSON.stringify({ values: allValues, images, tags, parentCat, subCat })); } catch { /* storage is optional */ } }, 800);
+    return () => clearTimeout(t);
+  }, [JSON.stringify(allValues), images, tags, parentCat, subCat]);   // eslint-disable-line react-hooks/exhaustive-deps
   const uomId = watch('uomId' as any) as string | undefined;
   const units = (watch('units' as any) as any[] | undefined) || [];
   const setUnits = (u: any[]) => setValue('units' as any, u as any, { shouldDirty: true });
@@ -70,8 +97,28 @@ export function ProductForm({ initialData, productId }: Props) {
   // fetch callback ran BEFORE React rendered the options, so it silently stayed on
   // "Select Category". Apply it in an effect that runs AFTER the options are committed.
   useEffect(() => {
-    if (categories.length && initialData?.categoryId) setValue('categoryId', initialData.categoryId, { shouldDirty: false });
+    if (!categories.length || !initialData?.categoryId) return;
+    const c = categories.find(x => x.id === initialData.categoryId);
+    if (c?.parentId && categories.some(x => x.id === c.parentId)) { setParentCat(c.parentId); setSubCat(c.id); }
+    else if (c) setParentCat(c.id);
+    setValue('categoryId', initialData.categoryId, { shouldDirty: false });
   }, [categories, initialData?.categoryId]);
+  // the product stores ONE category id: the sub-category when chosen, else the category
+  const chooseCategory = (id: string | null) => { setParentCat(id); setSubCat(null); setValue('categoryId', (id || '') as any, { shouldDirty: true, shouldValidate: true }); };
+  const chooseSub = (id: string | null) => { setSubCat(id); setValue('categoryId', (id || parentCat || '') as any, { shouldDirty: true, shouldValidate: true }); };
+  const createCategory = (parentId?: string) => async (name: string) => {
+    const res = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(parentId ? { parentId } : {}) }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.id) { toast.error(d.error || 'Could not add it.'); return null; }
+    const cat = { id: d.id, name, parentId: parentId || undefined, isActive: true } as any as Category;
+    setCategories(cs => [...cs, cat]); toast.success(`Added "${name}"`); return { id: d.id, label: name };
+  };
+  const createBrand = async (name: string) => {
+    const res = await fetch('/api/brands', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok && res.status !== 409) { toast.error(d.error || 'Could not add the brand.'); return null; }
+    setBrandNames(b => b.includes(name) ? b : [...b, name]); if (res.ok) toast.success(`Added brand "${name}"`); return { id: name, label: name };
+  };
 
   useEffect(() => {
     if (nameValue && !productId) {
@@ -125,6 +172,7 @@ export function ProductForm({ initialData, productId }: Props) {
   const onSubmit = async (data: any) => {
     if (saving) return;
     setSaving(true);
+    const stopBusy = startBusy(productId ? 'Saving product…' : 'Creating product…');
     try {
       const { id, createdAt, updatedAt, categoryName, categoryPath, avgRating, totalReviews, totalSold, totalRevenue, ...rest } = data;
       const payload = {
@@ -143,16 +191,25 @@ export function ProductForm({ initialData, productId }: Props) {
       try { result = await res.json(); } catch { /* non-JSON error page */ }
       if (res.ok && (result?.success || result?.id)) {
         toast.success(productId ? 'Product updated!' : 'Product created!');
+        try { localStorage.removeItem(DRAFT_KEY); } catch {}
         router.push('/admin/products');
         return;
       }
       toast.error(result?.error || `Save failed (server error ${res.status}). Nothing was changed.`);
     } catch { toast.error('Network error — check your connection and try again.'); }
-    setSaving(false);
+    stopBusy(); setSaving(false);
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
+      {/* Save and Cancel stay at the top while you scroll */}
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2.5 mb-5 bg-gray-50/95 backdrop-blur border-b border-gray-200 flex items-center gap-2">
+        <h1 className="flex-1 min-w-0 text-base sm:text-lg font-bold text-gray-900 font-display truncate">{productId ? 'Edit product' : 'New product'}{draftNote && <span className="ms-2 text-xs font-normal text-amber-700">{draftNote}</span>}</h1>
+        <button type="button" onClick={() => router.push('/admin/products')} className="btn-secondary py-2 px-3 text-sm"><ArrowLeft className="w-4 h-4"/>Cancel</button>
+        <button type="submit" disabled={saving} className="btn-primary py-2 px-4 text-sm">
+          {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <><Save className="w-4 h-4"/>{productId?'Save':'Create'}</>}
+        </button>
+      </div>
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main */}
         <div className="lg:col-span-2 space-y-6">
@@ -220,8 +277,9 @@ export function ProductForm({ initialData, productId }: Props) {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Brand</label>
-                  <input {...register('brand')} list="brand-options" className="input-field" placeholder="Pick a brand or type a new one"/>
-                  <datalist id="brand-options">{brandNames.map(n => <option key={n} value={n} />)}</datalist>
+                  <input type="hidden" {...register('brand')} />
+                  <PillSelect value={(watch('brand') as string) || null} onChange={id => setValue('brand', (id || '') as any, { shouldDirty: true })} onCreate={createBrand}
+                    placeholder="Search or add a brand" options={[...new Set([...brandNames, ...(initialData?.brand ? [initialData.brand] : [])])].map(n => ({ id: n, label: n }))} />
                 </div>
                 <div>
                   <label className="label">Barcode</label>
@@ -312,8 +370,7 @@ export function ProductForm({ initialData, productId }: Props) {
           </div>
 
           {/* SEO */}
-          <div className="card p-6">
-            <h3 className="font-bold text-gray-800 mb-4">SEO</h3>
+          <Collapsible title="SEO (Google)" hint="Optional. Filled automatically in the background if left empty.">
             <div className="space-y-3">
               <div><label className="label">Meta Title</label><input {...register('metaTitle')} className="input-field" placeholder="Appears in Google search results"/></div>
               <div><label className="label">Meta Description</label><textarea {...register('metaDesc')} rows={2} className="input-field resize-none" placeholder="Brief description for search engines (150-160 chars)"/></div>
@@ -321,31 +378,26 @@ export function ProductForm({ initialData, productId }: Props) {
               <div><label className="label">Meta Description (Arabic)</label><textarea {...register('metaDescAr' as any)} dir="rtl" rows={2} className="input-field resize-none"/></div>
               <div><label className="label">Meta Keywords</label><input {...register('metaKeywords')} className="input-field" placeholder="keyword1, keyword2, keyword3"/></div>
             </div>
-          </div>
+          </Collapsible>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-5">
-          {/* Category */}
-          <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-3">Category *</h3>
-            <select {...register('categoryId',{required:'Category required'})} className="input-field">
-              <option value="">Select Category</option>
-              {categories.filter(c => !c.parentId).map(root => {
-                const kids = categories.filter(c => c.parentId === root.id);
-                return kids.length ? (
-                  <optgroup key={root.id} label={`${root.name}${root.nameAr ? ` / ${root.nameAr}` : ''}`}>
-                    <option value={root.id}>{root.name} (general)</option>
-                    {kids.map(k => <option key={k.id} value={k.id}>- {k.name}{k.nameAr ? ` / ${k.nameAr}` : ''}</option>)}
-                  </optgroup>
-                ) : <option key={root.id} value={root.id}>{root.name}</option>;
-              })}
-              {/* orphaned sub-categories (parent missing/inactive) must still be selectable */}
-              {categories.filter(c => c.parentId && !categories.some(p => p.id === c.parentId)).map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            {errors.categoryId && <p className="text-red-500 text-xs mt-1">Category required</p>}
+          {/* Category + sub-category: one pill each */}
+          <div className="card p-5 space-y-4">
+            <div>
+              <h3 className="font-bold text-gray-800 mb-2">Category *</h3>
+              <input type="hidden" {...register('categoryId',{required:'Category required'})} />
+              <PillSelect value={parentCat} onChange={chooseCategory} onCreate={createCategory()} placeholder="Search or add a category"
+                options={categories.filter(c => !c.parentId || !categories.some(p => p.id === c.parentId)).map(c => ({ id: c.id, label: c.name, sub: (c as any).nameAr }))} />
+              {errors.categoryId && <p className="text-red-500 text-xs mt-1">Category required</p>}
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-800 mb-2">Sub-category <span className="text-xs font-normal text-gray-400">(optional)</span></h3>
+              <PillSelect value={subCat} onChange={chooseSub} onCreate={parentCat ? createCategory(parentCat) : undefined} disabled={!parentCat}
+                placeholder={parentCat ? 'Search or add a sub-category' : 'Pick a category first'}
+                options={categories.filter(c => c.parentId && c.parentId === parentCat).map(c => ({ id: c.id, label: c.name, sub: (c as any).nameAr }))} />
+            </div>
           </div>
 
           {/* Unit of measure */}
@@ -359,8 +411,7 @@ export function ProductForm({ initialData, productId }: Props) {
           </div>
 
           {/* Extra selling units */}
-          <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-1">Extra Selling Units</h3>
+          <Collapsible title="Extra selling units" hint="Optional: boxes, cartons, packs" defaultOpen={units.length > 0}>
             <p className="text-xs text-gray-500 mb-3">Optional. The product price above is for one base unit. Add boxes, cartons or packs here; stock is always tracked in base units.</p>
             <div className="space-y-3">
               {units.map((u, i) => (
@@ -381,7 +432,7 @@ export function ProductForm({ initialData, productId }: Props) {
             </div>
             <button type="button" onClick={() => setUnits([...units, { id: `u${Date.now().toString(36)}`, name: '', nameAr: '', factor: 12, price: Math.round(basePrice * 12 * 1000) / 1000 }])}
               className="mt-3 text-sm font-semibold text-brand-600 hover:underline">+ Add a unit</button>
-          </div>
+          </Collapsible>
 
           {/* Status */}
           <div className="card p-5">
@@ -403,24 +454,16 @@ export function ProductForm({ initialData, productId }: Props) {
           </div>
 
           {/* Returns */}
-          <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-3">Returns Policy</h3>
+          <Collapsible title="Returns policy" hint="Returnable by default">
+            <div>
             <label className="flex items-center gap-3 cursor-pointer mb-3">
               <input type="checkbox" {...register('isReturnable')} className="w-4 h-4 accent-brand-600 rounded"/>
               <span className="text-sm text-gray-700">Item is returnable</span>
             </label>
             <p className="text-xs text-gray-500">The return window (days after delivery) is set once for the whole store in Settings.</p>
-          </div>
+            </div>
+          </Collapsible>
 
-          {/* Save */}
-          <div className="flex gap-2">
-            <button type="button" onClick={()=>router.push('/admin/products')} className="btn-secondary flex-1 py-2.5 text-sm">
-              <ArrowLeft className="w-4 h-4"/>Cancel
-            </button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1 py-2.5 text-sm">
-              {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <><Save className="w-4 h-4"/>{productId?'Save Changes':'Create Product'}</>}
-            </button>
-          </div>
         </div>
       </div>
     </form>

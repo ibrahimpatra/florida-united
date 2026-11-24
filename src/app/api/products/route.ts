@@ -35,12 +35,14 @@ async function __GET(req: NextRequest) {
       admin:        isAdmin,
     };
     let result: any;
-    if (searchParams.get('sale') === 'true' && !isAdmin) {
+    const onlyDeal = searchParams.get('deal');
+    if ((searchParams.get('sale') === 'true' || onlyDeal) && !isAdmin) {
       // "On sale" = marked on sale OR covered by a deal that is running right now
-      const deals = (await adminGetActiveFlashDeals().catch(() => [])).filter((d: any) => dealIsLive(d));
+      let deals = (await adminGetActiveFlashDeals().catch(() => [])).filter((d: any) => dealIsLive(d));
+      if (onlyDeal) deals = deals.filter((d: any) => d.id === onlyDeal);   // /deals?deal=ID: only what that offer covers (nothing once it has ended)
       const page = filters.page || 1, size = filters.pageSize || 24;
       const all: any = await adminGetProducts({ ...filters, isOnSale: undefined, page: 1, pageSize: 5000 } as any);
-      const hit = all.items.filter((p: any) => p.isOnSale || deals.some((d: any) => dealCoversProduct(d, p.id, p.categoryId)));
+      const hit = all.items.filter((p: any) => (!onlyDeal && p.isOnSale) || deals.some((d: any) => dealCoversProduct(d, p.id, p.categoryId)));
       result = { items: hit.slice((page - 1) * size, page * size), total: hit.length, page, pageSize: size, hasMore: page * size < hit.length };
     } else result = await adminGetProducts(filters as any);
     // searching also finds bundles (public: active bundles only)

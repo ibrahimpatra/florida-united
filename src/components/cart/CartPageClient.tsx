@@ -1,4 +1,5 @@
 'use client';
+import { useCartStockCheck } from '@/lib/useCartStockCheck';
 import { useDealPricing } from '@/lib/useDeals';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, Tag, X, Truck, Lock } from 'lucide-react';
 import Link from '@/components/ui/LocLink';
@@ -12,8 +13,10 @@ import { toast } from 'react-hot-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export function CartPageClient() {
-  const { items, removeItem, updateQuantity, getSubtotal, discountAmount, couponCode, setCoupon, removeCoupon } = useCartStore();
+  const { items: allItems, removeItem, updateQuantity, getSubtotal, discountAmount, couponCode, setCoupon, removeCoupon } = useCartStore();
   const { t, L } = useLanguage();
+  useCartStockCheck();
+  const items = allItems.filter(i => !i.unavailable);   // sold-out lines are shown greyed out but never counted
   const { freeShippingThreshold } = useStoreSettings();
   const threshold = freeShippingThreshold ?? 0;
   const [couponInput, setCouponInput] = useState('');
@@ -32,15 +35,15 @@ export function CartPageClient() {
     if (!couponInput.trim()) return;
     setCouponLoading(true);
     try {
-      const res = await fetch('/api/coupons/validate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: couponInput, orderAmount: subtotal }) });
+      const res = await fetch('/api/coupons/validate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: couponInput, orderAmount: subtotal, items: items.map(i => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId, variantName: i.variantName })) }) });
       const data = await res.json();
-      if (data.valid) { setCoupon(couponInput.toUpperCase(), data.discount); toast.success(t('c1_cart2.couponOk', { amount: formatPrice(data.discount) })); setCouponInput(''); }
+      if (data.valid) { setCoupon(couponInput.toUpperCase(), data.discount); toast.success(data.discount > 0 ? t('c1_cart2.couponOk', { amount: formatPrice(data.discount) }) : t('c3_ck.applied', { code: couponInput.toUpperCase() })); setCouponInput(''); }
       else toast.error(data.error || t('c1_cart2.couponBad'));
     } catch { toast.error(t('c1_cart2.couponFail')); }
     setCouponLoading(false);
   };
 
-  if (items.length === 0) return (
+  if (allItems.length === 0) return (
     <div className="container-custom py-20 text-center">
       <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-6" />
       <h2 className="text-2xl font-bold text-gray-900 mb-3 font-display">{t('c1_cart2.emptyTitle')}</h2>
@@ -55,21 +58,22 @@ export function CartPageClient() {
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Items */}
         <div className="lg:col-span-2 space-y-4">
-          {items.map(item=>(
-            <div key={`${item.productId}-${item.variantId}`} className="card p-4 flex gap-4">
+          {allItems.map(item=>(
+            <div key={`${item.productId}-${item.variantId}`} className={`card p-4 flex gap-4 ${item.unavailable ? 'opacity-60' : ''}`}>
               <div className="w-20 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
                 {item.image && <img src={item.image} alt={L(item as any, 'name')} className="w-full h-full object-cover"/>}
               </div>
               <div className="flex-1 min-w-0">
-                <Link href={`/shop/products/${item.slug}`} className="font-semibold text-gray-800 hover:text-brand-700 text-sm line-clamp-2">{L(item as any, 'name')}</Link>
+                <Link href={String(item.productId).startsWith('bundle:') ? (item.slug && item.slug !== 'bundles' ? `/shop/bundles/${item.slug}` : '/bundles') : `/shop/products/${item.slug}`} className="font-semibold text-gray-800 hover:text-brand-700 text-sm line-clamp-2">{L(item as any, 'name')}</Link>
                 {item.variantName && <p className="text-xs text-gray-500 mt-0.5">{L(item as any, 'variantName')}</p>}
                 <p className="text-xs text-gray-400 font-mono mt-0.5">{t('c1_cart2.sku')}: <span dir="ltr">{item.sku}</span></p>
+                {item.unavailable && <p className="text-xs font-semibold text-red-600 mt-1">{t('c1_pd.oos')}</p>}
                 <div className="flex items-center justify-between mt-3">
-                  <div className="flex items-center gap-1.5">
+                  {item.unavailable ? <span /> : <div className="flex items-center gap-1.5">
                     <button onClick={()=>updateQuantity(item.productId,item.quantity-1,item.variantId)} className="w-7 h-7 rounded-lg border border-gray-200 hover:border-brand-300 flex items-center justify-center transition-colors"><Minus className="w-3 h-3"/></button>
                     <span className="text-sm font-bold w-8 text-center">{item.quantity}</span>
                     <button onClick={()=>updateQuantity(item.productId,item.quantity+1,item.variantId)} disabled={item.quantity>=item.stock} className="w-7 h-7 rounded-lg border border-gray-200 hover:border-brand-300 flex items-center justify-center transition-colors disabled:opacity-40"><Plus className="w-3 h-3"/></button>
-                  </div>
+                  </div>}
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-brand-700 text-end">{(dp.lines.find(l => l.item === item)?.saving || 0) > 0 && <span className="block text-xs font-normal text-gray-400 line-through">{formatPrice(item.price*item.quantity)}</span>}{formatPrice(dp.lines.find(l => l.item === item)?.total ?? item.price*item.quantity)}</span>
                     <button onClick={()=>{removeItem(item.productId,item.variantId);toast.success(t('c1_cart2.removed'));}} aria-label={t('c1_cart2.removeAria')} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4"/></button>
@@ -121,9 +125,12 @@ export function CartPageClient() {
               </div>
             )}
 
+            {items.length === 0 ? (
+              <span className="btn-primary w-full mt-4 py-3 justify-center opacity-50 cursor-not-allowed">{t('cart.checkout')} <ArrowRight className="w-4 h-4 rtl:rotate-180"/></span>
+            ) : (
             <Link href="/checkout" className="btn-primary w-full mt-4 py-3 justify-center">
               {t('cart.checkout')} <ArrowRight className="w-4 h-4 rtl:rotate-180"/>
-            </Link>
+            </Link>)}
             <Link href="/shop" className="block text-center text-sm text-brand-600 hover:text-brand-700 font-medium mt-3">{t('c1_cart2.continue')}</Link>
             <div className="flex items-center justify-center gap-2 mt-4 text-xs text-gray-400">
               <Lock className="w-3.5 h-3.5" />{t('c1_cart2.secured')}
@@ -131,7 +138,7 @@ export function CartPageClient() {
           </div>
         </div>
       </div>
-      <div className="container-custom pb-10"><h2 className="font-display text-lg font-bold text-gray-900 mb-1">{t('c3_nudge.alsoNeed')}</h2><AIRecommendations productId={items[0].productId} ids={items.map(i => i.productId).filter(id => !String(id).startsWith('bundle:')).slice(0, 12).join(',')} currentCategory={(items[0] as any).categoryId || ''} /><RecentlyViewed exclude={items.map(i => i.productId)} /></div>
+      <div className="container-custom pb-10"><h2 className="font-display text-lg font-bold text-gray-900 mb-1">{t('c3_nudge.alsoNeed')}</h2><AIRecommendations productId={(items[0] || allItems[0]).productId} ids={items.map(i => i.productId).filter(id => !String(id).startsWith('bundle:')).slice(0, 12).join(',')} currentCategory={((items[0] || allItems[0]) as any).categoryId || ''} /><RecentlyViewed exclude={items.map(i => i.productId)} /></div>
     </div>
   );
 }

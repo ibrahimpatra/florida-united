@@ -9,6 +9,7 @@ import { CreditCard, Banknote, MapPin, User, ChevronDown, Loader2, Lock, AlertTr
 import { formatPrice, govLabel } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import { KUWAIT_GOVERNORATES } from '@/types';
+import { useBusy } from '@/components/layout/BusyLayer';
 import { useCartStore } from '@/store/cartStore';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { CartItem } from '@/types';
@@ -37,6 +38,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
   const router = useRouter();
   const { t, isArabic } = useLanguage();
   const { clearCart, removeCoupon } = useCartStore();
+  const { start: startBusy } = useBusy();
   const [pay, setPay] = useState<Pay>('cod');
   const settings = useStoreSettings();
   const [busy, setBusy] = useState(false);
@@ -85,6 +87,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
     if (!governorate) { setGovError(true); toast.error(t('checkout.selectGovernorate')); return; }
     if (!quoteReady || !rateId) { toast.error(t('checkout.quoteFailed')); return; }
     inFlight.current = true; setBusy(true);
+    const stopBusy = startBusy(t('c2_chk.placing'));
 
     const shippingAddress = {
       firstName: d.firstName, lastName: d.lastName, phone: d.phone, city: d.city, governorate,
@@ -141,7 +144,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
       window.location.href = tap.url;
     } catch (e: any) {
       if (!unknownOutcome) idemKey.current = newKey(); // a definite failure must not poison the next attempt
-      inFlight.current = false; setBusy(false);
+      inFlight.current = false; setBusy(false); stopBusy();
       toast.error(e?.message || t('c2_chk.wrong'), { duration: 7000 });
       if (orderCreated) toast(t('checkout.checkOrders'), { duration: 9000 });
     }

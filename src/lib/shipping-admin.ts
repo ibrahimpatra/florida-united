@@ -95,8 +95,8 @@ export function sanitizeDeal(b: any, partial = false): Record<string, any> {
   if ('imageMode' in b) out.imageMode = b.imageMode === 'side' ? 'side' : 'background';
   if ('type' in b) out.type = ['percentage', 'fixed', 'bogo'].includes(b.type) ? b.type : 'percentage';
   if ('scope' in b) out.scope = ['all', 'category', 'products'].includes(b.scope) ? b.scope : 'all';
-  ['discountValue', 'minCartAmount', 'maxUsesTotal', 'maxUsesPerUser'].forEach(num);
-  ['showCountdown', 'showOnHomepage', 'showOnProductPage', 'isActive', 'isPinned'].forEach(bool);
+  ['discountValue', 'minCartAmount', 'maxUsesTotal', 'maxUsesPerUser', 'maxQtyPerOrder'].forEach(num);
+  ['showCountdown', 'showOnHomepage', 'showOnProductPage', 'isActive', 'isPinned', 'noCoupon'].forEach(bool);
   list('categoryIds'); list('productIds'); list('tags');
   if ('startAt' in b) out.startAt = b.startAt ? new Date(b.startAt).toISOString() : '';
   if ('endAt' in b) out.endAt = b.endAt ? new Date(b.endAt).toISOString() : '';

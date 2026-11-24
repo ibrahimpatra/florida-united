@@ -1,3 +1,4 @@
+import { reportIssue } from '@/lib/issues';
 import { getBrand } from '@/lib/brand-server';
 import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
@@ -38,7 +39,7 @@ async function __POST(req: NextRequest) {
         const old = await stripe.checkout.sessions.retrieve(o.stripeSessionId);
         if (old.status === 'open' && old.url) return NextResponse.json({ url: old.url });
         if (old.payment_status === 'paid') return NextResponse.json({ error: 'This order is already paid.' }, { status: 400 });
-      } catch {}
+      } catch (e) { reportIssue('stripe checkout: reuse of existing session failed', e, { status: 502 }); }
     }
 
     const rate = await getUsdRate(db);

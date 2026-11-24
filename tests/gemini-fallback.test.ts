@@ -10,9 +10,9 @@ const respond = (status: number, body: any = {}) => new Response(JSON.stringify(
 
 test('busy model (503) moves to the next model and the answer still arrives', async () => {
   const tried: string[] = [];
-  global.fetch = (async (url: any) => { const m = String(url).match(/models\/([^:]+):/)![1]; tried.push(m); return m === 'gemini-3.6-flash' ? respond(503, { msg: 'high demand' }) : respond(200, { ok: m }); }) as any;
+  global.fetch = (async (url: any) => { const m = String(url).match(/models\/([^:]+):/)![1]; tried.push(m); return m === 'gemini-3.8-flash' ? respond(503, { msg: 'high demand' }) : respond(200, { ok: m }); }) as any;
   const r = await generate({ contents: [] });
-  assert.equal(r.ok, 'gemini-3.8-flash'); assert.deepEqual(tried, ['gemini-3.6-flash', 'gemini-3.8-flash']);
+  assert.equal(r.ok, 'gemini-3.6-flash'); assert.deepEqual(tried, ['gemini-3.8-flash', 'gemini-3.6-flash']);
 });
 test('a bad API key stops at once; no model will fix it', async () => {
   let calls = 0; global.fetch = (async () => { calls++; return respond(403, { msg: 'denied' }); }) as any;

@@ -126,3 +126,22 @@ test('deals/bundles listing SEO comes from live items', async () => {
   assert.equal(s.title, 'ع'); assert.deepEqual(s.keywords, ['a', 'b', 'c']);
   assert.deepEqual(listingSeo([], 'en'), { title: undefined, description: undefined, keywords: undefined });
 });
+
+test('AI usage is counted per day, and background work stops at the daily cap without burning job attempts', async () => {
+  const { recordAiCall, assertBulkAllowed, __resetAiUsageCache } = await import('../src/lib/ai-usage');
+  process.env.AI_BULK_DAILY_CAP = '2'; __resetAiUsageCache();
+  await recordAiCall({ provider: 'gemini', model: 'gemini-3.6-flash', job: 'bulk', task: 'seo', tokensIn: 100, tokensOut: 50, ms: 400, ok: true });
+  await recordAiCall({ provider: 'gemini', job: 'live', ok: false, error: 'busy' });
+  const day = new Date().toISOString().slice(0, 10); const u = db.read('aiUsage', day);
+  assert.equal(u.calls, 2); assert.equal(u.errors, 1); assert.equal(u.tokensIn, 100); assert.equal(u.m_gemini_3_6_flash_calls, 1); assert.equal(u.t_seo_calls, 1); assert.equal(u.bulkCalls, 1);
+  await assertBulkAllowed();
+  await recordAiCall({ provider: 'gemini', job: 'bulk', ok: true });
+  await assert.rejects(() => assertBulkAllowed(), (e: any) => e.name === 'AiCapError');
+  db.seed('brands', 'bz', { name: 'Zed', slug: 'zed' });
+  db.seed('jobs', 'fill_brands_bz', { type: 'fill', collection: 'brands', status: 'queued', productId: 'bz', productName: 'Zed', attempts: 1, createdAt: 'x', updatedAt: new Date().toISOString() });
+  globalThis.fetch = openai({ nameAr: 'زد' });
+  await runJob('fill_brands_bz');
+  const j = db.read('jobs', 'fill_brands_bz'); assert.equal(j.status, 'queued'); assert.equal(j.attempts, 1); assert.match(j.error, /daily limit/);
+  assert.equal(db.read('brands', 'bz').nameAr, undefined);
+  delete process.env.AI_BULK_DAILY_CAP; __resetAiUsageCache();
+});

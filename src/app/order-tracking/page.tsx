@@ -57,10 +57,10 @@ export default function OrderTrackingPage() {
           <div className="space-y-6">
             <div className="card p-6">
               <div className="flex flex-wrap gap-4 justify-between mb-4">
-                <div><p className="text-xs text-gray-500 uppercase tracking-wide">{t('c2_trk.orderNo')}</p><p className="text-xl font-black text-brand-700" dir="ltr">#{order.orderNumber}</p></div>
-                <div><p className="text-xs text-gray-500 uppercase tracking-wide">{t('c2_trk.status')}</p><span className={`badge badge-${order.status === 'delivered' ? 'green' : order.status === 'cancelled' ? 'red' : order.status.includes('ship') ? 'blue' : 'yellow'} font-bold`}>{statusText(t, order.status)}</span></div>
-                <div><p className="text-xs text-gray-500 uppercase tracking-wide">{t('c2_trk.total')}</p><p className="text-xl font-bold text-gray-900">{formatPrice(order.total)}</p></div>
-                <div><p className="text-xs text-gray-500 uppercase tracking-wide">{t('c2_trk.ordered')}</p><p className="text-sm font-medium text-gray-700">{formatDateTime(order.createdAt)}</p></div>
+                <div><p className="text-xs text-gray-500">{t('c2_trk.orderNo')}</p><p className="text-xl font-black text-brand-700" dir="ltr">#{order.orderNumber}</p></div>
+                <div><p className="text-xs text-gray-500">{t('c2_trk.status')}</p><span className={`badge badge-${order.status === 'delivered' ? 'green' : order.status === 'cancelled' ? 'red' : order.status.includes('ship') ? 'blue' : 'yellow'} font-bold`}>{statusText(t, order.status)}</span></div>
+                <div><p className="text-xs text-gray-500">{t('c2_trk.total')}</p><p className="text-xl font-bold text-gray-900">{formatPrice(order.total)}</p></div>
+                <div><p className="text-xs text-gray-500">{t('c2_trk.ordered')}</p><p className="text-sm font-medium text-gray-700">{formatDateTime(order.createdAt)}</p></div>
               </div>
               {order.trackingNumber && (
                 <div className="bg-brand-50 rounded-xl p-3 flex gap-3 text-sm">

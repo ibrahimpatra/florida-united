@@ -12,6 +12,8 @@ import { getAdminDb } from './firebase-admin';
 import { cancelOrder, OrderError } from './orders-server';
 import { log } from './logger';
 import { awardForDelivered } from './loyalty';
+import { holdRevenue, applyRefund } from './revenue';
+import { nextSteps } from './order-flow';
 
 export const VALID_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'return_requested', 'return_approved', 'return_rejected', 'return_picked_up', 'returned', 'refunded'];
 const FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered'];
@@ -49,7 +51,7 @@ export async function changeOrderStatus(i: ChangeInput) {
 
   const order: any = await adminGetOrderById(i.orderId);
   if (!order) throw new OrderError(404, 'Order not found.', 'NOT_FOUND');
-  if (order.status === 'cancelled') throw bad('This order is cancelled and cannot be changed.');
+  if (order.status === 'cancelled') throw bad('This order is cancelled and cannot be changed.', 'LOCKED');
 
   // An unpaid card order must not be prepared or shipped: stock is held, but nothing has been paid yet.
   if (order.paymentMethod === 'card' && order.paymentStatus !== 'paid' && status && status !== 'pending')
@@ -58,22 +60,36 @@ export async function changeOrderStatus(i: ChangeInput) {
     throw bad('This card order has not been paid yet, so it cannot be shipped.', 'UNPAID');
 
   if (trackingNumber || carrier) {
+    if (!['processing', 'shipped'].includes(order.status)) throw bad('Tracking can only be added while the order is being processed or shipped.');
     if (!String(trackingNumber || '').trim() || !String(carrier || '').trim()) throw bad('Enter both a tracking number and a carrier.');
   } else if (!status) {
     throw bad('Nothing to update.');
   } else {
     if (!VALID_STATUSES.includes(status)) throw bad(`"${status}" is not a valid order status.`);
-    if (['returned', 'refunded'].includes(order.status) && status !== order.status) throw bad(`A ${order.status} order cannot be changed.`);
-    const from = FLOW.indexOf(order.status), to = FLOW.indexOf(status);
-    if (from >= 3 && to >= 0 && to < from) throw bad(`A ${order.status.replace(/_/g, ' ')} order cannot be moved back to ${status.replace(/_/g, ' ')}.`);
-    if (order.status === 'delivered' && to >= 0 && to < FLOW.length - 1) throw bad('A delivered order cannot be moved back.');
+    if (status !== order.status && !nextSteps(order.status).includes(status)) {
+      const steps = nextSteps(order.status).map(x => x.replace(/_/g, ' '));
+      throw bad(steps.length ? `A ${order.status.replace(/_/g, ' ')} order can only move to: ${steps.join(' or ')}.` : `A ${order.status.replace(/_/g, ' ')} order cannot be changed.`);
+    }
+    if (status === 'shipped' && !order.trackingNumber) throw bad('Enter the carrier and tracking number to ship this order.');
   }
 
   if (trackingNumber && carrier) {
     await adminUpdateOrderTracking(i.orderId, String(trackingNumber).trim(), String(carrier).trim());
+    if (order.status !== 'shipped') {
+      sendOrderStatusUpdate({ ...order, status: 'shipped' }, 'shipped', note).catch(e => log.error('email', 'status email failed', { order: order.orderNumber, error: e?.message }));
+      sendWhatsAppStatusUpdate({ ...order, status: 'shipped' }, 'shipped').catch(e => log.error('whatsapp', 'status message failed', { order: order.orderNumber, error: e?.message }));
+    }
     return { success: true, orderNumber: order.orderNumber as string, status: 'shipped' };
   }
   await adminUpdateOrderStatus(i.orderId, status!, note);
+  if (status === 'delivered') await holdRevenue(i.orderId).catch(e => log.error('orders', 'could not hold revenue', { order: order.orderNumber, error: e?.message }));
+  if (status === 'refunded') {   // refund given through the status flow: use the amount on the return request, else the whole order
+    try {
+      const rr = await getAdminDb().collection('returnRequests').where('orderId', '==', i.orderId).get();
+      const amt = rr.docs.map(d => d.data() as any).filter(r => r.refundAmount !== undefined).map(r => Number(r.refundAmount))[0];
+      await applyRefund(i.orderId, Number.isFinite(amt) ? amt : Number(order.total));
+    } catch (e: any) { log.error('orders', 'could not book refund in revenue', { order: order.orderNumber, error: e?.message }); }
+  }
   if (status === 'delivered') await awardForDelivered(i.orderId).catch(e => log.error('loyalty', 'could not award points', { order: order.orderNumber, error: e?.message }));
   sendOrderStatusUpdate({ ...order, status }, status!, note).catch(e => log.error('email', 'status email failed', { order: order.orderNumber, error: e?.message }));
   sendWhatsAppStatusUpdate({ ...order, status }, status!).catch(e => log.error('whatsapp', 'status message failed', { order: order.orderNumber, error: e?.message }));
