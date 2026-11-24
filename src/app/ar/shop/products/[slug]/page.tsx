@@ -1,7 +1,8 @@
 import Page, { generateMetadata as base } from '@/app/shop/products/[slug]/page';
 import { arabicMeta } from '@/lib/seo';
 import { adminGetProductBySlug } from '@/lib/firestore-admin';
-export const revalidate = 60;
+export const revalidate = 3600; // long cache: the server refreshes the page itself when stock or the product changes (catalog-sync.ts)
+export async function generateStaticParams() { return []; }
 export default Page;
 export async function generateMetadata(props: any) {
   const m = await base(props);

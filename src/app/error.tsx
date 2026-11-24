@@ -3,13 +3,14 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle } from 'lucide-react';
 import { useSession } from 'next-auth/react';
+import { sendClientIssue } from '@/components/layout/ClientIssueLogger';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const { t } = useLanguage();
   const { data: session } = useSession();
   const isAdmin = String((session?.user as any)?.role || '').toLowerCase() === 'admin';
-  useEffect(() => { console.error(error); }, [error]);
+  useEffect(() => { console.error(error); sendClientIssue('render', `${error?.message || 'render error'}${error?.digest ? ` (digest ${error.digest})` : ''}`); }, [error]);
   return (
     <main className="bg-gray-50 min-h-screen flex items-center justify-center p-4">
       <div className="text-center max-w-md">

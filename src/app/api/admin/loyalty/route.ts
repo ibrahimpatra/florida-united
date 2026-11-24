@@ -2,6 +2,7 @@ import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { denyUnlessSuper } from '@/lib/api-error';
 import { loadLoyaltySettings, saveLoyaltySettings, adjustPoints } from '@/lib/loyalty';
 
 export const dynamic = 'force-dynamic';
@@ -10,11 +11,13 @@ const admin = async () => { const s = await getServerSession(authOptions); retur
 async function __GET() { return (await admin()) ? NextResponse.json(await loadLoyaltySettings()) : NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 /** PUT = save the rules. POST { userId, points, note } = adjust one customer. */
 async function __PUT(req: NextRequest) {
-  if (!(await admin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const s0 = await admin(); if (!s0) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const d0 = await denyUnlessSuper(s0); if (d0) return d0;
   return NextResponse.json({ success: true, settings: await saveLoyaltySettings(await req.json().catch(() => ({}))) });
 }
 async function __POST(req: NextRequest) {
   const s = await admin(); if (!s) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const d1 = await denyUnlessSuper(s); if (d1) return d1;
   const b = await req.json().catch(() => ({}));
   try {
     let uid = String(b.userId || '').trim();

@@ -6,7 +6,6 @@ import { authOptions } from '@/lib/auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 import sharp from 'sharp';
 import { r2Enabled, uploadToR2, deleteFromR2 } from '@/lib/r2';
-import { recordIssue } from '@/lib/issues';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +42,6 @@ async function __POST(req: NextRequest) {
 
     if (!TYPES[type]) return NextResponse.json({ error: 'Only JPG, PNG, WebP or GIF images are allowed.' }, { status: 400 });
     if (buffer.length > MAX_BYTES) {
-      await recordIssue({ route: '/api/upload', method: 'POST', status: 400, message: `File too large: ${Math.round(buffer.length / 1024)} KB in ${folder}`, user: String(session.user.email || session.user.id) }).catch(() => {});
       return NextResponse.json({ error: 'File too large (max 5 MB).' }, { status: 400 });
     }
     if (!(isAdmin ? ADMIN_FOLDERS : CUSTOMER_FOLDERS).includes(folder))

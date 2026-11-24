@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from '@/components/ui/LocLink';
 import Image from 'next/image';
 import { useSession, signOut } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import {
   ShoppingCart, Search, User, Menu, X, ChevronDown,
   Phone, Heart, Bell, LogOut, Package, Settings, LayoutDashboard,
@@ -24,6 +25,8 @@ import type { Category } from '@/types';
 export function Header() {
   const SITE_CONFIG = useBrand();
   const { data: session } = useSession();
+  const pathname = (usePathname() || '/').replace(/^\/ar(?=\/|$)/, '') || '/';
+  const navOn = (p: string) => (p === '/' ? pathname === '/' : pathname.startsWith(p));
   const { t, L, dir, isArabic } = useLanguage();
   const { freeShippingThreshold } = useStoreSettings();
   const tagline = isArabic ? SITE_CONFIG.taglineAr : SITE_CONFIG.tagline;
@@ -39,7 +42,7 @@ export function Header() {
   const [categories, setCategories] = useState<Category[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const cartCount = cartItems.reduce((sum, item) => item.unavailable ? sum : sum + item.quantity, 0);
 
   // Fetch root categories for nav bar
   useEffect(() => {
@@ -76,12 +79,12 @@ export function Header() {
       <header
         className={`sticky top-0 z-50 w-full transition-all duration-300 ${
           isScrolled
-            ? 'bg-white/95 backdrop-blur-md shadow-md'
-            : 'bg-white shadow-sm'
+            ? 'bg-white/90 backdrop-blur-xl shadow-soft'
+            : 'bg-white'
         }`}
       >
         {/* Top Bar */}
-        <div className="bg-brand-700 text-white text-xs py-2 hidden md:block">
+        <div className="bg-brand-900 text-white/85 text-[11px] py-1.5 hidden md:block">
           <div className="container-custom flex justify-between items-center">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">
@@ -112,7 +115,7 @@ export function Header() {
           <div className="flex items-center gap-4 py-3 md:py-4">
             {/* Mobile Menu Button */}
             <button
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="md:hidden w-10 h-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={t('c1_nav.toggleMenu')}
               aria-expanded={mobileMenuOpen}
@@ -122,7 +125,7 @@ export function Header() {
 
             {/* Logo */}
             <Link href="/" className="flex-shrink-0 flex items-center gap-2 md:gap-3" aria-label={t('c1_nav.homeAria', { name: brandName })}>
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-md">
+              <div className="w-10 h-10 md:w-11 md:h-11 bg-brand-700 rounded-2xl flex items-center justify-center shadow-soft">
                 <span className="text-white font-bold text-lg font-display"><BrandMark /></span>
               </div>
               <div className="hidden xs:block">
@@ -137,12 +140,12 @@ export function Header() {
             <div className="flex-1 hidden md:block max-w-xl lg:max-w-2xl">
               <button
                 onClick={() => setSearchOpen(true)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-400 hover:border-brand-300 hover:bg-brand-50/30 transition-all duration-200 text-sm"
+                className="w-full flex items-center gap-3 px-5 py-3 bg-gray-100/80 border border-transparent rounded-full text-gray-400 hover:bg-gray-100 hover:border-gray-200 transition-all duration-200 text-sm"
                 aria-label={t('c1_nav.searchProducts')}
               >
                 <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <span>{t('c1_nav.searchHint')}</span>
-                <kbd className="ms-auto hidden lg:flex items-center gap-1 text-xs text-gray-300 border border-gray-200 rounded px-1.5 py-0.5 bg-white">
+                <kbd className="ms-auto hidden lg:flex items-center gap-1 text-[11px] text-gray-400 rounded-full px-2 py-0.5 bg-white">
                   Ctrl K
                 </kbd>
               </button>
@@ -153,7 +156,7 @@ export function Header() {
               <div className="md:hidden me-1"><LanguageToggle /></div>
               {/* Search Mobile */}
               <button
-                className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="md:hidden w-10 h-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
                 onClick={() => setSearchOpen(true)}
                 aria-label={t('c1_nav.search')}
               >
@@ -163,7 +166,7 @@ export function Header() {
               {/* Wishlist */}
               <Link
                 href="/account/wishlist"
-                className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors hidden sm:flex items-center"
+                className="relative w-10 h-10 rounded-full hover:bg-gray-100 transition-colors hidden sm:flex items-center justify-center"
                 aria-label={t('c1_nav.wishlistAria', { n: wishlistItems.length })}
               >
                 <Heart className="w-5 h-5 text-gray-700" />
@@ -179,11 +182,11 @@ export function Header() {
                 {session ? (
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-100 transition-colors"
                     aria-label={t('c1_nav.accountMenu')}
                     aria-expanded={userMenuOpen}
                   >
-                    <div className="w-8 h-8 bg-brand-100 text-brand-700 rounded-full flex items-center justify-center font-semibold text-sm">
+                    <div className="w-9 h-9 bg-brand-100 text-brand-700 rounded-full flex items-center justify-center font-semibold text-sm">
                       {session.user?.name?.[0]?.toUpperCase() || 'U'}
                     </div>
                     <ChevronDown className={`w-4 h-4 text-gray-500 hidden md:block transition-transform duration-200 ${userMenuOpen ? 'rotate-180' : ''}`} />
@@ -191,7 +194,7 @@ export function Header() {
                 ) : (
                   <Link
                     href="/auth/login"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-gray-100 transition-colors"
                   >
                     <User className="w-5 h-5 text-gray-700" />
                     <span className="text-sm font-medium text-gray-700 hidden md:block">{t('nav.signIn')}</span>
@@ -200,7 +203,7 @@ export function Header() {
 
                 {/* User Dropdown */}
                 {userMenuOpen && session && (
-                  <div className="absolute end-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 animate-slide-down z-50">
+                  <div className="absolute end-0 top-full mt-2 w-60 bg-white rounded-3xl shadow-hover border border-gray-100 py-2 animate-slide-down z-50">
                     <div className="px-4 py-3 border-b border-gray-100">
                       <p className="font-semibold text-gray-900 text-sm truncate">{session.user?.name}</p>
                       <p className="text-gray-400 text-xs truncate">{session.user?.email}</p>
@@ -240,7 +243,7 @@ export function Header() {
               {/* Cart */}
               <button
                 onClick={() => setMiniCartOpen(true)}
-                className="relative flex items-center gap-2 px-2.5 md:px-3 py-2 bg-brand-700 text-white rounded-xl hover:bg-brand-700 transition-all duration-200 shadow-sm"
+                className="relative flex items-center gap-2 px-3 md:px-4 h-10 bg-brand-800 text-white rounded-full hover:bg-brand-900 active:scale-95 transition-all duration-150 shadow-soft"
                 aria-label={t('c1_nav.cartAria', { n: cartCount })}
               >
                 <ShoppingCart className="w-5 h-5" />
@@ -256,19 +259,19 @@ export function Header() {
         </div>
 
         {/* Navigation - Desktop */}
-        <nav className="hidden md:block border-t border-gray-100 bg-white" aria-label={t('c1_nav.mainNav')}>
+        <nav className="hidden md:block bg-white" aria-label={t('c1_nav.mainNav')}>
           <div className="container-custom">
-            <ul className="flex items-center gap-0">
+            <ul className="flex items-center gap-1 pb-2.5">
               <li>
                 <Link
                   href="/"
-                  className="flex items-center px-4 py-3 text-sm font-semibold text-brand-700 hover:bg-brand-50 transition-colors border-b-2 border-brand-600"
+                  className={`flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors ${navOn('/') ? 'bg-brand-800 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
                 >
                   {t('c1_nav.home')}
                 </Link>
               </li>
               <li>
-                <Link href="/shop" className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-brand-700 hover:bg-brand-50 transition-colors border-b-2 border-transparent hover:border-brand-300">
+                <Link href="/shop" className={`flex items-center px-4 py-2 rounded-full text-sm font-medium transition-colors ${navOn('/shop') ? 'bg-brand-800 text-white' : 'text-gray-700 hover:bg-gray-100'}`}>
                   {t('c1_nav.allProducts')}
                 </Link>
               </li>
@@ -278,7 +281,7 @@ export function Header() {
                   <button
                     onMouseEnter={() => setActiveCategory(cat.slug)}
                     onMouseLeave={() => setActiveCategory(null)}
-                    className="flex items-center gap-1 px-4 py-3 text-sm font-medium text-gray-700 hover:text-brand-700 hover:bg-brand-50 transition-colors border-b-2 border-transparent hover:border-brand-300"
+                    className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
                   >
                     {L(cat, 'name')}
                     <ChevronDown className="w-3.5 h-3.5 opacity-60" />
@@ -287,7 +290,7 @@ export function Header() {
                   <div
                     onMouseEnter={() => setActiveCategory(cat.slug)}
                     onMouseLeave={() => setActiveCategory(null)}
-                    className={`absolute start-0 top-full w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 transition-all duration-200 ${
+                    className={`absolute start-0 top-full w-52 bg-white rounded-2xl shadow-hover border border-gray-100 py-2 z-50 transition-all duration-200 ${
                       activeCategory === cat.slug
                         ? 'opacity-100 visible translate-y-0'
                         : 'opacity-0 invisible -translate-y-2'
@@ -304,17 +307,17 @@ export function Header() {
                 );
               })}
               <li>
-                <Link href="/bundles" className="flex items-center gap-1 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors border-b-2 border-transparent hover:border-gray-300">
+                <Link href="/bundles" className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors">
                   <Package2 className="w-4 h-4" /> {t('c1_nav.bundles')}
                 </Link>
               </li>
               <li>
-                <Link href="/deals" className="flex items-center gap-1 px-4 py-3 text-sm font-semibold text-accent-600 hover:bg-accent-50 transition-colors border-b-2 border-transparent hover:border-accent-300">
+                <Link href="/deals" className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-accent-700 bg-accent-50 hover:bg-accent-100 transition-colors">
                   {t('c1_nav.deals')}
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-brand-700 hover:bg-brand-50 transition-colors border-b-2 border-transparent hover:border-brand-300">
+                <Link href="/contact" className="flex items-center px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
                   {t('c1_nav.contact')}
                 </Link>
               </li>
@@ -324,12 +327,12 @@ export function Header() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileMenuOpen(false)}>
+          <div className="md:hidden fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px]" onClick={() => setMobileMenuOpen(false)}>
             <div
-              className="absolute start-0 top-0 bottom-0 w-80 bg-white shadow-2xl overflow-y-auto"
+              className="absolute start-0 top-0 bottom-0 w-80 max-w-[88vw] bg-white shadow-2xl overflow-y-auto rounded-e-3xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-4 bg-brand-700">
+              <div className="p-5 bg-brand-800 rounded-be-3xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -345,16 +348,16 @@ export function Header() {
                   </button>
                 </div>
                 {session ? (
-                  <div className="mt-3 bg-white/10 rounded-xl p-3 text-white">
+                  <div className="mt-3 bg-white/10 rounded-2xl p-3 text-white">
                     <p className="font-semibold text-sm">{session.user?.name}</p>
                     <p className="text-brand-200 text-xs">{session.user?.email}</p>
                   </div>
                 ) : (
                   <div className="mt-3 flex gap-2">
-                    <Link href="/auth/login" className="flex-1 text-center py-2 bg-white text-brand-700 rounded-lg text-sm font-semibold">
+                    <Link href="/auth/login" className="flex-1 text-center py-2.5 bg-white text-brand-800 rounded-full text-sm font-semibold">
                       {t('nav.signIn')}
                     </Link>
-                    <Link href="/auth/register" className="flex-1 text-center py-2 bg-brand-500 text-white rounded-lg text-sm font-semibold border border-white/30">
+                    <Link href="/auth/register" className="flex-1 text-center py-2.5 bg-brand-600 text-white rounded-full text-sm font-semibold border border-white/30">
                       {t('c1_nav.register')}
                     </Link>
                   </div>

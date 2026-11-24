@@ -14,8 +14,8 @@ beforeEach(() => {
 });
 
 test('admin moves an order forward and the history records it', async () => {
-  await changeOrderStatus({ orderId: 'o1', actor: admin, status: 'processing' } as any);
-  assert.equal(db.read('orders', 'o1').status, 'processing');
+  await changeOrderStatus({ orderId: 'o1', actor: admin, status: 'confirmed' } as any);
+  assert.equal(db.read('orders', 'o1').status, 'confirmed');
 });
 test('customers cannot change status except cancel; others cannot cancel it', async () => {
   await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: cust, status: 'shipped' } as any), /only cancel/);
@@ -29,4 +29,25 @@ test('cancel restores stock once', async () => {
   await changeOrderStatus({ orderId: 'o1', actor: cust, status: 'cancelled' } as any);
   assert.equal(db.read('products', 'p1').stock, 10);
   await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: admin, status: 'shipped' } as any), /cancelled/);
+});
+
+test('status flow: no skipping steps, shipping needs tracking, shipped cannot be cancelled by anyone', async () => {
+  await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: admin, status: 'delivered' } as any), /can only move to/);
+  await changeOrderStatus({ orderId: 'o1', actor: admin, status: 'confirmed' } as any);
+  await changeOrderStatus({ orderId: 'o1', actor: admin, status: 'processing' } as any);
+  await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: admin, status: 'shipped' } as any), /tracking/);
+  await changeOrderStatus({ orderId: 'o1', actor: admin, trackingNumber: 'T1', carrier: 'DHL' } as any);
+  assert.equal(db.read('orders', 'o1').status, 'shipped');
+  await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: admin, status: 'cancelled' } as any), /cannot be cancelled/);
+  await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: cust, status: 'cancelled' } as any), /no longer be cancelled/);
+  await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: admin, status: 'processing' } as any), /can only move to/);
+  await changeOrderStatus({ orderId: 'o1', actor: admin, status: 'out_for_delivery' } as any);
+  await changeOrderStatus({ orderId: 'o1', actor: admin, status: 'delivered' } as any);
+  await assert.rejects(() => changeOrderStatus({ orderId: 'o1', actor: admin, status: 'confirmed' } as any), /cannot be changed/);
+});
+test('return flow only moves in order; rejected/refunded are final', async () => {
+  db.seed('orders', 'r1', { orderNumber: 'R', userId: 'u1', paymentMethod: 'cod', paymentStatus: 'paid', status: 'return_requested', total: 5, items: [], statusHistory: [] });
+  await assert.rejects(() => changeOrderStatus({ orderId: 'r1', actor: admin, status: 'refunded' } as any), /can only move to/);
+  for (const s of ['return_approved', 'return_picked_up', 'returned', 'refunded']) await changeOrderStatus({ orderId: 'r1', actor: admin, status: s } as any);
+  await assert.rejects(() => changeOrderStatus({ orderId: 'r1', actor: admin, status: 'returned' } as any), /cannot be changed/);
 });

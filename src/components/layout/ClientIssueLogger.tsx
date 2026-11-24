@@ -7,10 +7,24 @@ import { toast } from 'react-hot-toast';
  * (HTTP 400+ or no response), each with the method, URL and the server's error text.
  * Open DevTools > Console and filter by "[app]".
  */
+const sent = new Set<string>();
+/** Sends a browser-side technical problem to Admin > Issues. At most 5 different ones per page load; never throws. */
+export function sendClientIssue(area: string, message: string) {
+  try {
+    const m = String(message || '').slice(0, 300); const key = area + m;
+    if (!m || sent.has(key) || sent.size >= 5) return; sent.add(key);
+    // ResizeObserver / extension noise is not our bug
+    if (/ResizeObserver|Script error|chrome-extension|moz-extension|Non-Error promise rejection/i.test(m)) return;
+    const body = JSON.stringify({ area, message: m, page: location.pathname });
+    if (navigator.sendBeacon) navigator.sendBeacon('/api/client-issue', new Blob([body], { type: 'application/json' }));
+    else fetch('/api/client-issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+  } catch { /* reporting must never break the page */ }
+}
+
 export function ClientIssueLogger() {
   useEffect(() => {
-    const onError = (e: ErrorEvent) => console.error('[app] uncaught error:', e.message, e.filename ? `${e.filename}:${e.lineno}` : '');
-    const onRej = (e: PromiseRejectionEvent) => console.error('[app] unhandled promise rejection:', (e.reason && (e.reason.message || e.reason)) || e.reason);
+    const onError = (e: ErrorEvent) => { console.error('[app] uncaught error:', e.message, e.filename ? `${e.filename}:${e.lineno}` : ''); sendClientIssue('error', `${e.message} ${e.filename ? `(${e.filename.split('/').pop()}:${e.lineno})` : ''}`); }
+    const onRej = (e: PromiseRejectionEvent) => { const r = (e.reason && (e.reason.message || e.reason)) || e.reason; console.error('[app] unhandled promise rejection:', r); sendClientIssue('promise', String(r)); }
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRej);
 
@@ -40,7 +54,7 @@ export function ClientIssueLogger() {
           }
           return res;
         } catch (err: any) {
-          if (isApi) console.error(`[app] ${method} ${url} failed - no response (network or server down):`, err?.message || err);
+          if (isApi) { console.error(`[app] ${method} ${url} failed - no response (network or server down):`, err?.message || err); if (!url.includes('/api/client-issue') && navigator.onLine) sendClientIssue('network', `${method} ${url.replace(location.origin, '').split('?')[0]} got no response`); }
           throw err;
         }
       };

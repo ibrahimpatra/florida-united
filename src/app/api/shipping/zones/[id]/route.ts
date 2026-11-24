@@ -1,3 +1,4 @@
+import { denyUnlessSuper } from '@/lib/api-error';
 import { withLog } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -7,7 +8,8 @@ import { normalizeZone, findGovernorateConflict, ValidationError } from '@/lib/z
 
 async function guard() {
   const session = await getServerSession(authOptions);
-  return session && session.user.role === 'admin';
+  if (!session || session.user.role !== 'admin') return false;
+  return !(await denyUnlessSuper(session));
 }
 
 async function __PUT(req: NextRequest, { params }: { params: { id: string } }) {

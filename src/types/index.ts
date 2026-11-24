@@ -241,9 +241,17 @@ export interface Review {
 export interface Coupon {
   id: string;
   code: string;
-  type: 'percentage' | 'fixed';
+  type: 'percentage' | 'fixed' | 'free_shipping' | 'buy_x_get_y';
   value: number;
   minOrderAmount: number;
+  startsAt?: string | null;
+  productIds?: string[];
+  categoryIds?: string[];
+  segment?: 'all' | 'new' | 'returning' | 'vip' | 'inactive';
+  /** show the code in the matching customers' account page */
+  showInAccount?: boolean;
+  buyQty?: number;
+  getQty?: number;
   maxDiscount?: number;
   usageLimit?: number;
   /** max uses per customer; 1 = once per customer; empty/0 = unlimited */
@@ -348,7 +356,14 @@ export interface DashboardStats {
   warnings?: string[];
   avgOrderValue?: number;
   ordersByStatus: Record<string, number>;
-  revenueByDay: Array<{ date: string; revenue: number; orders: number }>;
+  revenueByDay: Array<{ date: string; revenue: number; orders: number; placed?: number }>;
+  /** Money actually earned: delivered, return window over, not returned/cancelled/refunded. */
+  recognized?: { today: number; last7: number; last30: number; thisMonth: number; lastMonth: number; orders30: number; shipping30: number; discount30: number };
+  /** Money not yet earned: still on its way, or delivered but inside the return window / being returned. */
+  pendingRevenue?: { inProgress: number; inProgressCount: number; held: number; heldCount: number };
+  refunds?: { last30: number; count30: number };
+  /** Gross value of orders placed (before any return/cancel). */
+  placed?: { last30: number; orders30: number };
 }
 
 export interface Notification {

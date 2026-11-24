@@ -252,6 +252,59 @@ By default only warnings and errors are printed: missing settings at startup, an
 
 ---
 
+## 9b. What changed in v25 (stock, roles, order flow, logging)
+
+- **Stock and database reads.** Product pages are cached for an hour and refreshed by the server only when something changes (an item sells out, comes back, or an admin edits it). The product list stays in server memory for 10 minutes; a tiny marker (`config/catalog`) tells other servers to refresh, checked at most every 20 seconds. Shoppers see only "In stock" / "Out of stock" (the number is capped at about 10 and never shown). The cart does one batched check (`/api/stock`) when the cart or checkout opens; sold-out lines are greyed out and not counted. The final stock check at order time is unchanged. No `.env` changes.
+- **Super admin only.** Settings, Issues, Jobs, Code graph, Shipping and Loyalty settings are blocked on the server for normal admins. If no one is a `superadmin` yet, the **oldest admin account becomes the owner automatically**. If that is the wrong account, set `role` = `superadmin` on the right user in Firestore. Role changes apply within about 5 minutes (or on next sign-in).
+- **Order status flow.** Pending → Confirmed → Processing → Shipped (needs carrier + tracking) → Out for delivery → Delivered. Return: Requested → Approved → Picked up → Received back → Refunded. Cancelled, Rejected and Refunded are locked. Shipped orders cannot be cancelled by anyone. Admin screens show only the valid next steps; the server enforces it.
+- **Issues.** Every technical error (API 5xx, `log.error`, background jobs, webhooks, browser crashes and failed network calls) goes to Admin > Issues, grouped with counts, kept 30 days. Expected 4xx answers (for example "cancelled order cannot be changed") are not logged. Technical detail is shown to admins only for real server errors and only when it adds something.
+
+## 9c. What changed in v26 (admin menu, forms, loyalty)
+
+- **Admin menu.** `/admin` is now a full-page grid of small tiles, grouped (Sales, Catalog, Marketing, Reports, Settings), with search, recent pages and badges (orders waiting, returns waiting). There is no sidebar: every admin page has a slim top bar and the grid button returns to the menu. Add a page in `src/lib/admin-nav.ts` and it appears everywhere. Super-admin-only tiles are hidden from normal admins (and still blocked on the server).
+- **Product form.** Save and Cancel are at the top and stay visible. Brand, Category and Sub-category are one-to-one pills with "Create ..." inline when it does not exist. SEO, extra units and returns are collapsed. A new product keeps a draft in the browser until saved.
+- **Categories and Brands.** Save/Cancel on top, optional parts collapsed, keywords as pills, parent category as a pill.
+- **Busy layer.** A grey full-screen layer with a spinner appears for important actions (placing an order, saving a product, changing an order status). It clears when the next page opens. Small actions keep their button spinner.
+- **Rewards.** Customers are not enrolled automatically: they open Account > Rewards and tap Join. Points from a delivered order are shown as *pending* and are added to the balance after the order's return window ends (the longest item `returnDays`, else the store default). A return in progress holds them; a refund before release cancels them. Points are released when the customer opens Rewards or checkout (no extra cron).
+
+## 9d. What changed in v27 (bundles, recently viewed, AI usage, deals)
+
+- **Bundle pages.** Each bundle has its own page at `/shop/bundles/<name>-<id>` (and `/ar/...`) with gallery, price and saving, what is inside (each part opens its product), In stock / Out of stock from the parts, add to cart, share, SEO and structured data. Bundles are in the sitemap, the listing, search and the cart. Renaming a bundle never breaks an old link.
+- **Recently viewed.** Signed-in customers: the browser list is merged into their account on login (one write, only if it changed) and later views are saved in one batched write a few seconds after the last one. Signed-out: browser only. Ids and times only, newest first, 20 max.
+- **AI usage (super admin).** Admin > Settings > AI usage shows calls, tokens, failures, backup use, estimated cost and the daily background cap, per day, provider and model. Counted by the app itself. Optional: add an OpenAI **admin** key as `OPENAI_ADMIN_KEY` on Vercel to show OpenAI's own billing as a cross-check (Google has no such call). No change is needed if you skip it.
+- **Deals.** Home page shows a "Deals right now" product row when an offer is live (hidden otherwise). Each offer links to `/deals?deal=<id>`, which lists only the products that offer covers. New limits per offer: most units per order at the offer price, and "cannot be combined with a coupon". Existing limits (minimum cart, total uses, uses per customer) are unchanged and still checked again when the order is placed.
+- **Translations.** Fixed the missing `newArrivalsSub` heading text, and a test now scans every `t('...')` key in the app for English and Arabic.
+
+## 9e. What changed in v28 part 1 (dashboard revenue, coupon rules, search)
+
+**Revenue is now counted correctly.** Money is "earned" only when an order is delivered, its return period has ended, and it was not cancelled, returned or refunded. Until then it shows separately as *On its way* or *Return period open*. A part-refund keeps only the share the customer kept. Refunds are shown as their own figure.
+- New files/fields: `src/lib/revenue.ts`; order fields `revenueState` (`held` / `recognized` / `void`), `revenueDueAt`, `revenueAmount`; collection `revenueDaily/{YYYY-MM-DD}`; `recRevenue` / `recUnits` on products and `categoryStats`.
+- Orders are "held" when marked delivered (`order-actions.ts`), booked by `settleDueRevenue()` (runs on each dashboard load, reads only still-held orders), and refunds go through `applyRefund()` (return route and status flow). Dashboard cost stays flat: about 124 daily docs + counts, no order scans.
+- **After deploying, open Admin → Dashboard and click "Rebuild analytics" once.** It re-books older orders with the new rule. Safe to repeat. No env changes, no new indexes.
+- Dashboard shows: earned today / 7 days / this month (vs last month), average order, on its way, return period open, refunds, orders placed (before returns), shipping and discounts on earned orders, all 12 order statuses, open returns, top products and categories by earned revenue.
+
+**Coupons with rules** (Admin → Coupons): percentage, fixed, free delivery, buy X get Y free (cheapest items free); apply to whole cart, chosen categories (with sub-categories) or products; start and end dates; total and per-customer limits; minimum order; who can use it (everyone, new, returning, VIP KD 200+, not ordered for 90+ days); optional "show in matching customers' accounts" (account page card **Offers for you**). Same rule function (`computeCoupon`) is used by cart preview, checkout quote and the placed order, so the three always agree. Existing coupons keep working unchanged. Flash deals marked "no coupons" still block coupons.
+
+**Search**: Arabic spellings are normalised (alef, ya, ta marbuta, diacritics, Arabic digits). A search with no results offers "Did you mean …" (English and Arabic). The shop and search page now have a brand filter next to price, category and in-stock.
+
+Purchasing and accounting are not in this release (planned for v28 part 2).
+
+## 9f. What changed in v28 part 2a (storefront redesign, UI only)
+
+A new look for every customer-facing page. No logic, server, database or env changes.
+- **Theme colours are unchanged**: everything still follows the colours chosen in Admin → Settings → Theme (`brand-*` / `accent-*` variables).
+- **Design system** (`tailwind.config.js`, `src/styles/globals.css`): rounder corners, soft shadows, pill buttons and chips, filled inputs, pill badges, Plus Jakarta Sans for Latin text (Arabic keeps IBM Plex Sans Arabic). Because these are shared classes, admin pages pick up the softer look too; admin pages are restyled properly in part 2b.
+- **Phones**: floating bottom bar (Home, Shop, Cart, Saved, Account) in `src/components/layout/MobileNav.tsx`, hidden on checkout, sign-in, order-success and admin; a sticky price + Add to cart bar on product pages; category chips in the shop; horizontally scrolling categories on the home page.
+- **Restyled**: header and menu, announcement bar, hero banner (rounded card), trust strip, category tiles, product cards, shop filters and toolbar, product page, cart, page headers, footer.
+- Works in Arabic (right-to-left) and English.
+
+### 9g. v28 part 2b: back-button memory, single product bar, admin polish
+
+- **Back from a product returns to the same page and row.** The shop URL mirrors page/filters (`/shop?page=3`); clicking a product saves the list and scroll position in `sessionStorage` (`fk-shop-return`); on Back the saved list shows instantly and scrolls to the exact spot, then refreshes quietly. Works for shop, search, deals, brands, categories. Code: `src/components/product/ShopClient.tsx`.
+- **Product page has one bottom bar** (cart icon + price + Add to cart / "Cart"); the floating site nav hides on `/shop/products/*`. Code: `ProductDetailClient.tsx`, `MobileNav.tsx`.
+- **Admin** restyled to the same look (top bar, home tiles, dashboard panels, `bg-concrete`). UI only.
+- **Bug fix:** `tailwind.config.js` now scans `src/lib`, so admin home tile colours (Sales/Marketing/Reports) show.
+
 ## 10. SEO
 
 Every public page has its own title, description and canonical link. English and Arabic versions (`/ar/...`) point to each other with `hreflang`. The sitemap lists both and only active products. Product pages carry price and stock data; the home page carries organisation and search-box data; product and category pages carry breadcrumbs. A default share image and app icons are included. Order tracking, cart, checkout and account pages are kept out of search results.

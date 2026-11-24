@@ -7,6 +7,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { HeroBanner } from '@/components/home/HeroBanner';
 import { CategoryGrid } from '@/components/home/CategoryGrid';
+import { DealsProducts } from '@/components/home/DealsProducts';
 import { FeaturedProducts } from '@/components/home/FeaturedProducts';
 import { NewArrivals } from '@/components/home/NewArrivals';
 import { FlashDealsSection } from '@/components/home/FlashDealsSection';
@@ -42,6 +43,7 @@ export default async function HomePage() {
         <HeroBanner/>
         <FlashDealsSection/>
         <PromoTiles/>
+        <DealsProducts/>
         <TrustBadges/>
         <section className="section bg-gray-50">
           <div className="container-custom">

@@ -11,6 +11,7 @@
  *    transaction; on collision a new number is drawn.
  *  - Cancel restores stock + rollups exactly once (already-cancelled is a no-op).
  */
+import { catalogChanged } from './catalog-sync';
 import { loadLoyaltySettings } from './loyalty';
 import { redeemPlan } from './loyalty-core';
 import { randomInt } from 'crypto';
@@ -22,7 +23,7 @@ import { expireStripeSession } from './stripe';
 import { onlineProvider } from './payments';
 import {
   applyFlashDeals, PricedLine, ZoneLike, ShippingSettings, canonicalGovernorate, computeShipping,
-  computeCoupon, computeTotal, makeOrderNumber, round3,
+  computeCoupon, customerSegments, computeTotal, makeOrderNumber, round3,
 } from './pricing';
 
 export class OrderError extends Error {
@@ -82,11 +83,14 @@ export async function resolveLines(db: Firestore, raw: RawItem[], opts: { userId
   return (await resolveLinesWithDeals(db, raw, opts)).lines;
 }
 
-export async function resolveLinesWithDeals(db: Firestore, raw: RawItem[], opts: { userId?: string } = {}): Promise<{ lines: PricedLine[]; usedDealIds: string[]; totalSaving: number }> {
+const COUPON_WITH_DEAL = 'This coupon cannot be used together with an offer that is in your cart.';
+
+export async function resolveLinesWithDeals(db: Firestore, raw: RawItem[], opts: { userId?: string } = {}): Promise<{ lines: PricedLine[]; usedDealIds: string[]; totalSaving: number; noCoupon?: boolean }> {
   const base = await resolveBaseLines(db, raw);
   let deals: any[] = [], blocked = new Set<string>();
   try { ({ deals, blocked } = await loadDeals(db, opts.userId)); } catch (e) { console.error('[deals] load failed, pricing without deals', e); }
-  return applyFlashDeals(base, deals, { blocked });
+  const r = applyFlashDeals(base, deals, { blocked });
+  return { ...r, noCoupon: deals.some(d => r.usedDealIds.includes(d.id) && d.noCoupon === true) };
 }
 
 async function resolveBaseLines(db: Firestore, raw: RawItem[]): Promise<PricedLine[]> {
@@ -158,23 +162,36 @@ async function resolveBaseLines(db: Firestore, raw: RawItem[]): Promise<PricedLi
   return lines;
 }
 
+/** The cart facts a coupon's rules need (scope, buy-X-get-Y, customer group). */
+export function couponCtx(lines: PricedLine[], segments?: string[]) {
+  return { segments, lines: lines.map(l => ({ productId: l.productId, categoryId: l.categoryId, quantity: l.quantity, total: l.total, bundle: !!l.bundleItems })) };
+}
+
 /** Used by /api/shipping/calculate so the checkout display == what gets charged. */
 export async function quoteShipping(rawItems: RawItem[], governorate: string | undefined, userId?: string, couponCode?: string) {
   const db = getAdminDb();
-  const { lines, totalSaving } = await resolveLinesWithDeals(db, rawItems, { userId });
+  const { lines, totalSaving, noCoupon } = await resolveLinesWithDeals(db, rawItems, { userId });
   const { zones, settings } = await loadShippingSettings(db);
   const subtotal = round3(lines.reduce((s, l) => s + l.total, 0));
   // Same rule placeOrder applies, so the checkout summary shows exactly what will be charged.
-  let discount = 0; let couponError: string | undefined;
+  let discount = 0; let couponError: string | undefined; let freeShip = false;
   const code = String(couponCode || '').trim().toUpperCase();
   if (code) {
     const cs = await db.collection('coupons').where('code', '==', code).limit(1).get();
     const cd: any = cs.empty ? null : cs.docs[0].data();
     const uses = cd?.perUserLimit && userId ? Number(((await db.collection('couponUsage').doc(`${cs.docs[0].id}_${userId}`).get()).data() as any)?.count || 0) : 0;
-    const r = computeCoupon(cd, subtotal, new Date(), uses);
-    if (r.valid) discount = r.discount; else couponError = r.error || 'Invalid coupon.';
+    const segs = cd?.segment && cd.segment !== 'all' && userId ? customerSegments((await db.collection('users').doc(userId).get()).data()) : undefined;
+    const r = computeCoupon(cd, subtotal, new Date(), uses, couponCtx(lines, segs));
+    if (noCoupon) couponError = COUPON_WITH_DEAL;
+    else if (r.valid) { discount = r.discount; freeShip = !!r.freeShipping; } else couponError = r.error || 'Invalid coupon.';
   }
-  return { subtotal, lines, dealSaving: totalSaving, discount, ...(couponError ? { couponError } : {}), ...computeShipping({ governorate, lines, zones, settings }) };
+  const ship = computeShipping({ governorate, lines, zones, settings });
+  if (freeShip) {   // free-shipping coupon: every delivery option costs nothing
+    ship.options = ship.options.map(o => ({ ...o, price: 0, isFree: true, badge: 'FREE', method: 'free' as any }));
+    ship.defaultOption = ship.options[0] || ship.defaultOption;
+    ship.amountToFreeShipping = undefined;
+  }
+  return { subtotal, lines, dealSaving: totalSaving, discount, ...(freeShip ? { couponFreeShipping: true } : {}), ...(couponError ? { couponError } : {}), ...ship };
 }
 
 // ── Address validation ───────────────────────────────────────
@@ -231,7 +248,7 @@ export async function placeOrder(input: PlaceOrderInput) {
   if (!chosen) throw new OrderError(400, 'No delivery option is available for your area.', 'NO_SHIPPING');
   const codFee = method === 'cod' ? ship.codFee : 0;
   if (method === 'cod' && !ship.codAvailable) throw new OrderError(400, 'Cash on delivery is not available right now.', 'COD_OFF');
-  const shippingCost = round3(chosen.price + codFee);
+  const shipBase = round3(chosen.price + codFee);
 
   // Coupon doc reference (validated again inside the transaction with fresh data)
   let couponRef: FirebaseFirestore.DocumentReference | null = null;
@@ -255,7 +272,9 @@ export async function placeOrder(input: PlaceOrderInput) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const orderNumber = makeOrderNumber(n => randomInt(n));
     try {
-      return await db.runTransaction(async tx => {
+      let wentOut: string[] = [];
+      const placed: any = await db.runTransaction(async tx => {
+        wentOut = [];
         // ---------- READS ----------
         const lockSnap = lockRef ? await tx.get(lockRef) : null;
         if (lockSnap?.exists) return { ...(lockSnap.data() as any), duplicate: true };
@@ -285,13 +304,18 @@ export async function placeOrder(input: PlaceOrderInput) {
           if (Number(d.maxUsesPerUser) > 0 && Number((usageSnaps[i].data() as any)?.count || 0) >= Number(d.maxUsesPerUser)) throw new OrderError(409, 'You have already used an offer in your cart. Please review your cart and try again.', 'DEAL_ENDED');
         });
 
+        let shippingCost = shipBase;
         let discount = 0;
         if (couponRef) {
           const cs = await tx.get(couponRef);
           const cu = await tx.get(db.collection('couponUsage').doc(`${couponRef.id}_${input.userId}`));
-          const res = computeCoupon(cs.exists ? (cs.data() as any) : null, subtotal, new Date(), Number((cu.data() as any)?.count || 0));
+          if (dealSnaps.some(ds => (ds.data() as any)?.noCoupon === true)) throw new OrderError(400, COUPON_WITH_DEAL, 'BAD_COUPON');
+          const cdata: any = cs.exists ? cs.data() : null;
+          const segs = cdata?.segment && cdata.segment !== 'all' ? customerSegments((await tx.get(db.collection('users').doc(input.userId))).data()) : undefined;
+          const res = computeCoupon(cdata, subtotal, new Date(), Number((cu.data() as any)?.count || 0), couponCtx(lines, segs));
           if (!res.valid) throw new OrderError(400, res.error || 'Invalid coupon.', 'BAD_COUPON');
           discount = res.discount;
+          if (res.freeShipping) shippingCost = round3(shipBase - chosen.price);   // delivery is free; a cash-on-delivery fee still applies
         }
         // Loyalty points: balance read inside the transaction, so two checkouts can never spend the same points.
         let loyaltyPoints = 0, loyaltyDiscount = 0;
@@ -333,6 +357,7 @@ export async function placeOrder(input: PlaceOrderInput) {
         tx.set(numRef, { orderId: orderRef.id, createdAt: FieldValue.serverTimestamp() });
 
         // stock + per-product counters
+        wentOut = snaps.filter(s => Number((s.data() as any)?.stock || 0) - need.get(s.id)! <= 0).map(s => s.id);   // these just sold out: their pages must say so
         for (const s of snaps) {
           const revenue = lines.filter(l => l.productId === s.id && !l.bundleItems).reduce((a, l) => a + l.total, 0);
           tx.update(s.ref, {
@@ -379,6 +404,8 @@ export async function placeOrder(input: PlaceOrderInput) {
           },
         };
       });
+      if (!placed.duplicate && wentOut.length) void catalogChanged(wentOut);
+      return placed;
     } catch (e) {
       if (e instanceof NumberCollision) continue; // draw another number
       throw e;
@@ -402,7 +429,9 @@ export function plainOrder(v: any): any {
 export async function cancelOrder(args: { orderId: string; actor: { id: string; role: string }; note?: string }) {
   const db = getAdminDb();
   const isAdmin = args.actor.role === 'admin';
-  return db.runTransaction(async tx => {
+  let backInStock: string[] = [];
+  const result = await db.runTransaction(async tx => {
+    backInStock = [];
     const ref = db.collection('orders').doc(args.orderId);
     const snap = await tx.get(ref);
     if (!snap.exists) throw new OrderError(404, 'Order not found.', 'NOT_FOUND');
@@ -410,9 +439,9 @@ export async function cancelOrder(args: { orderId: string; actor: { id: string; 
     if (!isAdmin && o.userId !== args.actor.id) throw new OrderError(403, 'Forbidden', 'FORBIDDEN');
     if (o.status === 'cancelled') return { alreadyCancelled: true, order: plainOrder({ id: snap.id, ...o }) };
 
-    const allowed = isAdmin ? ['pending', 'confirmed', 'processing', 'shipped'] : ['pending', 'confirmed'];
+    const allowed = isAdmin ? ['pending', 'confirmed', 'processing'] : ['pending', 'confirmed'];
     if (!allowed.includes(o.status))
-      throw new OrderError(400, isAdmin ? `A "${o.status}" order cannot be cancelled.` : 'This order can no longer be cancelled online. Please contact support.', 'NOT_CANCELLABLE');
+      throw new OrderError(400, isAdmin ? `A ${String(o.status).replace(/_/g, ' ')} order cannot be cancelled.` : 'This order can no longer be cancelled online. Please contact support.', 'NOT_CANCELLABLE');
 
     const need = new Map<string, number>();
     for (const i of (o.items || []) as any[]) {
@@ -425,6 +454,7 @@ export async function cancelOrder(args: { orderId: string; actor: { id: string; 
     for (const p of pSnaps) {
       if (!p.exists) continue; // product deleted since
       const q = need.get(p.id)!;
+      if (Number((p.data() as any)?.stock || 0) <= 0) backInStock.push(p.id);
       const revenueBack = (o.items as any[]).filter(i => i.productId === p.id && !i.bundleItems).reduce((a, i) => a + Number(i.total || 0), 0);
       tx.update(p.ref, {
         stock: FieldValue.increment(q), totalSold: FieldValue.increment(-q),
@@ -471,6 +501,8 @@ export async function cancelOrder(args: { orderId: string; actor: { id: string; 
     });
     return { alreadyCancelled: false, needsRefund: wasPaid, order: plainOrder({ id: snap.id, ...o, status: 'cancelled' }) };
   });
+  if (backInStock.length && !(result as any).alreadyCancelled) void catalogChanged(backInStock);   // it was sold out and is back: refresh its page
+  return result;
 }
 
 // ── Card payments ────────────────────────────────────────────
@@ -520,6 +552,7 @@ export async function restockItems(db: Firestore, items: any[]) {
   const snaps = await db.getAll(...[...back.keys()].map(id => db.collection('products').doc(id)));
   for (const s of snaps) if (s.exists) batch.update(s.ref, { stock: FieldValue.increment(back.get(s.id)!) });
   await batch.commit();
+  void catalogChanged([...back.keys()]);
 }
 
 

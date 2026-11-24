@@ -14,6 +14,6 @@ export async function denyUnlessSuper(session: any): Promise<NextResponse | null
 
 export function failJson(session: any, status: number, publicMessage: string, cause?: any, extra: Record<string, any> = {}) {
   const detail = cause ? String(cause?.message || cause).slice(0, 400) : '';
-  return NextResponse.json({ error: publicMessage, ...extra, ...(isAdminRole(session) && detail ? { adminDetail: detail } : {}) }, { status });
+  return NextResponse.json({ error: publicMessage, ...extra, ...(isAdminRole(session) && status >= 500 && detail && detail.trim() !== publicMessage.trim() ? { adminDetail: detail } : {}) }, { status });
 }
 export { errorText } from './error-text';

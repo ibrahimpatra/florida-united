@@ -109,6 +109,10 @@ const baseAr = {
     privacy: 'سياسة الخصوصية', terms: 'شروط الخدمة',
     about: 'من نحن', careers: 'وظائف', blog: 'المدونة',
   },
+  offers: {
+    title: 'عروض خاصة لك', code: 'استخدم الكود', pct: 'خصم {n}%', fixed: 'خصم {n} د.ك', freeShip: 'توصيل مجاني', bxgy: 'اشترِ {b} واحصل على {g} مجانًا', minOrder: 'الحد الأدنى للطلب {n} د.ك', until: 'حتى {date}', copied: 'تم نسخ الكود',
+  },
+  bnav: { home: 'الرئيسية', shop: 'المتجر', cart: 'السلة', saved: 'المفضلة', account: 'حسابي' },
   addr: {
     title: 'دفتر العناوين', subtitle: 'احفظ عناوين التوصيل في الكويت لإتمام الطلب بشكل أسرع.',
     addNew: 'إضافة عنوان جديد', edit: 'تعديل العنوان', new: 'عنوان جديد', label: 'التسمية',
@@ -124,10 +128,13 @@ const baseAr = {
     bundle: 'حزمة',
   },
   bundles: {
+    freeShipping: 'شحن مجاني',
+    returns: 'إرجاع سهل',
     title: 'الحزم والمجموعات', subtitle: 'وفّر أكثر عند شراء مجموعات متكاملة.', empty: 'لا توجد حزم متاحة حاليًا.',
     includes: 'تتضمن', addBundle: 'أضف الحزمة إلى السلة', youSave: 'توفّر', added: 'تمت إضافة الحزمة إلى السلة!', outOfStock: 'غير متوفر',
   },
   common: {
+    error: 'حدث خطأ ما. حاول مرة أخرى.',
     loading: 'جار التحميل...', save: 'حفظ', cancel: 'إلغاء',
     delete: 'حذف', edit: 'تعديل', view: 'عرض', confirm: 'تأكيد',
     back: 'رجوع', next: 'التالي', search: 'بحث', filter: 'تصفية',

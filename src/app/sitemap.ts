@@ -47,5 +47,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
   } catch {}
 
-  return [...staticPages, ...categoryPages, ...brandPages, ...productPages];
+  let bundlePages: MetadataRoute.Sitemap = [];
+  try {
+    const { getStorefrontBundles } = await import('@/lib/firestore-admin');
+    const { bundlePath } = await import('@/lib/bundle-path');
+    bundlePages = (await getStorefrontBundles()).flatMap((b: any) => both(bundlePath(b), { lastModified: new Date(b.updatedAt || b.createdAt || Date.now()), changeFrequency: 'weekly', priority: 0.6 }));
+  } catch {}
+
+  return [...staticPages, ...categoryPages, ...brandPages, ...productPages, ...bundlePages];
 }

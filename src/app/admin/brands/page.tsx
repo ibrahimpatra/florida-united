@@ -2,6 +2,7 @@
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
+import { Collapsible } from '@/components/admin/Collapsible';
 import { SeoFields, AiFillButton } from '@/components/admin/SeoFields';
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Upload } from 'lucide-react';
@@ -68,10 +69,15 @@ export default function AdminBrandsPage() {
 
       {(creating || editing) && (
         <div className="card p-6 mb-6 border-2 border-brand-200">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-bold text-gray-800 text-lg">{editing ? `Edit: ${editing.name}` : 'New Brand'}</h3>
-            <button onClick={close} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+          {/* Save and Cancel stay on top while you scroll the form */}
+          <div className="sticky top-0 z-10 -mx-6 -mt-6 mb-5 px-6 py-3 bg-white/95 backdrop-blur border-b border-gray-100 rounded-t-2xl flex items-center gap-2">
+            <h3 className="flex-1 min-w-0 font-bold text-gray-800 truncate">{editing ? `Edit: ${editing.name}` : 'New brand'}</h3>
+            <button type="button" onClick={close} className="btn-secondary py-2 px-4 text-sm">Cancel</button>
+            <button type="button" onClick={save} disabled={saving || !form.name.trim()} className="btn-primary py-2 px-5 text-sm disabled:opacity-50 flex items-center gap-2">
+              {saving ? 'Saving…' : <><Save className="w-4 h-4"/>{editing ? 'Save' : 'Create'}</>}
+            </button>
           </div>
+
           <div className="grid sm:grid-cols-2 gap-4">
             <div><label className="label">Name *</label>
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value, slug: editing ? f.slug : (f.slug || generateSlug(e.target.value)) }))} className="input-field" placeholder="e.g. Siemens" /></div>
@@ -83,6 +89,8 @@ export default function AdminBrandsPage() {
             <div><label className="label">Slug {editing && <span className="text-gray-400 font-normal text-xs">(fixed after creation so links keep working)</span>}</label>
               <input value={form.slug} disabled={!!editing} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} className="input-field font-mono text-sm disabled:bg-gray-50" placeholder="siemens" /></div>
             <div className="sm:col-span-2"><ImageUploadField label="Brand logo (shows on the homepage and the brand page)" value={form.image} onChange={v => setForm(f => ({ ...f, image: v }))} folder="brands" name={form.name} maxSide={600} /></div>
+            <div className="sm:col-span-2"><Collapsible title="Description, website and search engines" hint="Optional" defaultOpen={!!editing}>
+              <div className="grid sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2"><label className="label">Description</label>
               <textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="input-field resize-none" placeholder="A few factual lines about the brand" /></div>
             <div className="sm:col-span-2"><label className="label">Arabic Description <span dir="rtl" className="text-gray-400 font-normal">(الوصف بالعربية)</span></label>
@@ -96,12 +104,9 @@ export default function AdminBrandsPage() {
               <SeoFields value={form} onChange={p => setForm(f => ({ ...f, ...p }))} />
               <p className="text-xs text-gray-500">Leave Arabic or SEO empty and the background job fills them after you save (see Admin &gt; Jobs).</p>
             </div>
+              </div>
+            </Collapsible></div>
             <div className="sm:col-span-2 flex flex-wrap gap-6 pt-2 border-t border-gray-100"><Toggle label="Active" field="isActive" /><Toggle label="Show on homepage" field="showOnHome" /></div>
-          </div>
-          <div className="flex gap-3 mt-5 pt-4 border-t border-gray-100">
-            <button onClick={close} className="btn-secondary py-2.5 px-5 text-sm">Cancel</button>
-            <button onClick={save} disabled={saving || !form.name.trim()} className="btn-primary py-2.5 px-6 text-sm disabled:opacity-50 flex items-center gap-2">
-              {saving ? 'Saving...' : <><Save className="w-4 h-4" />{editing ? 'Save Changes' : 'Create Brand'}</>}</button>
           </div>
         </div>
       )}

@@ -71,7 +71,7 @@ export async function updateBrand(id: string, data: any): Promise<void> {
     for (let i = 0; i < ps.docs.length; i += 400) {
       const b = db.batch(); ps.docs.slice(i, i + 400).forEach(d => b.update(d.ref, { brand: clean.name })); await b.commit();
     }
-    const { invalidateProductCache } = await import('./firestore-admin'); invalidateProductCache();
+    const { invalidateProductCache } = await import('./firestore-admin'); invalidateProductCache(true);
   }
 }
 

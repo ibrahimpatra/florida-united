@@ -4,6 +4,7 @@ module.exports = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/lib/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
@@ -12,7 +13,7 @@ module.exports = {
         brand: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map(n => [n, `rgb(var(--brand-${n}) / <alpha-value>)`])),
         // Safety yellow by default. Always paired with dark text, so pick a light accent colour.
         accent: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map(n => [n, `rgb(var(--accent-${n}) / <alpha-value>)`])),
-        concrete: '#f1f3f4',
+        concrete: '#f6f7f9',
         success: '#16a34a',
         warning: '#d97706',
         danger: '#dc2626',
@@ -57,11 +58,12 @@ module.exports = {
           '50%': { transform: 'translateY(-8px)' },
         },
       },
-      borderRadius: { md: '0.25rem', lg: '0.3125rem', xl: '0.375rem', '2xl': '0.5rem', '3xl': '0.75rem' },
+      borderRadius: { md: '0.5rem', lg: '0.75rem', xl: '1rem', '2xl': '1.25rem', '3xl': '1.75rem' },
       boxShadow: {
-        'soft': '0 1px 3px rgba(15, 35, 48, 0.08)',
-        'card': '0 1px 0 rgba(15, 35, 48, 0.05)',
-        'hover': '0 3px 0 0 #f5b800',
+        'soft': '0 2px 10px rgba(15, 35, 48, 0.06)',
+        'card': '0 1px 2px rgba(15, 35, 48, 0.04), 0 6px 20px rgba(15, 35, 48, 0.05)',
+        'hover': '0 12px 32px rgba(15, 35, 48, 0.12)',
+        'float': '0 10px 30px rgba(15, 35, 48, 0.22)',
         'inner-sm': 'inset 0 1px 2px 0 rgba(0, 0, 0, 0.05)',
       },
       backgroundImage: {

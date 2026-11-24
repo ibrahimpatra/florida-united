@@ -1,3 +1,4 @@
+import { reportIssue } from './issues';
 /**
  * Background jobs, shown in Admin > Jobs (super admin).
  * Today there is one job type, "seo": when a product is saved with missing description / Arabic text / meta title / meta description / tags,
@@ -56,10 +57,10 @@ export async function enqueueSeoIfMissing(productId: string): Promise<void> {
     }
     await ref.set({ type: 'seo', status: 'queued', productId, productName: String(p.name || ''), attempts: cur.exists ? (cur.data() as any).attempts || 0 : 0, createdAt: cur.exists ? (cur.data() as any).createdAt : iso, updatedAt: iso });
     if (running < 2) {
-      const work = runJob(id).catch(() => {});
+      const work = runJob(id).catch(e => reportIssue(`job ${id}`, e));
       try { (await import('@vercel/functions')).waitUntil(work); } catch { /* not on Vercel: the promise just keeps running */ }
     }
-  } catch { /* a background job must never break a save */ }
+  } catch (e) { reportIssue('job enqueue', e); /* a background job must never break a save */ }
 }
 
 /** Same as enqueueSeoIfMissing for categories, banners, flash deals, bundles, promo tiles and popups. Never throws. */
@@ -74,10 +75,10 @@ export async function enqueueFill(collection: string, entityId: string): Promise
     if (cur.exists) { const c: any = cur.data(); if (c.status === 'queued' || c.status === 'running') return; if (c.status === 'failed' && (c.attempts || 0) >= MAX_ATTEMPTS) return; }
     await ref.set({ type: 'fill', collection, status: 'queued', productId: entityId, productName: String(doc[spec.nameField] || ''), attempts: cur.exists ? (cur.data() as any).attempts || 0 : 0, createdAt: cur.exists ? (cur.data() as any).createdAt : iso, updatedAt: iso });
     if (running < 2) {
-      const work = runJob(id).catch(() => {});
+      const work = runJob(id).catch(e => reportIssue(`job ${id}`, e));
       try { (await import('@vercel/functions')).waitUntil(work); } catch { /* not on Vercel */ }
     }
-  } catch { /* a background job must never break a save */ }
+  } catch (e) { reportIssue('job enqueue', e); /* a background job must never break a save */ }
 }
 
 /** Runs one job. Safe to call twice: the status check inside a transaction lets only one runner start it. */
@@ -103,7 +104,7 @@ export async function runJob(id: string): Promise<Job | null> {
       const { patch, provider } = await fillEntity(spec, es.data(), keys, { job: 'bulk' });
       if (!Object.keys(patch).length) throw new Error('The AI returned nothing usable.');
       await eRef.update({ ...patch, autoFilledAt: new Date().toISOString() });
-      try { (await import('./firestore-admin')).invalidateProductCache?.(); } catch { /* refreshes on its own */ }
+      try { (await import('./firestore-admin')).invalidateProductCache?.(true); } catch { /* refreshes on its own */ }
       await finish({ status: 'done', provider, error: '', result: { filled: Object.keys(patch) } });
       return null;
     }
@@ -119,10 +120,12 @@ export async function runJob(id: string): Promise<Job | null> {
     for (const k of missing) { if (k === 'nameAr' || k === 'shortDescriptionAr') { if (fields[k]) patch[k] = fields[k]; } else if (k === 'tags') { if (tags.length) patch.tags = tags; } else if (fields[k]) patch[k] = fields[k]; }
     if (!Object.keys(patch).length) throw new Error('The AI returned nothing usable.');
     await db.collection('products').doc(claimed.productId).update({ ...patch, seoAutoFilledAt: new Date().toISOString() });
-    try { (await import('./firestore-admin')).invalidateProductCache?.(); } catch { /* cache refreshes on its own */ }
+    try { (await import('./firestore-admin')).invalidateProductCache?.(true); } catch { /* cache refreshes on its own */ }
     await finish({ status: 'done', provider, error: '', result: { filled: Object.keys(patch) } });
   } catch (e: any) {
+    if (e?.name === 'AiCapError') { await finish({ status: 'queued', attempts: claimed.attempts || 0, error: String(e.message).slice(0, 300) }).catch(() => {}); return null; }
     const attempts = (claimed.attempts || 0) + 1;
+    if (attempts >= MAX_ATTEMPTS) reportIssue(`job ${id} failed`, explainAi(e), { method: 'JOB' });
     await finish({ status: attempts >= MAX_ATTEMPTS ? 'failed' : 'queued', error: explainAi(e) }).catch(() => {});
   } finally { running--; }
   return null;
@@ -136,7 +139,12 @@ export async function listJobs(limit = 100): Promise<Job[]> {
 /** Runs queued jobs one after another until the time budget is used. Returns how many were processed. */
 export async function runQueued(budgetMs = 40_000): Promise<{ ran: number; left: number }> {
   const t0 = Date.now(); let ran = 0;
-  const all = (await listJobs(300)).filter(j => j.status === 'queued' || (j.status === 'running' && Date.now() - new Date(j.updatedAt).getTime() > STALE_RUNNING_MS));
+  // read only the waiting jobs (and stuck ones), not the whole job history: this runs every few minutes, so reads matter
+  const col = getAdminDb().collection(COL);
+  const rows = (s: any) => s.docs.map((d: any) => ({ id: d.id, ...d.data() } as Job));
+  const [q, r] = await Promise.all([col.where('status', '==', 'queued').limit(300).get(), col.where('status', '==', 'running').limit(50).get()]);
+  const all = [...rows(q), ...rows(r).filter((j: Job) => Date.now() - new Date(j.updatedAt).getTime() > STALE_RUNNING_MS)];
+  if (all.length) { try { await (await import('./ai-usage')).assertBulkAllowed(); } catch (e: any) { if (e?.name === 'AiCapError') return { ran: 0, left: all.length }; } }
   for (const j of all) {
     if (Date.now() - t0 > budgetMs - 12_000) break;
     await runJob(j.id); ran++;

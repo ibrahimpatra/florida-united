@@ -1,6 +1,7 @@
 // Generated dictionary part p2 (English).
 export const p2En = {
   c2_chk: {
+    placing: "Placing your order…",
     failGeneric: "We could not place your order right now. Nothing was charged. Please try again.",
     failShort: "Order failed.",
     cardFail: "We could not start the card payment. Your order was not placed. Please try again or choose cash on delivery.",
