@@ -264,7 +264,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
       )}
 
       <button type="submit" disabled={busy || done || !quoteReady}
-        className="sticky bottom-3 z-30 shadow-float w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-full flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-base">
+        className="md:sticky md:bottom-3 md:z-30 shadow-float w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-full flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-base">
         {busy ? <><Loader2 className="w-5 h-5 animate-spin" />{t('checkout.processing')}</>
           : pay === 'card' ? <><CreditCard className="w-5 h-5" />{t('c2_pay.payCard')} — {quoteReady ? formatPrice(total) : '...'}</>
           : <><Banknote className="w-5 h-5" />{t('checkout.placeCod')} — {quoteReady ? formatPrice(total + codFee) : '...'}</>}

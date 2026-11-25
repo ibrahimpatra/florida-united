@@ -110,7 +110,7 @@ export default function AddressBookPage() {
           </div>
         </div>
 
-        <div className="container-custom py-8 max-w-2xl">
+        <div className="container-custom py-5 max-w-2xl">
           {/* Add button */}
           {!creating && !editing && (
             <button onClick={startCreate}

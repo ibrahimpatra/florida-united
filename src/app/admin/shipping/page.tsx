@@ -190,8 +190,8 @@ export default function AdminShippingPage() {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display flex items-center gap-3">
             <Truck className="w-7 h-7 text-brand-600"/> Shipping Management
@@ -213,7 +213,7 @@ export default function AdminShippingPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
+      <div className="flex gap-1 border-b border-gray-200 mb-4">
         {([
           ['zones', 'Shipping Zones', Truck],
           ['config', 'Store Config', MapPin],
@@ -233,7 +233,7 @@ export default function AdminShippingPage() {
             <div className="card p-16 text-center">
               <Truck className="w-12 h-12 text-gray-300 mx-auto mb-4"/>
               <p className="text-gray-500 font-semibold mb-1">No shipping zones configured</p>
-              <p className="text-gray-400 text-sm mb-6">Create zones for each Kuwait governorate with delivery rates</p>
+              <p className="text-gray-400 text-sm mb-4">Create zones for each Kuwait governorate with delivery rates</p>
               <button onClick={() => setEditingZone(emptyZone())} className="btn-primary py-2 px-6 text-sm">
                 <Plus className="w-4 h-4"/> Create First Zone
               </button>
@@ -299,13 +299,13 @@ export default function AdminShippingPage() {
           {/* Zone Edit Modal */}
           {editingZone && (
             <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-6 px-4 overflow-y-auto">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mb-6">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mb-4">
                 <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                   <h3 className="font-bold text-gray-900 text-lg">{editingZone.id ? 'Edit' : 'New'} Shipping Zone</h3>
                   <button onClick={() => setEditingZone(null)} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5"/></button>
                 </div>
 
-                <div className="p-6 space-y-5">
+                <div className="p-4 space-y-5">
                   {/* Basic info */}
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>

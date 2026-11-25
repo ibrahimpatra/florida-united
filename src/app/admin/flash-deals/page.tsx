@@ -92,8 +92,8 @@ export default function AdminFlashDealsPage() {
   }, [deals]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-5xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Zap className="w-6 h-6 text-brand-600" />Deals and promotions</h1>
           <p className="text-sm text-gray-500 mt-1">A deal lowers prices on the shop and at checkout, and puts a banner at the top of the home page while it runs.</p>

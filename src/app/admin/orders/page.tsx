@@ -82,7 +82,7 @@ export default function AdminOrdersPage() {
   const totalPages = Math.ceil(total / 20);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-3 sm:p-4 lg:p-5">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-5 sm:mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Orders</h1>
@@ -94,7 +94,7 @@ export default function AdminOrdersPage() {
       </div>
 
       {/* Filters */}
-      <div className="card p-4 mb-6 flex flex-wrap gap-3">
+      <div className="card p-4 mb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search orders, customers..."

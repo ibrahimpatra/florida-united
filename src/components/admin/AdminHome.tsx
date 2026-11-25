@@ -42,18 +42,18 @@ export function AdminHome({ isSuper }: { isSuper: boolean }) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-5 sm:py-8">
-      <div className="relative max-w-md mx-auto mb-6">
+      <div className="relative max-w-md mx-auto mb-4">
         <Search className="w-4 h-4 text-gray-400 absolute top-1/2 -translate-y-1/2 start-4" />
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search pages…" className="input-field !rounded-full ps-10 py-3 text-sm w-full" aria-label="Search admin pages" />
       </div>
       {!q && recents.length > 0 && (
-        <section className="mb-6">
+        <section className="mb-4">
           <button type="button" onClick={toggleRecent} aria-expanded={showRecent} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-800 mb-1 px-1"><Clock className="w-3.5 h-3.5" />Recent<ChevronDown className={`w-3.5 h-3.5 transition-transform ${showRecent ? 'rotate-180' : ''}`} /></button>
           {showRecent && <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1">{recents.map(i => <Tile key={i.href} item={i} color={i.color} />)}</div>}
         </section>
       )}
       {groups.map(g => (
-        <section key={g.id} className="mb-6">
+        <section key={g.id} className="mb-4">
           <h2 className="text-sm font-bold text-gray-900 mb-2 px-2">{g.label}</h2>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1 rounded-[2rem] bg-white shadow-card border border-gray-100 p-2">
             {g.items.map(i => <Tile key={i.href} item={i} color={g.color} />)}

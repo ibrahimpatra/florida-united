@@ -20,12 +20,12 @@ export function NewsletterSection() {
     setLoading(false);
   };
   return (
-    <section className="py-10 bg-gradient-to-br from-brand-700 via-brand-600 to-brand-800 relative overflow-hidden">
+    <section className="py-6 bg-gradient-to-br from-brand-700 via-brand-600 to-brand-800 relative overflow-hidden">
       <div className="relative container-custom text-center">
         <div className="max-w-xl mx-auto">
           <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-5"><Mail className="w-7 h-7 text-white" /></div>
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 font-display">{t('c1_home.nlTitle')}</h2>
-          <p className="text-brand-200 mb-8">{t('c1_home.nlSub')}</p>
+          <p className="text-brand-200 mb-5">{t('c1_home.nlSub')}</p>
           <form onSubmit={submit} className="flex gap-2 max-w-md mx-auto">
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={t('c1_home.nlPlaceholder')} required dir="ltr"
               className="flex-1 min-w-0 px-4 py-3 rounded-xl bg-white/15 backdrop-blur-sm border border-white/30 text-white placeholder-blue-200 outline-none focus:bg-white/25 text-sm" />

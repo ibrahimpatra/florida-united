@@ -53,7 +53,7 @@ export function CategoryGrid() {
 
   if (categories.length === 0) {
     return (
-      <p className="text-sm text-gray-400 col-span-full text-center py-8">
+      <p className="text-sm text-gray-400 col-span-full text-center py-5">
         {t('c1_home.noCats')}
       </p>
     );

@@ -39,7 +39,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
       <div className="absolute top-4 end-4"><LanguageToggle /></div>
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+        <div className="text-center mb-5">
           <Link href="/" className="inline-flex items-center gap-3 mb-6">
             <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-xl font-display"><BrandMark /></span>

@@ -25,7 +25,7 @@ export function AccountClient({ user }: { user: any }) {
   return (
     <div className="bg-gray-50 min-h-screen">
       {/* Hero */}
-      <div className="bg-gradient-to-r from-brand-700 to-brand-600 text-white py-10">
+      <div className="bg-gradient-to-r from-brand-700 to-brand-600 text-white py-6">
         <div className="container-custom flex items-center gap-5">
           <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-2xl font-black">{user.name?.[0]||'U'}</div>
           <div>
@@ -35,11 +35,11 @@ export function AccountClient({ user }: { user: any }) {
         </div>
       </div>
 
-      <div className="container-custom py-8">
+      <div className="container-custom py-5">
         <LoyaltyCard />
         <OffersCard />
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
           {[
             { icon: ShoppingBag, label:t('c2_acct.totalOrders'), value: orders.length, color:'text-brand-600 bg-brand-50' },
             { icon: Package, label:t('c2_acct.delivered'), value: orders.filter(o=>o.status==='delivered').length, color:'text-green-600 bg-green-50' },

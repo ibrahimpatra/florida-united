@@ -17,7 +17,9 @@ async function __GET(req: NextRequest) {
       isAdmin = session?.user?.role === 'admin';
     }
     const stock = searchParams.get('stock');
-    const filters: ProductFilters & { admin?: boolean; fresh?: boolean } = {
+    const st = searchParams.get('status');
+    const filters: ProductFilters & { admin?: boolean; fresh?: boolean; status?: 'active' | 'inactive' | 'archived' } = {
+      status:       st === 'active' || st === 'inactive' || st === 'archived' ? st : undefined,
       categoryId:   searchParams.get('categoryId')  || undefined,
       categorySlug: searchParams.get('categorySlug')|| undefined,
       minPrice:     searchParams.get('minPrice') ? Number(searchParams.get('minPrice')) : undefined,
@@ -51,6 +53,7 @@ async function __GET(req: NextRequest) {
       const found = await searchBundles(filters.search, 6).catch(() => []);
       result = { ...result, bundles: found.map((b: any) => ({ id: b.id, name: b.name, nameAr: b.nameAr, image: b.image || b.items?.[0]?.image || '', price: Number(b.bundlePrice), comparePrice: b.comparePrice || undefined, itemCount: (b.items || []).length })) };
     }
+    if (isAdmin && searchParams.get('idsOnly') === '1') result = { ids: result.items.map((p: any) => p.id), total: result.total };   // "select everything that matches" in the admin list
     return NextResponse.json(result, {
       headers: { 'Cache-Control': isAdmin ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=60' },
     });

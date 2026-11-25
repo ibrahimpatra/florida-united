@@ -41,7 +41,7 @@ export default function WishlistPage() {
     <><Header/>
     <main className="bg-gray-50 min-h-screen">
       <div className="page-hero"><div className="container-custom"><h1 className="text-2xl font-bold text-gray-900 font-display flex items-center gap-3"><Heart className="w-7 h-7 text-red-500 fill-red-500"/>{t('c2_acct.wlTitle')}</h1><p className="text-gray-500 mt-1">{t('c2_acct.wlCount', { n: wishlistIds.length })}</p></div></div>
-      <div className="container-custom py-8">
+      <div className="container-custom py-5">
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({length:4}).map((_,i)=><div key={i} className="card overflow-hidden"><div className="skeleton h-48 w-full"/><div className="p-4 space-y-2"><div className="skeleton h-4 w-full rounded"/><div className="skeleton h-4 w-3/4 rounded"/></div></div>)}</div>
         ) : products.length === 0 ? (

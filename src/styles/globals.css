@@ -160,6 +160,9 @@
            transition-[box-shadow,transform,border-color] duration-200;
   }
 
+  /* admin screens: denser cards */
+  .admin-dense .card { @apply rounded-2xl; }
+
   .card-hover {
     @apply card hover:shadow-hover hover:-translate-y-0.5;
   }
@@ -204,12 +207,12 @@
   }
 
   .section-subtitle {
-    @apply text-gray-500 mb-8;
+    @apply text-gray-500 mb-5;
   }
 
   /* Container */
   .container-custom {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+    @apply max-w-7xl mx-auto px-4 sm:px-5 lg:px-6;
   }
 
   /* Skeleton Loading */

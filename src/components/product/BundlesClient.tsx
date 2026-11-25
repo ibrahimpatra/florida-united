@@ -34,7 +34,7 @@ export function BundlesClient() {
   };
 
   return (
-    <div className="container-custom py-8">
+    <div className="container-custom py-5">
       <h1 className="text-2xl md:text-3xl font-bold font-display text-gray-900">{t('bundles.title')}</h1>
       <p className="text-gray-500 mt-1 mb-6">{t('bundles.subtitle')}</p>
       {state === 'loading' && <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-600" /></div>}

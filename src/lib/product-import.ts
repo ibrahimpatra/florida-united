@@ -180,5 +180,5 @@ export const TEMPLATE_ROWS: string[][] = [
   [...IMPORT_COLUMNS],
   ['LED-FL-50W', 'LED Flood Light 50W', 'كشاف ليد خارجي 50 واط', '8.500', '12.000', '5.000', '100', '10', 'Lighting', 'Outdoor', 'Philips', 'pcs', 'Box of 6|6|45.000',
     'High-efficiency 50W LED flood light for outdoor use', 'كشاف ليد عالي الكفاءة للاستخدام الخارجي', '50W LED flood light', 'كشاف ليد 50 واط',
-    'https://example.com/image.jpg', 'led,flood,outdoor', '0.8', '', 'false', 'false', 'true', 'false', 'true', 'true', '14'],
+    'https://example.com/front.jpg;https://example.com/side.jpg;https://example.com/back.jpg', 'led,flood,outdoor', '0.8', '', 'false', 'false', 'true', 'false', 'true', 'true', '14'],
 ];

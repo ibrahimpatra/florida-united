@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 
 type PlanRow = { line: number; action: 'create' | 'update' | 'error'; sku: string; name: string; message?: string; changes?: string[] };
 type Plan = { rows: PlanRow[]; newCategories: { name: string; parentName?: string }[]; newUoms: { name: string }[]; unknownColumns: string[]; counts: { create: number; update: number; error: number } };
-type Result = { created: number; updated: number; createdCategories: number; createdUnits: number; skipped: number; errors: string[]; moreErrors?: number };
+type Result = { created: number; updated: number; createdCategories: number; createdUnits: number; skipped: number; errors: string[]; moreErrors?: number; imageJobs?: number };
 
 const BADGE: Record<string, string> = { create: 'bg-green-100 text-green-800', update: 'bg-blue-100 text-blue-800', error: 'bg-red-100 text-red-800' };
 
@@ -13,6 +13,22 @@ export default function AdminImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [copy, setCopy] = useState<{ running: boolean; left: number | null; note: string }>({ running: false, left: null, note: '' });
+  // Pictures given as links to other sites are copied onto our own storage by background jobs; this button just runs them now.
+  const copyNow = async () => {
+    setCopy({ running: true, left: result?.imageJobs ?? null, note: '' });
+    try {
+      for (let i = 0; i < 40; i++) {
+        const r = await fetch('/api/admin/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'run' }) });
+        if (r.status === 403 || r.status === 401) { setCopy({ running: false, left: null, note: 'Only the main admin can run this now. It also finishes by itself overnight.' }); return; }
+        const d = await r.json().catch(() => ({}));
+        setCopy({ running: true, left: d.left ?? 0, note: '' });
+        if (!d.ran || !d.left) break;
+      }
+      setCopy(c => ({ running: false, left: c.left, note: c.left ? 'Some are still waiting. Press the button again or open Admin > Jobs.' : 'All pictures are copied.' }));
+    } catch { setCopy({ running: false, left: null, note: 'Could not run now. It will finish by itself overnight.' }); }
+  };
+
   const [busy, setBusy] = useState<'' | 'preview' | 'import' | 'assist'>('');
   const [kind, setKind] = useState<'products' | 'categories' | 'brands'>('products');
   const [assist, setAssist] = useState(true);
@@ -60,8 +76,8 @@ export default function AdminImportPage() {
   const ok = plan ? plan.counts.create + plan.counts.update : 0;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-6xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Import from Excel</h1>
           <p className="text-gray-500 text-sm">{kind === 'products' ? 'Add and update every product, price and stock level from one spreadsheet.' : kind === 'brands' ? 'Add and update brands (logo link, Arabic name, SEO text) from one spreadsheet.' : 'Add and update categories and sub-categories from one spreadsheet.'}</p>
@@ -126,6 +142,15 @@ export default function AdminImportPage() {
       {result && (
         <div className="card p-6 space-y-3">
           <p className="flex items-center gap-2 font-semibold text-green-700"><CheckCircle className="w-5 h-5" />Done: {result.created} added, {result.updated} updated{result.createdCategories ? `, ${result.createdCategories} categories created` : ''}{result.createdUnits ? `, ${result.createdUnits} units created` : ''}{(result as any).createdBrands ? `, ${(result as any).createdBrands} new brands added to Brands` : ''}.</p>
+          {!!result.imageJobs && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+              <p><b>{result.imageJobs}</b> product{result.imageJobs === 1 ? ' has' : 's have'} pictures linked from other websites. They show for now, and are being copied onto your own storage in the background so they cannot disappear.</p>
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                <button onClick={copyNow} disabled={copy.running} className="btn-secondary py-1.5 px-3 text-sm">{copy.running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}Copy pictures now</button>
+                {copy.left !== null && copy.running && <span className="text-xs">{copy.left} left…</span>}
+                {copy.note && <span className="text-xs">{copy.note}</span>}
+              </div>
+            </div>)}
           {result.skipped > 0 && (
             <div><p className="flex items-center gap-2 text-sm font-semibold text-red-700"><XCircle className="w-4 h-4" />{result.skipped} rows skipped</p>
               <ul className="text-xs text-gray-600 list-disc ps-5 mt-1">{result.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>

@@ -9,6 +9,9 @@ import { ensureBrands } from '@/lib/brands';
 import { parseUpload } from '@/lib/import-file';
 import { planImport, slugify, type ImportCtx } from '@/lib/product-import';
 
+import { isExternalImage } from '@/lib/image-ingest';
+const hasExternal = (v: unknown) => Array.isArray(v) && v.some(isExternalImage);
+
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 const BATCH_SIZE = 400;
@@ -82,22 +85,23 @@ async function __POST(req: NextRequest) {
     ctx = { ...(await loadSmall(db)), products: ctx.products };
     plan = planImport(rows, { ...ctx, createMissing: false });
     let createdN = 0, updatedN = 0, i = 0;
-    const touched: string[] = [];
+    const touched: string[] = []; const withLinks: string[] = [];   // products whose pictures are links to other sites
     const work = plan.rows.filter(r => r.action !== 'error' && r.data && Object.keys(r.data).length);
     while (i < work.length) {
       const batch = db.batch();
       for (const r of work.slice(i, i + BATCH_SIZE)) {
         const data: Record<string, any> = Object.fromEntries(Object.entries(r.data!).filter(([k, v]) => v !== undefined && !k.startsWith('__')));
-        if (r.action === 'create') { const nref = db.collection('products').doc(); touched.push(nref.id); batch.set(nref, { ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }); createdN++; }
-        else { touched.push(r.id!); delete data.sku; delete data.slug; batch.update(db.collection('products').doc(r.id!), { ...data, updatedAt: FieldValue.serverTimestamp() }); updatedN++; }
+        if (r.action === 'create') { const nref = db.collection('products').doc(); touched.push(nref.id); if (hasExternal(data.images)) withLinks.push(nref.id); batch.set(nref, { ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }); createdN++; }
+        else { touched.push(r.id!); if (hasExternal(data.images)) withLinks.push(r.id!); delete data.sku; delete data.slug; batch.update(db.collection('products').doc(r.id!), { ...data, updatedAt: FieldValue.serverTimestamp() }); updatedN++; }
       }
       await batch.commit();
       i += BATCH_SIZE;
     }
     invalidateProductCache(false, { ids: touched, cats: created.categories > 0 });   // others re-read just these products
+    const imageJobs = withLinks.length ? await (await import('@/lib/jobs')).enqueueImageCopies(withLinks).catch(() => 0) : 0;   // copied onto our storage in the background (Admin > Jobs)
     const newBrands = await ensureBrands(work.map(r => String((r.data as any)?.brand || ''))).catch(() => 0);
     const errors = plan.rows.filter(r => r.action === 'error');
-    return NextResponse.json({ success: true, created: createdN, updated: updatedN, createdCategories: created.categories, createdUnits: created.uoms, createdBrands: newBrands,
+    return NextResponse.json({ success: true, created: createdN, updated: updatedN, createdCategories: created.categories, createdUnits: created.uoms, createdBrands: newBrands, imageJobs,
       skipped: errors.length, errors: errors.slice(0, 100).map(e => `Row ${e.line}: ${e.message}`), moreErrors: Math.max(0, errors.length - 100) });
   } catch (err: any) {
     console.error('Bulk import error:', err);

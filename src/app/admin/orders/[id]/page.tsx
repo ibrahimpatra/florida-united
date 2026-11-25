@@ -67,7 +67,7 @@ export default function AdminOrderDetailPage() {
   const sc = statusColor[order.status] || 'gray';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-full overflow-x-hidden">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-full overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 mb-5 sm:mb-8">
         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
@@ -90,7 +90,7 @@ export default function AdminOrderDetailPage() {
 
       <div className="grid lg:grid-cols-3 gap-4 sm:gap-6 [&>*]:min-w-0">
         {/* Left - Order details */}
-        <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-4 min-w-0">
           {/* Items */}
           <div className="card overflow-hidden">
             <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-2">

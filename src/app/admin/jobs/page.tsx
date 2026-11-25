@@ -41,8 +41,8 @@ export default function AdminJobsPage() {
   const counts = jobs.reduce((a: any, j) => { a[j.status] = (a[j.status] || 0) + 1; return a; }, {});
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Background jobs</h1>
           <p className="text-gray-500 text-sm">When a product is saved without description, Arabic text, meta title, meta description or tags, the AI fills only the empty ones here.</p>
@@ -60,7 +60,7 @@ export default function AdminJobsPage() {
         <table className="w-full text-sm">
           <thead><tr className="text-left text-gray-500 text-xs"><th className="p-3">Product</th><th className="p-3">Status</th><th className="p-3">Result</th><th className="p-3">Updated</th><th className="p-3" /></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={5} className="p-6 text-center text-gray-400">Loading...</td></tr>
+            {loading ? <tr><td colSpan={5} className="p-4 text-center text-gray-400">Loading...</td></tr>
               : !jobs.length ? <tr><td colSpan={5} className="p-8 text-center text-gray-400">No jobs yet. They appear when you save a product with empty SEO fields.</td></tr>
               : jobs.map(j => (
                 <tr key={j.id} className="border-t border-gray-100 align-top">

@@ -68,8 +68,8 @@ export default function AdminPopupsPage() {
   const togglePage = (k: string) => f('pages', form.pages.includes(k) ? form.pages.filter((x: string) => x !== k) : [...form.pages, k]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-5xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Popups</h1>
           <p className="text-gray-500 text-sm">Offers and messages that appear on the storefront. Choose when, to whom and how often.</p>
@@ -78,7 +78,7 @@ export default function AdminPopupsPage() {
       </div>
 
       {form && (
-        <div className="card p-4 sm:p-6 mb-6">
+        <div className="card p-4 sm:p-6 mb-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-gray-800">{form.id ? 'Edit popup' : 'New popup'}</h3>
             <button onClick={() => setForm(null)} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
@@ -89,7 +89,7 @@ export default function AdminPopupsPage() {
               {TEMPLATES.map(t => <button key={t.label} type="button" onClick={() => setForm({ ...EMPTY, ...t.data })} className="px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 bg-white text-gray-700">{t.label}</button>)}
             </div>
           )}
-          <div className="grid lg:grid-cols-[1fr_320px] gap-6">
+          <div className="grid lg:grid-cols-[1fr_320px] gap-4">
             <div className="space-y-4">
               <TranslateButton context="a popup offer in a hardware store" fields={[
                 { en: form.title, ar: form.titleAr, set: v => f('titleAr', v) }, { en: form.body, ar: form.bodyAr, set: v => f('bodyAr', v) }, { en: form.ctaText, ar: form.ctaTextAr, set: v => f('ctaTextAr', v) },

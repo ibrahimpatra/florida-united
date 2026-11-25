@@ -23,8 +23,8 @@ export default function AdminIssuesPage() {
     load();
   };
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-5xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Issues</h1>
           <p className="text-gray-500 text-sm">Server problems from anywhere in the app, including login and register failures that nobody could see. The same problem repeated shows once with a count.</p>
