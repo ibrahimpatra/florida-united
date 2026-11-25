@@ -84,6 +84,7 @@ test('deal limits: max units per order at the offer price; the rest is charged n
 
 import { bundleSlug, bundleIdFromSlug, bundlePath } from '../src/lib/bundle-path';
 import { getStorefrontBundle } from '../src/lib/firestore-admin';
+import { dropMemo } from '../src/lib/memo';
 import { mergeRecent } from '../src/lib/recent';
 import { summariseDay, estimateUsd } from '../src/lib/ai-cost';
 test('bundle page address finds the bundle by id even after a rename; stock comes from the parts and is capped', async () => {
@@ -92,11 +93,14 @@ test('bundle page address finds the bundle by id even after a rename; stock come
   db.seed('products', 'p1', { name: 'Drill', slug: 'drill', stock: 100, isActive: true, price: 30, images: ['/media/a.webp'] });
   db.seed('products', 'p2', { name: 'Bit', slug: 'bit', stock: 9, isActive: true, price: 2 });
   db.seed('bundles', 'b1', { name: 'Kit', bundlePrice: 28, isActive: true, items: [{ productId: 'p1', quantity: 1, price: 30, productName: 'Drill' }, { productId: 'p2', quantity: 3, price: 2, productName: 'Bit' }] });
+  invalidateProductCache(true); dropMemo('bundles');
   const b: any = await getStorefrontBundle('b1');
   assert.equal(b.available, 3); assert.equal(b.items[0].slug, 'drill'); assert.equal(b.items[0].image, '/media/a.webp');
   db.seed('products', 'p2', { name: 'Bit', slug: 'bit', stock: 0, isActive: true, price: 2 });
+  invalidateProductCache(true);
   assert.equal(((await getStorefrontBundle('b1')) as any).available, 0);
   db.seed('bundles', 'b2', { name: 'Off', bundlePrice: 1, isActive: false, items: [] });
+  dropMemo('bundles');
   assert.equal(await getStorefrontBundle('b2'), null); assert.equal(await getStorefrontBundle('nope'), null);
 });
 test('recently viewed merge: one entry per product, newest time wins, capped at 20, bundles ignored', () => {

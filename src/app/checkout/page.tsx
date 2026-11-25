@@ -1,4 +1,5 @@
 'use client';
+import { ChevronDown } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -28,6 +29,7 @@ export default function CheckoutPage() {
   const soldOut = allItems.filter(i => i.unavailable);
   const { t, L } = useLanguage();
   const [governorate, setGovernorate] = useState('');
+  const [sumOpen, setSumOpen] = useState(false);   // phones: the order summary starts folded so the form is the first thing you see
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -128,9 +130,14 @@ export default function CheckoutPage() {
           />
         </div>
 
-        <div className="lg:sticky lg:top-24 space-y-4 h-fit order-first lg:order-none">
+        <div className="lg:sticky lg:top-28 space-y-4 h-fit order-first lg:order-none">
           <div className="bg-gray-50 rounded-2xl p-5">
-            <h3 className="font-bold text-gray-900 mb-4">{t('checkout.orderSummary')} ({items.length})</h3>
+            <button type="button" onClick={() => setSumOpen(o => !o)} aria-expanded={sumOpen} className="lg:hidden w-full flex items-center justify-between gap-3 text-start">
+              <span className="font-bold text-gray-900">{t('checkout.orderSummary')} ({items.length})</span>
+              <span className="flex items-center gap-2 font-extrabold text-brand-700">{chosen ? formatPrice(total) : ''}<ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sumOpen ? 'rotate-180' : ''}`} /></span>
+            </button>
+            <h3 className="hidden lg:block font-bold text-gray-900 mb-4">{t('checkout.orderSummary')} ({items.length})</h3>
+            <div className={`${sumOpen ? 'block mt-4' : 'hidden'} lg:block`}>
             {soldOut.length > 0 && (
               <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
                 {soldOut.map(i => (
@@ -182,6 +189,7 @@ export default function CheckoutPage() {
               </div>
               {dealSaving + discount > 0 && <p className="text-xs font-semibold text-green-700 bg-green-50 rounded-lg px-3 py-2 text-center">{t('c3_ck.saved', { amount: formatPrice(dealSaving + discount) })}</p>}
               <p className="text-xs text-gray-400 text-center">{t('checkout.noVat')}</p>
+            </div>
             </div>
           </div>
         </div>

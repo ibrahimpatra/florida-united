@@ -10,6 +10,9 @@ import { bestDealFor } from '@/lib/pricing';
 import { formatPrice, calculateDiscount } from '@/lib/utils';
 import { productLink, shareLink } from '@/lib/site-url';
 import { toast } from 'react-hot-toast';
+import { toastAdded } from '@/lib/added-toast';
+import { useCartStore as useCartStoreRaw } from '@/store/cartStore';
+import { CardSlides } from './CardSlides';
 import { QtyStepper } from '@/components/cart/QtyStepper';
 import type { Product } from '@/types';
 
@@ -36,6 +39,7 @@ export function ProductCard({ product, showQuickView = true }: Props) {
     e.preventDefault();
     if (isOutOfStock) return;
     setAdding(true);
+    const before = useCartStoreRaw.getState().items.find(i => i.productId === product.id && !i.variantId)?.quantity || 0;
     addItem({
       id: product.id,
       productId: product.id,
@@ -51,7 +55,7 @@ export function ProductCard({ product, showQuickView = true }: Props) {
       isReturnable: product.isReturnable,
       freeShipping: product.freeShipping,
     });
-    toast.success(t('c1_card.added'));
+    toastAdded(t('c1_card.added'), { productId: product.id, before }, { undo: t('smart.undo'), undone: t('smart.undone'), cart: t('smart.viewCart') });
     setTimeout(() => setAdding(false), 600);
   }
 
@@ -73,19 +77,9 @@ export function ProductCard({ product, showQuickView = true }: Props) {
       <Link href={`/shop/products/${product.slug}`} className="block">
         {/* Image */}
         <div className="p-2 pb-0"><div className="relative overflow-hidden bg-gray-100/80 rounded-[1.25rem] aspect-square product-image-zoom">
-          {!imgError && product.images?.[0] ? (
-            <img
-              src={product.images[0]}
-              alt={L(product, 'name')}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-              onError={() => setImgError(true)}
-              loading="lazy"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-100">
-              <Package className="w-12 h-12 text-gray-300" />
-            </div>
-          )}
+          {!imgError && product.images?.[0]
+            ? <CardSlides images={product.images} alt={L(product, 'name')} onError={() => setImgError(true)} />
+            : <div className="w-full h-full flex items-center justify-center bg-gray-100"><Package className="w-12 h-12 text-gray-300" /></div>}
 
           {/* Badges */}
           <div className="absolute top-2.5 start-2.5 flex flex-col gap-1.5">

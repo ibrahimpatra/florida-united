@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, Filter, Download, RefreshCw, Eye, ChevronDown } from 'lucide-react';
@@ -30,8 +30,20 @@ export default function AdminOrdersPage() {
   const [page, setPage] = useState(1);
   const [updatingId, setUpdatingId] = useState<string|null>(null);
   const [q, setQ] = useState('');   // debounced search sent to the server
+  // Filters and page are remembered for this tab: coming back from an order lands on the same list, same page.
+  const [ready, setReady] = useState(false);
+  const keepPage = useRef(false);
+  useEffect(() => {
+    try {
+      const m = JSON.parse(sessionStorage.getItem('admin-orders-view') || 'null');
+      if (m) { setStatus(m.status || 'all'); setSearch(m.search || ''); setQ((m.search || '').trim()); setPage(m.page || 1); keepPage.current = (m.page || 1) > 1; }
+    } catch { /* optional */ }
+    setReady(true);
+  }, []);
+  useEffect(() => { if (ready) try { sessionStorage.setItem('admin-orders-view', JSON.stringify({ status, search, page })); } catch { /* optional */ } }, [ready, status, search, page]);
 
   const fetchOrders = useCallback(async () => {
+    if (!ready) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), scope: 'all' });
@@ -44,9 +56,9 @@ export default function AdminOrdersPage() {
       setTotal(data.total || 0);
     } catch (e: any) { toast.error(e.message || 'Failed to load orders'); }
     setLoading(false);
-  }, [status, page, q]);
+  }, [status, page, q, ready]);
 
-  useEffect(() => { const t = setTimeout(() => { setQ(search.trim()); setPage(1); }, 350); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(() => { setQ(search.trim()); if (keepPage.current) keepPage.current = false; else setPage(1); }, 350); return () => clearTimeout(t); }, [search]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { cachedJson } from '@/lib/client-cache';
 import Link from '@/components/ui/LocLink';
 import { ChevronLeft, ChevronRight, Check, LayoutGrid } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -19,7 +20,7 @@ export function HeroBanner() {
 
   useEffect(() => {
     fetch('/api/banners').then(r => (r.ok ? r.json() : [])).then(d => setBanners(Array.isArray(d) ? d : [])).catch(() => {});
-    fetch('/api/categories').then(r => (r.ok ? r.json() : [])).then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
+    cachedJson<any[]>('/api/categories').then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
   }, []);
 
   // Banners created in Admin > Banners replace the default slides.

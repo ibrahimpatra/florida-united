@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { isAdminRole, denyUnlessSuper } from '@/lib/api-error';
+import { getAdminDb } from '@/lib/firebase-admin';
 import { listJobs, runQueued, retryJob, queueAllMissing, runJob } from '@/lib/jobs';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,12 @@ async function guard() {
   if (!isAdminRole(s)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   return denyUnlessSuper(s);
 }
-async function __GET() { return (await guard()) || NextResponse.json({ jobs: await listJobs() }); }
+async function __GET() {
+  const no = await guard(); if (no) return no;
+  // one count query (billed per 1000 matches, not per job) tells the page whether anything is waiting
+  let queued = 0; try { queued = (await getAdminDb().collection('jobs').where('status', '==', 'queued').count().get()).data().count; } catch { /* page falls back to what it can see */ }
+  return NextResponse.json({ jobs: await listJobs(60), queued });
+}
 /** POST { action: 'run' | 'retry' | 'queue-missing', id? } */
 async function __POST(req: NextRequest) {
   const no = await guard(); if (no) return no;

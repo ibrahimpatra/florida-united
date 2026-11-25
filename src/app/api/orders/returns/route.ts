@@ -62,6 +62,7 @@ async function __POST(req: NextRequest) {
       status: 'return_requested', updatedAt: FieldValue.serverTimestamp(),
       statusHistory: FieldValue.arrayUnion({ status: 'return_requested', note: `Return requested: ${String(reason)}`, createdAt: new Date().toISOString() }),
     });
+    import('@/lib/notifications').then(m => m.notifyAdmins({ type: 'return', title: `Return request ${order.orderNumber || ''}`, body: String(reason).slice(0, 80), href: '/admin/returns' })).catch(() => {});
     return NextResponse.json({ success: true, id: ref.id });
   } catch (e) { console.error('[POST returns]', e); return NextResponse.json({ error: 'Could not submit the return request. Please try again.' }, { status: 500 }); }
 }
@@ -126,6 +127,7 @@ async function __PATCH(req: NextRequest) {
       status: orderStatus, ...(status === 'refunded' ? { paymentStatus: 'refunded' } : {}), updatedAt: FieldValue.serverTimestamp(),
       statusHistory: FieldValue.arrayUnion({ status: orderStatus, note: note || `Return ${status}`, createdAt: new Date().toISOString() }),
     });
+    import('@/lib/notifications').then(m => m.notifyOrderStatus({ id: cur.orderId, orderNumber: cur.orderNumber, userId: cur.userId }, orderStatus)).catch(() => {});
     if (status === 'refunded') await (await import('@/lib/revenue')).applyRefund(cur.orderId, Number(patch.refundAmount ?? cur.refundAmount ?? 0)).catch(e => console.error('[revenue refund]', e?.message));
     if (status === 'refunded') await (await import('@/lib/loyalty')).reverseForRefund(cur.orderId, Number(patch.refundAmount ?? cur.refundAmount ?? 0)).catch(e => console.error('[loyalty reverse]', e?.message));
     return NextResponse.json({ success: true });

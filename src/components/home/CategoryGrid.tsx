@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { cachedJson } from '@/lib/client-cache';
 import Link from '@/components/ui/LocLink';
 import { Package } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -40,8 +41,7 @@ export function CategoryGrid() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/categories')
-      .then(r => r.json())
+    cachedJson<Category[]>('/api/categories')
       .then((cats: Category[]) => {
         setCategories(cats.filter(c => c.isActive && !c.parentId && (c.showOnHome ?? true)));
         setLoading(false);

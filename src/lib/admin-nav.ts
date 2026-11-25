@@ -1,5 +1,5 @@
 /** The admin menu: one list used by the full-page grid and the top bar. Add a page here and it appears everywhere. */
-import { LayoutDashboard, ShoppingCart, RotateCcw, Users, Package, Gift, Tag, Award, Ruler, Upload, Image, Megaphone, Sparkles, Zap, Percent, Truck, Settings, ListChecks, AlertTriangle, Network, BarChart2, Sparkles as SparklesIcon } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, RotateCcw, Users, Package, Gift, Tag, Award, Ruler, Upload, Image, Megaphone, Sparkles, Zap, Percent, Truck, Settings, ListChecks, AlertTriangle, Network, BarChart2, Bell, Sparkles as SparklesIcon } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: any; superOnly?: boolean; badge?: 'orders' | 'returns'; keywords?: string }
 export interface NavGroup { id: string; label: string; color: string; items: NavItem[] }
@@ -21,6 +21,7 @@ export const ADMIN_GROUPS: NavGroup[] = [
   { id: 'marketing', label: 'Marketing', color: 'bg-orange-500', items: [
     { href: '/admin/banners', label: 'Banners', icon: Image },
     { href: '/admin/popups', label: 'Popups', icon: Megaphone },
+    { href: '/admin/notifications', label: 'Notifications', icon: Bell, keywords: 'bell message offer announce send' },
     { href: '/admin/promo-tiles', label: 'Promo tiles', icon: Sparkles },
     { href: '/admin/flash-deals', label: 'Flash deals', icon: Zap, keywords: 'deals offers sale' },
     { href: '/admin/coupons', label: 'Coupons', icon: Percent, keywords: 'discount code' },

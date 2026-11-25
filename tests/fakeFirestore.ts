@@ -56,17 +56,22 @@ class FakeRef {
   async set(d: any, o?: any) { this._set(d, o); }
   async update(d: any) { this._update(d); }
   async delete() { this._delete(); }
+  collection(n: string) { return new FakeCol(this.db, `${this.col}/${this.id}/${n}`); }
   _set(d: any, o?: any) { (this.db as any).col(this.col).set(this.id, applyWrite(this.db.read(this.col, this.id), d, !!o?.merge)); }
   _update(d: any) { if (!this.snap().exists) throw new Error(`NOT_FOUND: ${this.col}/${this.id}`); (this.db as any).col(this.col).set(this.id, applyWrite(this.db.read(this.col, this.id), d, true)); }
   _delete() { (this.db as any).col(this.col).delete(this.id); }
 }
 class FakeQuery {
-  constructor(protected db: FakeDb, protected c: string, protected filters: [string, any, string][] = [], protected n = Infinity) {}
-  where(f: string, op: string, v: any) { if (op !== '==' && op !== 'array-contains') throw new Error('fake: only == and array-contains'); return new FakeQuery(this.db, this.c, [...this.filters, [f, v, op]], this.n); }
-  limit(n: number) { return new FakeQuery(this.db, this.c, this.filters, n); }
+  constructor(protected db: FakeDb, protected c: string, protected filters: [string, any, string][] = [], protected n = Infinity, protected ord: [string, 'asc' | 'desc'] | null = null) {}
+  where(f: string, op: string, v: any) { if (op !== '==' && op !== 'array-contains') throw new Error('fake: only == and array-contains'); return new FakeQuery(this.db, this.c, [...this.filters, [f, v, op]], this.n, this.ord); }
+  limit(n: number) { return new FakeQuery(this.db, this.c, this.filters, n, this.ord); }
+  orderBy(f: string, dir: 'asc' | 'desc' = 'asc') { return new FakeQuery(this.db, this.c, this.filters, this.n, [f, dir]); }
+  count() { return { get: async () => { const n = (await this.get()).size; return { data: () => ({ count: n }) }; } }; }
   select(..._f: string[]) { return this; }
   async get() {
-    const docs = [...(this.db as any).col(this.c).entries()].filter(([, d]) => this.filters.every(([f, v, op]) => op === 'array-contains' ? Array.isArray(d[f]) && d[f].includes(v) : d[f] === v)).slice(0, this.n)
+    let rows = [...(this.db as any).col(this.c).entries()].filter(([, d]) => this.filters.every(([f, v, op]) => op === 'array-contains' ? Array.isArray(d[f]) && d[f].includes(v) : d[f] === v));
+    if (this.ord) { const [f, dir] = this.ord; rows = rows.sort((a, b) => (a[1][f] > b[1][f] ? 1 : a[1][f] < b[1][f] ? -1 : 0) * (dir === 'desc' ? -1 : 1)); }
+    const docs = rows.slice(0, this.n)
       .map(([id]) => new FakeSnap(new FakeRef(this.db, this.c, id), this.db.read(this.c, id)));
     return { docs, empty: docs.length === 0, size: docs.length };
   }

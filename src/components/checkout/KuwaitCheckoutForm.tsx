@@ -40,7 +40,10 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
   const { clearCart, removeCoupon } = useCartStore();
   const { start: startBusy } = useBusy();
   const [pay, setPay] = useState<Pay>('cod');
+  // the shopper's last payment choice is remembered on this device
+  const pickPay = (v: Pay) => { setPay(v); try { localStorage.setItem('fk-pay', v); } catch { /* optional */ } };
   const settings = useStoreSettings();
+  useEffect(() => { try { if (localStorage.getItem('fk-pay') === 'card' && settings.cardEnabled) setPay('card'); } catch { /* optional */ } }, [settings.cardEnabled]);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [govError, setGovError] = useState(false);
@@ -196,7 +199,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
       <section>
         <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-600" />{t('checkout.deliveryAddress')}</h3>
         <div className="grid grid-cols-2 gap-3">
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <L k="checkout.governorate" req />
             <div className="relative">
               <select value={governorate} onChange={e => { onGovernorateChange(e.target.value); setGovError(false); }}
@@ -208,7 +211,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
             </div>
             {govError && <E m={t('checkout.required')} />}
           </div>
-          <div><L k="checkout.areaCity" req /><input {...register('city', { required: t('checkout.required') })} className="input-field" /><E m={errors.city?.message} /></div>
+          <div className="col-span-2 sm:col-span-1"><L k="checkout.areaCity" req /><input {...register('city', { required: t('checkout.required') })} className="input-field" /><E m={errors.city?.message} /></div>
           <div><L k="checkout.block" req /><input {...register('block', { required: t('checkout.required') })} className="input-field" /><E m={errors.block?.message} /></div>
           <div><L k="checkout.street" req /><input {...register('street', { required: t('checkout.required') })} className="input-field" /><E m={errors.street?.message} /></div>
           <div><L k="checkout.building" req /><input {...register('building', { required: t('checkout.required') })} className="input-field" /><E m={errors.building?.message} /></div>
@@ -231,14 +234,14 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
       <section>
         <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4 text-brand-600" />{t('checkout.paymentMethod')}</h3>
         <div className={`grid gap-3 ${settings.cardEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          <button type="button" onClick={() => setPay('cod')}
+          <button type="button" onClick={() => pickPay('cod')}
             className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${pay === 'cod' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
             <Banknote className="w-6 h-6 text-green-600" />
             <span className="text-xs font-semibold text-gray-700">{t('checkout.codTitle')}</span>
             {codFee > 0 && <span className="text-[10px] text-gray-400">+ {formatPrice(codFee)}</span>}
           </button>
           {settings.cardEnabled && (
-            <button type="button" onClick={() => setPay('card')}
+            <button type="button" onClick={() => pickPay('card')}
               className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${pay === 'card' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
               <CreditCard className="w-6 h-6 text-brand-700" />
               <span className="text-xs font-semibold text-gray-700">{t('c2_pay.cardTitle')}</span>
@@ -261,7 +264,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
       )}
 
       <button type="submit" disabled={busy || done || !quoteReady}
-        className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-base">
+        className="sticky bottom-3 z-30 shadow-float w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-full flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-base">
         {busy ? <><Loader2 className="w-5 h-5 animate-spin" />{t('checkout.processing')}</>
           : pay === 'card' ? <><CreditCard className="w-5 h-5" />{t('c2_pay.payCard')} — {quoteReady ? formatPrice(total) : '...'}</>
           : <><Banknote className="w-5 h-5" />{t('checkout.placeCod')} — {quoteReady ? formatPrice(total + codFee) : '...'}</>}

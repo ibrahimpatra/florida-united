@@ -104,7 +104,7 @@ export async function runJob(id: string): Promise<Job | null> {
       const { patch, provider } = await fillEntity(spec, es.data(), keys, { job: 'bulk' });
       if (!Object.keys(patch).length) throw new Error('The AI returned nothing usable.');
       await eRef.update({ ...patch, autoFilledAt: new Date().toISOString() });
-      try { (await import('./firestore-admin')).invalidateProductCache?.(true); } catch { /* refreshes on its own */ }
+      if (claimed.collection === 'categories') { try { (await import('./firestore-admin')).invalidateProductCache?.(true, { cats: true }); } catch { /* refreshes on its own */ } }
       await finish({ status: 'done', provider, error: '', result: { filled: Object.keys(patch) } });
       return null;
     }
@@ -120,7 +120,7 @@ export async function runJob(id: string): Promise<Job | null> {
     for (const k of missing) { if (k === 'nameAr' || k === 'shortDescriptionAr') { if (fields[k]) patch[k] = fields[k]; } else if (k === 'tags') { if (tags.length) patch.tags = tags; } else if (fields[k]) patch[k] = fields[k]; }
     if (!Object.keys(patch).length) throw new Error('The AI returned nothing usable.');
     await db.collection('products').doc(claimed.productId).update({ ...patch, seoAutoFilledAt: new Date().toISOString() });
-    try { (await import('./firestore-admin')).invalidateProductCache?.(true); } catch { /* cache refreshes on its own */ }
+    try { (await import('./firestore-admin')).invalidateProductCache?.(true, { ids: [claimed.productId] }); } catch { /* cache refreshes on its own */ }   // only this product is re-read
     await finish({ status: 'done', provider, error: '', result: { filled: Object.keys(patch) } });
   } catch (e: any) {
     if (e?.name === 'AiCapError') { await finish({ status: 'queued', attempts: claimed.attempts || 0, error: String(e.message).slice(0, 300) }).catch(() => {}); return null; }
@@ -132,8 +132,9 @@ export async function runJob(id: string): Promise<Job | null> {
 }
 
 export async function listJobs(limit = 100): Promise<Job[]> {
-  const snap = await getAdminDb().collection(COL).get();
-  return snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Job)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, limit);
+  // newest first and capped: the page must never read the whole job history (hundreds of documents) every time it refreshes
+  const snap = await getAdminDb().collection(COL).orderBy('updatedAt', 'desc').limit(limit).get();
+  return snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Job));
 }
 
 /** Runs queued jobs one after another until the time budget is used. Returns how many were processed. */
@@ -142,7 +143,7 @@ export async function runQueued(budgetMs = 40_000): Promise<{ ran: number; left:
   // read only the waiting jobs (and stuck ones), not the whole job history: this runs every few minutes, so reads matter
   const col = getAdminDb().collection(COL);
   const rows = (s: any) => s.docs.map((d: any) => ({ id: d.id, ...d.data() } as Job));
-  const [q, r] = await Promise.all([col.where('status', '==', 'queued').limit(300).get(), col.where('status', '==', 'running').limit(50).get()]);
+  const [q, r] = await Promise.all([col.where('status', '==', 'queued').limit(30).get(), col.where('status', '==', 'running').limit(50).get()]);
   const all = [...rows(q), ...rows(r).filter((j: Job) => Date.now() - new Date(j.updatedAt).getTime() > STALE_RUNNING_MS)];
   if (all.length) { try { await (await import('./ai-usage')).assertBulkAllowed(); } catch (e: any) { if (e?.name === 'AiCapError') return { ran: 0, left: all.length }; } }
   for (const j of all) {

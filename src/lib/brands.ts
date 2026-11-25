@@ -29,9 +29,15 @@ function pick(data: any): Record<string, any> {
   return o;
 }
 
-export async function getBrands(activeOnly = true): Promise<Brand[]> {
-  const snap = await getAdminDb().collection(COL).get();
-  let list = snap.docs.map(d => shape(d.id, d.data()));
+// brands change rarely: kept in memory for 2 minutes per server and dropped at once by any brand change made on that server
+let brandMemo: { at: number; list: Brand[]; db: unknown } | null = null;
+export const dropBrandMemo = () => { brandMemo = null; };
+export async function getBrands(activeOnly = true, fresh = false): Promise<Brand[]> {
+  if (fresh || !brandMemo || brandMemo.db !== getAdminDb() || Date.now() - brandMemo.at > 120_000) {
+    const snap = await getAdminDb().collection(COL).get();
+    brandMemo = { at: Date.now(), db: getAdminDb(), list: snap.docs.map(d => shape(d.id, d.data())) };
+  }
+  let list = [...brandMemo.list];
   if (activeOnly) list = list.filter(b => b.isActive !== false);
   return list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
 }
@@ -48,7 +54,9 @@ export async function createBrand(data: any): Promise<string> {
   if (all.some(b => String(b.name || '').toLowerCase() === clean.name.toLowerCase())) throw new BrandError(409, `A brand called "${clean.name}" already exists.`);
   let slug = brandSlug(clean.slug || clean.name) || `brand-${Date.now().toString(36)}`;
   if (all.some(b => b.slug === slug)) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+  brandMemo = null;
   const ref = await db.collection(COL).add({ isActive: true, showOnHome: true, sortOrder: 0, ...clean, slug, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  brandMemo = null;
   queueFill(COL, ref.id);
   return ref.id;
 }
@@ -63,7 +71,9 @@ export async function updateBrand(id: string, data: any): Promise<void> {
     const all = (await db.collection(COL).get()).docs.filter(d => d.id !== id).map(d => d.data() as any);
     if (all.some(b => String(b.name || '').toLowerCase() === clean.name.toLowerCase())) throw new BrandError(409, `A brand called "${clean.name}" already exists.`);
   }
+  brandMemo = null;
   await db.collection(COL).doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
+  brandMemo = null;
   queueFill(COL, id);
   // products keep the brand NAME: a rename must follow
   if (clean.name && clean.name !== old.name) {
@@ -76,6 +86,7 @@ export async function updateBrand(id: string, data: any): Promise<void> {
 }
 
 export async function deleteBrand(id: string): Promise<void> {
+  brandMemo = null;
   const db = getAdminDb(); await db.collection(COL).doc(id).delete();   // products keep their brand text; it simply has no brand page any more
 }
 
@@ -85,7 +96,7 @@ export async function ensureBrands(names: string[]): Promise<number> {
   for (const n of names) { const t = String(n || '').trim(); if (t && !want.has(t.toLowerCase())) want.set(t.toLowerCase(), t); }
   if (!want.size) return 0;
   const db = getAdminDb();
-  const have = new Set((await db.collection(COL).get()).docs.map(d => String((d.data() as any).name || '').toLowerCase()));
+  const have = new Set((await getBrands(false)).map(b => String(b.name || '').toLowerCase()));
   let n = 0;
   for (const [k, name] of want) { if (have.has(k)) continue; try { await createBrand({ name }); n++; } catch { /* a parallel save made it first */ } }
   return n;

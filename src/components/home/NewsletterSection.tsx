@@ -20,7 +20,7 @@ export function NewsletterSection() {
     setLoading(false);
   };
   return (
-    <section className="py-16 bg-gradient-to-br from-brand-700 via-brand-600 to-brand-800 relative overflow-hidden">
+    <section className="py-10 bg-gradient-to-br from-brand-700 via-brand-600 to-brand-800 relative overflow-hidden">
       <div className="relative container-custom text-center">
         <div className="max-w-xl mx-auto">
           <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-5"><Mail className="w-7 h-7 text-white" /></div>

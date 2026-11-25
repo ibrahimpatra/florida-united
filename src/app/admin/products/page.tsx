@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { cachedJson } from '@/lib/client-cache';
 import Link from 'next/link';
 import {
   Plus, Search, Edit2, Trash2, Eye, ToggleLeft, ToggleRight,
@@ -17,23 +18,35 @@ export default function AdminProductsPage() {
   const [search, setSearch]       = useState('');
   const [debounced, setDebounced] = useState('');
   const reqId = useRef(0);
+  const forceFresh = useRef(false);   // only the Refresh button re-reads every product from the database; everything else uses the shared in-memory list
   const [categoryId, setCategoryId] = useState('');
   const [stockFilter, setStockFilter] = useState('');
   const [page, setPage]           = useState(1);
   const [sortBy, setSortBy]       = useState('newest');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Filters and page are remembered for this tab: coming back from editing a product lands on the same list, same page.
+  const [ready, setReady] = useState(false);
+  const keepPage = useRef(false);
+  useEffect(() => {
+    try {
+      const m = JSON.parse(sessionStorage.getItem('admin-products-view') || 'null');
+      if (m) { setSearch(m.search || ''); setDebounced(m.search || ''); setCategoryId(m.categoryId || ''); setStockFilter(m.stockFilter || ''); setSortBy(m.sortBy || 'newest'); setPage(m.page || 1); keepPage.current = (m.page || 1) > 1; }
+    } catch { /* optional */ }
+    setReady(true);
+  }, []);
+  useEffect(() => { if (ready) try { sessionStorage.setItem('admin-products-view', JSON.stringify({ search, categoryId, stockFilter, sortBy, page })); } catch { /* optional */ } }, [ready, search, categoryId, stockFilter, sortBy, page]);
 
   // Load categories once
   useEffect(() => {
-    fetch('/api/categories?all=true')
-      .then(r => r.json())
+    cachedJson<any>('/api/categories?admin=1')
       .then(d => setCategories(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, []);
 
-  useEffect(() => { const t = setTimeout(() => { setDebounced(search); setPage(1); }, 350); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(() => { setDebounced(search); if (keepPage.current) keepPage.current = false; else setPage(1); }, 350); return () => clearTimeout(t); }, [search]);
 
   const fetchProducts = useCallback(async () => {
+    if (!ready) return;
     const my = ++reqId.current;
     setLoading(true);
     try {
@@ -43,6 +56,7 @@ export default function AdminProductsPage() {
       if (debounced)  params.set('q', debounced);
       if (categoryId) params.set('categoryId', categoryId);
       if (stockFilter) params.set('stock', stockFilter);
+      if (forceFresh.current) { params.set('fresh', '1'); forceFresh.current = false; }
       const res  = await fetch(`/api/products?${params}`, { cache: 'no-store' });
       const data = await res.json();
       if (my !== reqId.current) return;
@@ -51,7 +65,7 @@ export default function AdminProductsPage() {
       setTotal(data.total || 0);
     } catch (e: any) { if (my === reqId.current) toast.error(e?.message || 'Failed to load products'); }
     if (my === reqId.current) setLoading(false);
-  }, [page, sortBy, debounced, categoryId, stockFilter]);
+  }, [page, sortBy, debounced, categoryId, stockFilter, ready]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
@@ -98,7 +112,7 @@ export default function AdminProductsPage() {
           <p className="text-gray-500 text-sm">{total} products total</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={fetchProducts}
+          <button onClick={() => { forceFresh.current = true; fetchProducts(); }}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50 transition-colors">
             <RefreshCw className="w-4 h-4" /><span className="hidden sm:inline">Refresh</span>
           </button>

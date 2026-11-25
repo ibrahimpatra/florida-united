@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { authOptions } from '@/lib/auth';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { invalidateProductCache } from '@/lib/firestore-admin';
+import { invalidateProductCache, getProductIndex } from '@/lib/firestore-admin';
 import { ensureBrands } from '@/lib/brands';
 import { parseUpload } from '@/lib/import-file';
 import { planImport, slugify, type ImportCtx } from '@/lib/product-import';
@@ -14,13 +14,18 @@ export const maxDuration = 60;
 const BATCH_SIZE = 400;
 const MAX_BYTES = 8 * 1024 * 1024;
 
-async function loadCtx(db: FirebaseFirestore.Firestore): Promise<ImportCtx> {
-  const [c, p, u] = await Promise.all([db.collection('categories').get(), db.collection('products').select('sku', 'slug', 'stock').get(), db.collection('uoms').get()]);
-  return {
-    categories: c.docs.map(d => ({ id: d.id, ...(d.data() as any) })),
-    products: p.docs.map(d => ({ id: d.id, ...(d.data() as any) })),
-    uoms: u.docs.map(d => ({ id: d.id, ...(d.data() as any) })),
-  };
+/**
+ * Reads kept small on purpose (Firestore bills every document read):
+ *  - preview: products come from the shared in-memory list (0 reads while it is fresh)
+ *  - import : the product list is read ONCE (fresh, so SKU matching is exact) and reused; later steps re-read only categories and units
+ */
+async function loadSmall(db: FirebaseFirestore.Firestore) {
+  const [c, u] = await Promise.all([db.collection('categories').get(), db.collection('uoms').get()]);
+  return { categories: c.docs.map(d => ({ id: d.id, ...(d.data() as any) })), uoms: u.docs.map(d => ({ id: d.id, ...(d.data() as any) })) };
+}
+async function loadCtx(db: FirebaseFirestore.Firestore, fresh: boolean): Promise<ImportCtx> {
+  const [small, products] = await Promise.all([loadSmall(db), getProductIndex(fresh)]);
+  return { ...small, products: products as any };
 }
 
 /**
@@ -44,7 +49,7 @@ async function __POST(req: NextRequest) {
     catch (e: any) { return NextResponse.json({ error: e?.message || 'Could not read that file.' }, { status: 400 }); }
 
     const db = getAdminDb();
-    let ctx = await loadCtx(db);
+    let ctx = await loadCtx(db, mode === 'import');
     let plan = planImport(rows, { ...ctx, createMissing: true });
     if (plan.headerError) return NextResponse.json({ error: plan.headerError }, { status: 400 });
 
@@ -74,21 +79,22 @@ async function __POST(req: NextRequest) {
     }
 
     // 2. plan again with everything in place (no more "pending" lookups), then write
-    ctx = await loadCtx(db);
+    ctx = { ...(await loadSmall(db)), products: ctx.products };
     plan = planImport(rows, { ...ctx, createMissing: false });
     let createdN = 0, updatedN = 0, i = 0;
+    const touched: string[] = [];
     const work = plan.rows.filter(r => r.action !== 'error' && r.data && Object.keys(r.data).length);
     while (i < work.length) {
       const batch = db.batch();
       for (const r of work.slice(i, i + BATCH_SIZE)) {
         const data: Record<string, any> = Object.fromEntries(Object.entries(r.data!).filter(([k, v]) => v !== undefined && !k.startsWith('__')));
-        if (r.action === 'create') { batch.set(db.collection('products').doc(), { ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }); createdN++; }
-        else { delete data.sku; delete data.slug; batch.update(db.collection('products').doc(r.id!), { ...data, updatedAt: FieldValue.serverTimestamp() }); updatedN++; }
+        if (r.action === 'create') { const nref = db.collection('products').doc(); touched.push(nref.id); batch.set(nref, { ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }); createdN++; }
+        else { touched.push(r.id!); delete data.sku; delete data.slug; batch.update(db.collection('products').doc(r.id!), { ...data, updatedAt: FieldValue.serverTimestamp() }); updatedN++; }
       }
       await batch.commit();
       i += BATCH_SIZE;
     }
-    invalidateProductCache();
+    invalidateProductCache(false, { ids: touched, cats: created.categories > 0 });   // others re-read just these products
     const newBrands = await ensureBrands(work.map(r => String((r.data as any)?.brand || ''))).catch(() => 0);
     const errors = plan.rows.filter(r => r.action === 'error');
     return NextResponse.json({ success: true, created: createdN, updated: updatedN, createdCategories: created.categories, createdUnits: created.uoms, createdBrands: newBrands,

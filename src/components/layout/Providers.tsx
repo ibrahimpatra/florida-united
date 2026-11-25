@@ -6,6 +6,7 @@ import { PopupManager } from './PopupManager';
 import { BusyProvider } from './BusyLayer';
 import { RecentSync } from './RecentSync';
 import { MobileNav } from './MobileNav';
+import { ImageGuard } from './ImageGuard';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -16,6 +17,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <PopupManager />
         <RecentSync />
         <MobileNav />
+        <ImageGuard />
         </BusyProvider>
       </LanguageProvider>
     </SessionProvider>

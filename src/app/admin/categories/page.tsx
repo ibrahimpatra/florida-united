@@ -3,7 +3,8 @@ import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Home, Navigation } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Home, Navigation, RefreshCw, CornerDownRight } from 'lucide-react';
+import { cachedJson, dropCached } from '@/lib/client-cache';
 import { toast } from 'react-hot-toast';
 import { generateSlug } from '@/lib/utils';
 import type { Category } from '@/types';
@@ -26,19 +27,31 @@ export default function AdminCategoriesPage() {
   const [form, setForm]       = useState(EMPTY_FORM);
   const [saving, setSaving]   = useState(false);
 
-  const load = () =>
-    fetch('/api/categories')
-      .then(r => r.json())
+  const [lastMain, setLastMain] = useState<string>('');    // the main category just created or edited: a sub-category added next is linked to it automatically
+  const [kind, setKind] = useState<'main' | 'sub'>('main');
+  const [needParent, setNeedParent] = useState(false);
+
+  // `force` = ask the server again (Refresh button, and right after every save). Otherwise the saved copy in this browser is used.
+  const load = (force = false, fresh = false) =>
+    cachedJson<Category[]>(`/api/categories?admin=1${fresh ? '&fresh=1' : ''}`, { force })
       .then(d => { setCats(Array.isArray(d) ? d : []); setLoading(false); })
       .catch(() => { toast.error('Failed to load categories'); setLoading(false); });
 
   useEffect(() => { load(); }, []);
+
+  const pickKind = (k: 'main' | 'sub') => {
+    setKind(k); setNeedParent(false);
+    if (k === 'main') setForm(f => ({ ...f, parentId: '' }));
+    else setForm(f => ({ ...f, parentId: f.parentId || (cats.some(c => c.id === lastMain && !c.parentId) ? lastMain : '') }));
+  };
+  const startNew = (parentId = '') => { setCreating(true); setEditing(null); setForm({ ...EMPTY_FORM, parentId }); setKind(parentId ? 'sub' : 'main'); setNeedParent(false); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   const resetForm = () => setForm(EMPTY_FORM);
 
   const startEdit = (c: Category) => {
     setEditing(c);
     setCreating(false);
+    setKind(c.parentId ? 'sub' : 'main'); setNeedParent(false);
     setForm({
       name: c.name, nameAr: c.nameAr || '', slug: c.slug, description: c.description || '', descriptionAr: c.descriptionAr || '',
       parentId: c.parentId || '', isActive: c.isActive,
@@ -51,6 +64,7 @@ export default function AdminCategoriesPage() {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
+    if (kind === 'sub' && !form.parentId) { setNeedParent(true); toast.error('Choose the main category first.'); return; }
     setSaving(true);
     try {
       const url    = editing ? `/api/categories/${editing.id}` : '/api/categories';
@@ -58,13 +72,16 @@ export default function AdminCategoriesPage() {
       const res    = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, sortOrder: Number(form.sortOrder), productCount: Number(form.productCount) }),
+        body: JSON.stringify({ ...form, parentId: kind === 'main' ? '' : form.parentId, sortOrder: Number(form.sortOrder), productCount: Number(form.productCount) }),
       });
       const data = await res.json();
       if (res.ok && (data.success || data.id)) {
         toast.success(editing ? 'Category updated!' : 'Category created!');
+        if (kind === 'main') setLastMain(editing ? editing.id : data.id);
+        else if (form.parentId) setLastMain(form.parentId);
         setEditing(null); setCreating(false); resetForm();
-        load();
+        dropCached('/api/categories');                 // every list in this browser forgets its old copy
+        load(true);
       } else {
         toast.error(data.error || 'Failed to save');
       }
@@ -79,7 +96,7 @@ export default function AdminCategoriesPage() {
     try {
       const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
       if (!res.ok) { const d = await res.json().catch(() => null); toast.error(d?.error || 'Could not delete this category'); return; }
-      setCats(cs => cs.filter(c => c.id !== id));
+      setCats(cs => cs.filter(c => c.id !== id)); dropCached('/api/categories');
       toast.success('Deleted');
     } catch { toast.error('Failed to delete'); }
   };
@@ -108,12 +125,10 @@ export default function AdminCategoriesPage() {
           <h1 className="text-2xl font-bold text-gray-900 font-display">Categories</h1>
           <p className="text-gray-500 text-sm">{cats.length} categories total</p>
         </div>
-        <button
-          onClick={() => { setCreating(true); setEditing(null); resetForm(); }}
-          className="btn-primary py-2 px-4 text-sm flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4"/>Add Category
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => { dropCached('/api/categories'); load(true, true); toast.success('Reloaded'); }} className="btn-secondary py-2 px-4 text-sm flex items-center gap-2" title="Reload from the server"><RefreshCw className="w-4 h-4"/><span className="hidden sm:inline">Refresh</span></button>
+          <button onClick={() => startNew()} className="btn-primary py-2 px-4 text-sm flex items-center gap-2"><Plus className="w-4 h-4"/>Add Category</button>
+        </div>
       </div>
 
       {/* ── Form Panel ─────────────────────────────────────── */}
@@ -129,6 +144,24 @@ export default function AdminCategoriesPage() {
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
+            {/* What is being added: decided first, so a sub-category is never created without its main category */}
+            <div className="sm:col-span-2">
+              <label className="label">What are you adding?</label>
+              <div className="inline-flex p-1 bg-gray-100 rounded-full">
+                {([['main', 'Main category'], ['sub', 'Sub-category']] as const).map(([k, lbl]) => (
+                  <button key={k} type="button" onClick={() => pickKind(k)} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${kind === k ? 'bg-white shadow-soft text-brand-800' : 'text-gray-500'}`}>{lbl}</button>
+                ))}
+              </div>
+              {kind === 'sub' && (
+                <div className="mt-3 max-w-md">
+                  <label className="label">Main category *</label>
+                  <PillSelect value={form.parentId || null} onChange={id => { setNeedParent(false); setForm(f => ({ ...f, parentId: id || '' })); }} placeholder="Choose the main category first"
+                    options={roots.filter(r => r.id !== editing?.id).map(c => ({ id: c.id, label: c.name, sub: c.nameAr }))} />
+                  {needParent && <p className="text-xs text-red-600 mt-1">A sub-category must belong to a main category.</p>}
+                  {!needParent && form.parentId && !editing && form.parentId === lastMain && <p className="text-xs text-gray-500 mt-1">Linked to the category you just worked on. Change it if needed.</p>}
+                </div>
+              )}
+            </div>
             {/* Name + Slug */}
             <div>
               <label className="label">Name *</label>
@@ -160,12 +193,7 @@ export default function AdminCategoriesPage() {
               />
             </div>
 
-            {/* Parent + Sort */}
-            <div>
-              <label className="label">Parent Category</label>
-<PillSelect value={form.parentId || null} onChange={id => setForm(f => ({ ...f, parentId: id || '' }))} placeholder="None (main category). Search to make it a sub-category"
-                options={roots.filter(r => r.id !== editing?.id).map(c => ({ id: c.id, label: c.name, sub: c.nameAr }))} />
-            </div>
+            {/* Sort */}
             <div>
               <label className="label">Sort Order <span className="text-gray-400 font-normal text-xs">(lower = first)</span></label>
               <NumberInput type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) }))} className="input-field"/>
@@ -259,6 +287,7 @@ export default function AdminCategoriesPage() {
                     <td className="text-gray-600 text-sm hidden sm:table-cell">{c.sortOrder}</td>
                     <td>
                       <div className="flex gap-2">
+                        <button onClick={() => startNew(c.id)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Add a sub-category here"><CornerDownRight className="w-3.5 h-3.5"/></button>
                         <button onClick={() => startEdit(c)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5"/></button>
                         <button onClick={() => handleDelete(c.id, c.name)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button>
                       </div>
