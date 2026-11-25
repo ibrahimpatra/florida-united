@@ -305,6 +305,29 @@ A new look for every customer-facing page. No logic, server, database or env cha
 - **Admin** restyled to the same look (top bar, home tiles, dashboard panels, `bg-concrete`). UI only.
 - **Bug fix:** `tailwind.config.js` now scans `src/lib`, so admin home tile colours (Sales/Marketing/Reports) show.
 
+### 9i. v28 part 3: smart UX, fewer reads, notifications (v28p3)
+
+**Database reads (Firebase Spark limit is 50K/day)**
+- Product list is kept in memory per server and updated by *delta*: `config/catalog` holds a short history of what changed (product ids / categories). A server that is behind re-reads only those products (`getAll`), not the whole catalogue. Full re-read only when cold, too far behind or told "everything". Code: `catalog-sync.ts`, `firestore-admin.ts` (`syncCatalog`, `applyIds`).
+- Categories are cached the same way; brands 2 min; running deals and active bundles 1 min (`memo.ts`). Admin lists use the cache; **Refresh** buttons force a re-read (`fresh=1`).
+- Browser side: `client-cache.ts` keeps categories/brands/searches in memory + sessionStorage (browser refresh does not download them again). Admin saves call `dropCached()` so new categories/brands show at once (the old "needs full refresh" bug was the 30 s network cache on `/api/categories`; admin now uses `?admin=1`, no-store).
+- Jobs page reads the newest 60 jobs only; dashboard numbers are remembered 2 min; import reads the catalogue once.
+
+**Storefront**
+- Product card: pictures cross-fade on hover (desktop) and swipe on phones. Product page: swipe gallery, arrows, thumbnails, full-screen view, gentle auto-slide until touched (`CardSlides.tsx`, `ProductGallery.tsx`).
+- Right-click / long-press save / drag of shop pictures is blocked (`ImageGuard.tsx`). This is a deterrent only: screenshots and page source still work, and Google Images is unaffected.
+- **Google Images**: `/image-sitemap.xml` (listed in robots) with every product picture, title and caption; pictures are served from our own `/media` address as WebP/JPEG, both indexable; every image has alt text.
+- Category bar scrolls sideways with a thin scrollbar when there are many; hovering a category shows its sub-categories (mobile menu has an accordion).
+- Shop filter panel is sticky and scrolls inside itself; wider page and 5 columns on large screens. Recently viewed removed from the shop page. Home spacing tightened.
+- Product page phone bar: save, share, WhatsApp, Add to cart with price (no cart icon).
+- Checkout on phones: summary starts folded, address fields stack, sticky Place order button; last payment method remembered.
+- Add to cart shows an Undo / View cart toast.
+- Chat assistant uses Gemini only (no OpenAI).
+
+**Notifications (bell)** for customers (order/return updates, offers) and admin (new order, new return). Data: `users/{uid}/notifications`, `adminNotifications`, `broadcasts`, read marker `notifState/{uid}`. The bell asks at most every 5 min (about 25 reads). Admin > Notifications sends offers to every customer. Code: `notifications.ts`, `api/notifications`, `NotificationBell.tsx`.
+
+**Admin**: categories form asks Main/Sub first and links a sub-category to the main category just created (or use the + button on a row); Orders/Products remember filters and page for the tab; Recent on the admin home is collapsible.
+
 ## 10. SEO
 
 Every public page has its own title, description and canonical link. English and Arabic versions (`/ar/...`) point to each other with `hreflang`. The sitemap lists both and only active products. Product pages carry price and stock data; the home page carries organisation and search-box data; product and category pages carry breadcrumbs. A default share image and app icons are included. Order tracking, cart, checkout and account pages are kept out of search results.

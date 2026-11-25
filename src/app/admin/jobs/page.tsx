@@ -9,11 +9,12 @@ const COLOR: Record<string, string> = { queued: 'badge-blue', running: 'badge-ye
 export default function AdminJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [waiting, setWaiting] = useState(0);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
   const load = useCallback(async () => {
-    try { const r = await fetch('/api/admin/jobs', { cache: 'no-store' }); const d = await r.json(); if (r.ok) setJobs(d.jobs || []); else toast.error(d.error || 'Could not load jobs'); }
+    try { const r = await fetch('/api/admin/jobs', { cache: 'no-store' }); const d = await r.json(); if (r.ok) { setJobs(d.jobs || []); setWaiting(Number(d.queued) || 0); } else toast.error(d.error || 'Could not load jobs'); }
     catch { toast.error('Could not load jobs'); }
     setLoading(false);
   }, []);
@@ -31,9 +32,11 @@ export default function AdminJobsPage() {
   useEffect(() => { load(); }, [load]);
   // While this page is open, queued jobs are worked on automatically (Vercel Hobby has no always-on worker).
   useEffect(() => {
-    const t = setInterval(() => { if (jobs.some(j => j.status === 'queued')) post({ action: 'run' }, true); else load(); }, 15000);
+    // Only while jobs are waiting, only while this tab is on screen, and no faster than every 30 s: every refresh is a database read.
+    if (!waiting) return;
+    const t = setInterval(() => { if (!document.hidden) post({ action: 'run' }, true); }, 30000);
     return () => clearInterval(t);
-  }, [jobs, post, load]);
+  }, [waiting, post]);
 
   const counts = jobs.reduce((a: any, j) => { a[j.status] = (a[j.status] || 0) + 1; return a; }, {});
 

@@ -23,7 +23,7 @@ export function RecentlyViewed({ exclude, title }: { exclude?: string[]; title?:
 
   if (!items.length) return null;
   return (
-    <section className="mt-12">
+    <section className="mt-6 md:mt-8">
       <div className="flex items-center gap-2 mb-4">
         <Clock className="w-5 h-5 text-brand-600" />
         <h2 className="text-xl font-bold text-gray-900">{title || t('c4_recent.title')}</h2>

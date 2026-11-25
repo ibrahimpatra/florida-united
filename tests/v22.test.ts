@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { invalidateProductCache } from '../src/lib/firestore-admin';
 import { test, beforeEach } from 'node:test';
 import { FakeDb } from './fakeFirestore';
 import { __setAdminDbForTests } from '../src/lib/firebase-admin';
@@ -41,6 +42,7 @@ test('ensureBrands adds only the missing names once (case-insensitive)', async (
 });
 test('home brands: managed ones with logos; falls back to product brands when none are managed', async () => {
   db.seed('products', 'p1', { name: 'a', brand: 'Hilti', isActive: true }); db.seed('products', 'p2', { name: 'b', brand: 'Hilti', isActive: true });
+  invalidateProductCache(true);   // the product list is kept in memory: tell it the seed changed
   assert.deepEqual((await getHomeBrands()).map(b => b.name), ['Hilti']);
   await createBrand({ name: 'Bosch', image: '/media/brands/a.webp' }); await createBrand({ name: 'Off', showOnHome: false });
   const h = await getHomeBrands(); assert.deepEqual(h.map(b => b.name), ['Bosch']); assert.equal(h[0].image, '/media/brands/a.webp');

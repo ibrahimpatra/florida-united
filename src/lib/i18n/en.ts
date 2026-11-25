@@ -109,6 +109,7 @@ const baseEn = {
   offers: {
     title: 'Offers for you', code: 'Use code', pct: '{n}% off', fixed: 'KD {n} off', freeShip: 'Free delivery', bxgy: 'Buy {b}, get {g} free', minOrder: 'Min. order KD {n}', until: 'Until {date}', copied: 'Code copied',
   },
+  smart: { undo: 'Undo', undone: 'Removed from cart', viewCart: 'View cart', bell: 'Notifications', bellEmpty: 'You are all caught up', markAll: 'Mark all as read', justNow: 'Just now', sendTitle: 'Send a notification', },
   bnav: { home: 'Home', shop: 'Shop', cart: 'Cart', saved: 'Saved', account: 'Account' },
   addr: {
     title: 'Address Book', subtitle: 'Save your Kuwait delivery addresses for faster checkout.',

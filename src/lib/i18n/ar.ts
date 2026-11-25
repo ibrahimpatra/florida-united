@@ -112,6 +112,7 @@ const baseAr = {
   offers: {
     title: 'عروض خاصة لك', code: 'استخدم الكود', pct: 'خصم {n}%', fixed: 'خصم {n} د.ك', freeShip: 'توصيل مجاني', bxgy: 'اشترِ {b} واحصل على {g} مجانًا', minOrder: 'الحد الأدنى للطلب {n} د.ك', until: 'حتى {date}', copied: 'تم نسخ الكود',
   },
+  smart: { undo: 'تراجع', undone: 'تمت الإزالة من السلة', viewCart: 'عرض السلة', bell: 'الإشعارات', bellEmpty: 'لا توجد إشعارات جديدة', markAll: 'تحديد الكل كمقروء', justNow: 'الآن', sendTitle: 'إرسال إشعار', },
   bnav: { home: 'الرئيسية', shop: 'المتجر', cart: 'السلة', saved: 'المفضلة', account: 'حسابي' },
   addr: {
     title: 'دفتر العناوين', subtitle: 'احفظ عناوين التوصيل في الكويت لإتمام الطلب بشكل أسرع.',

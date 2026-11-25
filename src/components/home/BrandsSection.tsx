@@ -8,7 +8,7 @@ export function BrandsSection({ brands }: { brands: HomeBrand[] }) {
   const { t, L } = useLanguage();
   if (!brands.length) return null;
   return (
-    <section className="py-10 bg-gray-50 border-y border-gray-100">
+    <section className="py-6 bg-gray-50 border-y border-gray-100">
       <div className="container-custom">
         <p className="text-center text-xs font-semibold text-gray-400 mb-6">{t('c1_home.brands')}</p>
         <div className="flex flex-wrap justify-center gap-3">

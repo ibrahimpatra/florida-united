@@ -16,6 +16,7 @@ export function notifyOrderPlaced(o: Order) {
   const ctx = { order: (o as any).orderNumber };
   sendOrderConfirmation({ ...o, userEmail: to }).catch(e => log.error('email', 'order confirmation to customer FAILED (check EMAIL_* settings)', { ...ctx, to, error: e?.message }));
   sendAdminNewOrderNotification(o).catch(e => log.error('email', 'new-order alert to admin FAILED', { ...ctx, error: e?.message }));
+  import('@/lib/notifications').then(m => m.notifyNewOrder(o)).catch(() => {});
   sendWhatsAppOrderConfirmation(o).catch(e => log.error('whatsapp', 'order WhatsApp FAILED', { ...ctx, error: e?.message }));
 }
 

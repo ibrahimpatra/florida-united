@@ -1,5 +1,6 @@
 'use client';
 import { HtmlField } from './HtmlField';
+import { cachedJson, dropCached } from '@/lib/client-cache';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { useState, useEffect } from 'react';
@@ -24,7 +25,7 @@ export function ProductForm({ initialData, productId }: Props) {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [brandNames, setBrandNames] = useState<string[]>([]);
-  useEffect(() => { fetch('/api/brands').then(r => (r.ok ? r.json() : [])).then(d => setBrandNames(Array.isArray(d) ? d.map((b: any) => b.name) : [])).catch(() => {}); }, []);
+  useEffect(() => { cachedJson<any[]>('/api/brands').then(d => setBrandNames(Array.isArray(d) ? d.map((b: any) => b.name) : [])).catch(() => {}); }, []);
   const { start: startBusy } = useBusy();
   const [parentCat, setParentCat] = useState<string | null>(null);   // Category pill
   const [subCat, setSubCat] = useState<string | null>(null);         // Sub-category pill (optional)
@@ -88,7 +89,7 @@ export function ProductForm({ initialData, productId }: Props) {
   };
 
   useEffect(() => {
-    fetch('/api/categories').then(r => r.json()).then((cats: Category[]) => {
+    cachedJson<Category[]>('/api/categories?admin=1').then((cats: Category[]) => {
       setCategories(Array.isArray(cats) ? cats.filter(c => c.isActive !== false) : []);
     }).catch(() => toast.error('Could not load categories'));
   }, []);
@@ -110,6 +111,7 @@ export function ProductForm({ initialData, productId }: Props) {
     const res = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(parentId ? { parentId } : {}) }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok || !d.id) { toast.error(d.error || 'Could not add it.'); return null; }
+    dropCached('/api/categories');
     const cat = { id: d.id, name, parentId: parentId || undefined, isActive: true } as any as Category;
     setCategories(cs => [...cs, cat]); toast.success(`Added "${name}"`); return { id: d.id, label: name };
   };
@@ -117,7 +119,7 @@ export function ProductForm({ initialData, productId }: Props) {
     const res = await fetch('/api/brands', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok && res.status !== 409) { toast.error(d.error || 'Could not add the brand.'); return null; }
-    setBrandNames(b => b.includes(name) ? b : [...b, name]); if (res.ok) toast.success(`Added brand "${name}"`); return { id: name, label: name };
+    dropCached('/api/brands'); setBrandNames(b => b.includes(name) ? b : [...b, name]); if (res.ok) toast.success(`Added brand "${name}"`); return { id: name, label: name };
   };
 
   useEffect(() => {

@@ -11,6 +11,8 @@ import { useDeals } from '@/lib/useDeals';
 import { bestDealFor } from '@/lib/pricing';
 import { formatPrice, calculateDiscount } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
+import { toastAdded } from '@/lib/added-toast';
+import { ProductGallery } from './ProductGallery';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useStoreSettings } from '@/lib/useStoreSettings';
 import type { Product } from '@/types';
@@ -36,11 +38,9 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
   const unitPrice = unit ? unit.price : product.price;
   // stock shown/selectable is in the chosen unit (base stock / units per pack)
   const stock = Math.floor(liveStock / factor);
-  const [mainImg, setMainImg] = useState(0);
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<'desc' | 'specs'>('desc');
   const { addItem, updateQuantity } = useCartStore();
-  const cartCount = useCartStore(st => st.items.reduce((n, i) => (i.unavailable ? n : n + i.quantity), 0));
   const cartLine = useCartStore(st => st.items.find(i => i.productId === product.id && (i.variantId || undefined) === (unitId || undefined)));
   const { isInWishlist, toggleItem } = useWishlistStore();
   const inWishlist = isInWishlist(product.id);
@@ -51,6 +51,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
   const handleAddToCart = () => {
     if (stock === 0) return;
     setAdding(true);
+    const before = useCartStore.getState().items.find(i => i.productId === product.id && (i.variantId || '') === (unit?.id || ''))?.quantity || 0;
     addItem({
       id: product.id, productId: product.id, categoryId: product.categoryId, name: product.name, nameAr: product.nameAr, slug: product.slug,
       price: unitPrice, comparePrice: unit ? undefined : product.comparePrice,
@@ -59,7 +60,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
       quantity: qty, stock: stock, isReturnable: product.isReturnable,
       freeShipping: product.freeShipping,
     });
-    toast.success(t('c1_pd.addedQty', { qty, name }));
+    toastAdded(t('c1_pd.addedQty', { qty, name }), { productId: product.id, variantId: unit?.id, before }, { undo: t('smart.undo'), undone: t('smart.undone'), cart: t('smart.viewCart') });
     setTimeout(() => setAdding(false), 800);
   };
 
@@ -88,25 +89,9 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
 
       <div className="grid lg:grid-cols-2 gap-10 mb-16">
         {/* Images */}
-        <div>
-          <div className="relative bg-gray-50 rounded-2xl overflow-hidden aspect-square mb-4 group">
-            {product.images?.[mainImg]
-              ? <img src={product.images[mainImg]} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-              : <div className="w-full h-full flex items-center justify-center"><Package className="w-24 h-24 text-gray-300" /></div>
-            }
-            {discount > 0 && <span className="absolute top-4 start-4 badge-red badge font-bold">{isArabic ? `${discount}%-` : `-${discount}%`}</span>}
-          </div>
-          {product.images?.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {product.images.map((img, i) => (
-                <button key={i} onClick={() => setMainImg(i)}
-                  className={`w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border-2 transition-colors ${i === mainImg ? 'border-brand-500' : 'border-transparent hover:border-gray-300'}`}>
-                  <img src={img} alt={`${name} - ${i + 1}`} className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <ProductGallery images={product.images || []} alt={name}>
+          {discount > 0 && <span className="absolute top-4 start-4 badge-red badge font-bold">{isArabic ? `${discount}%-` : `-${discount}%`}</span>}
+        </ProductGallery>
 
         {/* Info */}
         <div>
@@ -189,26 +174,27 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
             </button>
           </div>
           )}
-          {/* Phones: one bottom bar for this page (replaces the tab bar): price, cart shortcut, Add to cart */}
+          {/* Phones: the one bottom bar for this page: save, share, WhatsApp and Add to cart with the price */}
           <div className="md:hidden fixed inset-x-3 z-40 no-print" style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
-            <div className="flex items-center gap-2 rounded-full bg-brand-900/95 backdrop-blur-md shadow-float ps-2 pe-2 py-2">
-              <Link href="/cart" aria-label={t('bnav.cart')} className="relative shrink-0 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center">
-                <ShoppingCart className="w-5 h-5" />
-                {cartCount > 0 && <span className="absolute -top-0.5 -end-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-accent-500 text-brand-950 text-[10px] font-extrabold flex items-center justify-center">{cartCount > 9 ? '9+' : cartCount}</span>}
-              </Link>
-              <span className="font-extrabold text-white whitespace-nowrap ps-1">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : unitPrice)}</span>
+            <div className="flex items-center gap-1.5 rounded-full bg-brand-900/95 backdrop-blur-md shadow-float p-1.5">
+              <button type="button" onClick={() => toggleItem(product.id)} aria-label={inWishlist ? t('c1_pd.wishlisted') : t('c1_pd.wishlist')}
+                className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center transition active:scale-90 ${inWishlist ? 'bg-red-500 text-white' : 'bg-white/10 text-white'}`}>
+                <Heart className="w-5 h-5" fill={inWishlist ? 'currentColor' : 'none'} />
+              </button>
+              <button type="button" onClick={handleShare} aria-label={t('c1_pd.share')} className="shrink-0 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-90 transition"><Share2 className="w-5 h-5" /></button>
+              <button type="button" onClick={handleWhatsApp} aria-label={t('c1_pd.whatsapp')} className="shrink-0 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-90 transition"><MessageCircle className="w-5 h-5" /></button>
               {cartLine ? (
-                <Link href="/cart" className="flex-1 inline-flex items-center justify-center h-11 rounded-full bg-accent-500 text-brand-950 font-bold">{t('bnav.cart')} · {cartLine.quantity}</Link>
+                <Link href="/cart" className="flex-1 min-w-0 inline-flex items-center justify-center h-11 rounded-full bg-accent-500 text-brand-950 font-bold text-sm whitespace-nowrap px-2">{t('bnav.cart')} · {cartLine.quantity}</Link>
               ) : (
-                <button onClick={handleAddToCart} disabled={stock === 0 || adding} className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-full bg-accent-500 text-brand-950 font-bold disabled:opacity-50">
-                  {stock === 0 ? t('c1_pd.oos') : adding ? t('c1_pd.adding') : t('c1_pd.addCart')}
+                <button onClick={handleAddToCart} disabled={stock === 0 || adding} className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 h-11 rounded-full bg-accent-500 text-brand-950 font-bold text-sm whitespace-nowrap px-2 disabled:opacity-50">
+                  {stock === 0 ? t('c1_pd.oos') : adding ? t('c1_pd.adding') : <><span>{t('c1_pd.addCart')}</span><span className="font-extrabold">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : unitPrice)}</span></>}
                 </button>
               )}
             </div>
           </div>
 
           {/* Secondary actions */}
-          <div className="flex gap-2 mb-6">
+          <div className="hidden md:flex gap-2 mb-6">
             <button onClick={() => toggleItem(product.id)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-semibold transition-all ${inWishlist ? 'bg-red-50 border-red-200 text-red-600' : 'border-gray-200 text-gray-600 hover:border-red-200 hover:text-red-500'}`}>
               <Heart className="w-4 h-4" fill={inWishlist ? 'currentColor' : 'none'} />{inWishlist ? t('c1_pd.wishlisted') : t('c1_pd.wishlist')}
             </button>

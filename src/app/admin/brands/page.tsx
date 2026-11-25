@@ -1,5 +1,6 @@
 'use client';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { dropCached } from '@/lib/client-cache';
 import { TranslateButton } from '@/components/admin/TranslateButton';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { Collapsible } from '@/components/admin/Collapsible';
@@ -21,7 +22,7 @@ export default function AdminBrandsPage() {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
 
-  const load = () => fetch('/api/brands?all=1').then(r => r.json()).then(d => { setBrands(Array.isArray(d) ? d : []); setLoading(false); }).catch(() => { toast.error('Failed to load brands'); setLoading(false); });
+  const load = () => fetch('/api/brands?all=1', { cache: 'no-store' }).then(r => r.json()).then(d => { setBrands(Array.isArray(d) ? d : []); setLoading(false); }).catch(() => { toast.error('Failed to load brands'); setLoading(false); });
   useEffect(() => { load(); }, []);
 
   const close = () => { setEditing(null); setCreating(false); setForm(EMPTY); };
@@ -38,14 +39,14 @@ export default function AdminBrandsPage() {
     try {
       const res = await fetch(editing ? `/api/brands/${editing.id}` : '/api/brands', { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, sortOrder: Number(form.sortOrder) }) });
       const d = await res.json().catch(() => ({}));
-      if (res.ok && (d.success || d.id)) { toast.success(editing ? 'Brand updated' : 'Brand created'); close(); load(); }
+      if (res.ok && (d.success || d.id)) { toast.success(editing ? 'Brand updated' : 'Brand created'); close(); dropCached('/api/brands'); load(); }
       else toast.error(d.error || 'Failed to save');
     } catch { toast.error('Network error. Please try again.'); }
     setSaving(false);
   };
   const del = async (b: Brand) => {
     if (!confirm(`Delete "${b.name}"? Products keep the brand name as text.`)) return;
-    try { const r = await fetch(`/api/brands/${b.id}`, { method: 'DELETE' }); if (!r.ok) return toast.error('Could not delete this brand'); setBrands(x => x.filter(i => i.id !== b.id)); toast.success('Deleted'); }
+    try { const r = await fetch(`/api/brands/${b.id}`, { method: 'DELETE' }); if (!r.ok) return toast.error('Could not delete this brand'); setBrands(x => x.filter(i => i.id !== b.id)); dropCached('/api/brands'); toast.success('Deleted'); }
     catch { toast.error('Failed to delete'); }
   };
   const Toggle = ({ label, field }: { label: string; field: 'isActive' | 'showOnHome' }) => (

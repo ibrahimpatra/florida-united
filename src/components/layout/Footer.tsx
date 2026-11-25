@@ -1,5 +1,6 @@
 'use client';
 import Link from '@/components/ui/LocLink';
+import { cachedJson } from '@/lib/client-cache';
 import { useBrand } from '@/contexts/BrandContext';
 import { BrandMark } from '@/components/layout/BrandMark';
 import { useEffect, useState } from 'react';
@@ -14,7 +15,7 @@ export function Footer() {
   const { freeShippingThreshold } = useStoreSettings();
   const [cats, setCats] = useState<any[]>([]);
   useEffect(() => {
-    fetch('/api/categories').then(r => (r.ok ? r.json() : [])).then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
+    cachedJson<any[]>('/api/categories').then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
   }, []);
   return (
     <footer dir={dir} className="bg-brand-950 text-gray-300 rounded-t-[2rem] md:rounded-t-[2.5rem] mt-10 overflow-hidden">

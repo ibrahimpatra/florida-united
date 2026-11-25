@@ -2,6 +2,7 @@
  * shipping-admin.ts — Admin SDK versions of shippingService functions
  * Use in API routes only. Never import in client components.
  */
+import { memo, dropMemo } from './memo';
 import { getAdminDb } from './firebase-admin';
 import { queueFill } from './bg';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -74,8 +75,9 @@ export async function adminGetAllFlashDeals(): Promise<FlashDeal[]> {
 }
 export async function adminGetActiveFlashDeals(): Promise<FlashDeal[]> {
   // Single-field read + in-memory filter: avoids a composite index and docs missing a field vanishing.
+  // Shown to shoppers only (orders re-check deals themselves), so one read per minute per server is shared by every visitor.
+  const all = await memo('deals:all', 60_000, async () => toList<any>(await getAdminDb().collection('flashDeals').get()));
   const now = Date.now();
-  const all = toList<any>(await getAdminDb().collection('flashDeals').get());
   const t = (v: any) => (v?.toDate ? v.toDate().getTime() : new Date(v).getTime());
   return all.filter(d => d.isActive !== false && t(d.endAt) >= now && (!d.startAt || t(d.startAt) <= now))
     .sort((a, b) => Number(!!b.isPinned) - Number(!!a.isPinned) || t(a.endAt) - t(b.endAt)) as FlashDeal[];
@@ -108,7 +110,7 @@ export function sanitizeDeal(b: any, partial = false): Record<string, any> {
 
 export async function adminCreateFlashDeal(data: any): Promise<string> {
   const ref = await getAdminDb().collection('flashDeals').add({ ...sanitizeDeal(data), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-  queueFill('flashDeals', ref.id);
+  dropMemo('deals'); queueFill('flashDeals', ref.id);
   return ref.id;
 }
 export async function adminUpdateFlashDeal(id: string, data: Partial<FlashDeal>): Promise<void> {
@@ -116,17 +118,17 @@ export async function adminUpdateFlashDeal(id: string, data: Partial<FlashDeal>)
   const d = sanitizeDeal(data, true);
   const cleared = ['minCartAmount', 'maxUsesTotal', 'maxUsesPerUser'].filter(k => k in (data as any) && (data as any)[k] === null || (data as any)[k] === '').reduce((o: any, k) => ({ ...o, [k]: FieldValue.delete() }), {});
   await ref.update({ ...d, ...cleared, updatedAt: FieldValue.serverTimestamp() }); // usedCount / id / createdAt are never taken from the form
-  queueFill('flashDeals', id);
+  dropMemo('deals'); queueFill('flashDeals', id);
 }
 /** A deal that was used keeps its record (orders reference it): it is switched off instead of deleted. */
 export async function adminDeleteFlashDeal(id: string): Promise<{ archived?: true; message: string }> {
   const ref = getAdminDb().collection('flashDeals').doc(id);
   const snap = await ref.get();
   if (snap.exists && Number((snap.data() as any).usedCount || 0) > 0) {
-    await ref.update({ isActive: false, updatedAt: FieldValue.serverTimestamp() });
+    await ref.update({ isActive: false, updatedAt: FieldValue.serverTimestamp() }); dropMemo('deals');
     return { archived: true, message: 'This deal was already used in orders, so it was switched off instead of deleted.' };
   }
-  await ref.delete();
+  await ref.delete(); dropMemo('deals');
   return { message: 'Deal deleted.' };
 }
 

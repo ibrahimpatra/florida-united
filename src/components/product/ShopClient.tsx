@@ -1,8 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { cachedJson } from '@/lib/client-cache';
 import { SlidersHorizontal, Grid3X3, List, X, ChevronDown, SearchX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { RecentlyViewed } from './RecentlyViewed';
 import { ProductCard } from './ProductCard';
 import type { Product, ProductFilters, Category } from '@/types';
 
@@ -99,8 +99,7 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
   }, []);
 
   useEffect(() => {
-    fetch('/api/categories')
-      .then(r => r.json())
+    cachedJson<Category[]>('/api/categories')
       .then((cats: Category[]) => {
         const active = cats.filter(c => c.isActive);
         setCategories(active);
@@ -287,10 +286,11 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
   );
 
   return (
-    <div dir={dir} className="container-custom py-8">
-      <div className="flex gap-8">
-        <aside className="w-60 flex-shrink-0 hidden lg:block">
-          <div className="sticky top-24 card p-5">{FilterPanel()}</div>
+    <div dir={dir} className="container-custom !max-w-[1760px] py-6">
+      <div className="flex gap-6 xl:gap-8">
+        <aside className="w-64 xl:w-72 flex-shrink-0 hidden lg:block">
+          {/* stays in view while you scroll the products; a long list scrolls inside the panel (thin bar) */}
+          <div className="sticky top-28 card p-5 max-h-[calc(100vh-8rem)] overflow-y-auto thin-scroll">{FilterPanel()}</div>
         </aside>
         <div className="flex-1 min-w-0">
           <div ref={topRef} className="flex flex-wrap items-center justify-between gap-3 mb-4 scroll-mt-28">
@@ -326,7 +326,7 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
             </div>
           )}
           {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-5">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-5">
               {Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="card overflow-hidden">
                   <div className="skeleton h-48 w-full" />
@@ -347,11 +347,10 @@ export function ShopClient({ initialFilters = {} }: { initialFilters?: Record<st
               <button onClick={clearFilters} className="btn-primary">{t('c1_shop.clearBtn')}</button>
             </div>
           ) : (
-            <div onClickCapture={rememberPosition} className={view === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-5' : 'space-y-4'}>
+            <div onClickCapture={rememberPosition} className={view === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-5' : 'space-y-4'}>
               {products.map(p => <ProductCard key={p.id} product={p} />)}
             </div>
           )}
-          <RecentlyViewed />
           {totalPages > 1 && (
             <div className="flex justify-center gap-2 mt-10">
               <button disabled={page === 1} onClick={() => goPage(page - 1)}

@@ -10,7 +10,7 @@ export function PromoTiles() {
   useEffect(() => { fetch('/api/promo-tiles').then(r => (r.ok ? r.json() : [])).then(d => setTiles(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
   if (!tiles.length) return null;
   return (
-    <section className="py-6" aria-label="Promotions">
+    <section className="py-3" aria-label="Promotions">
       <div className="container-custom grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tiles.slice(0, 12).map(t => (
           <Link key={t.id} href={t.link || '/shop'} className="group relative overflow-hidden rounded-2xl aspect-[4/3] text-white flex flex-col justify-end p-3 shadow-sm hover:shadow-lg transition-shadow" style={{ backgroundColor: t.color || '#b91c1c' }}>

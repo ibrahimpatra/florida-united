@@ -1,5 +1,6 @@
 'use client';
 import { bundlePath } from '@/lib/bundle-path';
+import { cachedJson } from '@/lib/client-cache';
 import { useState, useEffect, useRef } from 'react';
 import { X, Search, ArrowRight, Clock, TrendingUp, LayoutGrid } from 'lucide-react';
 import Link, { localizePath } from '@/components/ui/LocLink';
@@ -24,7 +25,7 @@ export function SearchModal({ isOpen, onClose }: Props) {
     if (isOpen) {
       inputRef.current?.focus();
       try { setRecent(JSON.parse(localStorage.getItem('fu-recent-searches') || '[]')); } catch { setRecent([]); }
-      if (!cats.length) fetch('/api/categories').then(r => (r.ok ? r.json() : [])).then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
+      if (!cats.length) cachedJson<any[]>('/api/categories').then((d: any[]) => setCats((Array.isArray(d) ? d : []).filter(c => c.isActive !== false && !c.parentId).slice(0, 6))).catch(() => {});
     } else { setQuery(''); setResults([]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -37,8 +38,8 @@ export function SearchModal({ isOpen, onClose }: Props) {
     const id = ++reqId.current;
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/products?q=${encodeURIComponent(query)}&limit=6`);
-        const data = await res.json();
+        // the same search typed again within 2 minutes is answered from this browser (no request at all)
+        const data: any = await cachedJson(`/api/products?q=${encodeURIComponent(query.trim().toLowerCase())}&limit=6`, { ttlMs: 2 * 60_000 });
         if (id === reqId.current) { setResults(data.items || []); setBundleHits(data.bundles || []); }
       } catch {}
       if (id === reqId.current) setLoading(false);

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Search, Clock } from 'lucide-react';
+import { Search, Clock, ChevronDown } from 'lucide-react';
 import { visibleGroups, ADMIN_GROUPS } from '@/lib/admin-nav';
 
 const RECENT_KEY = 'admin-recent-pages';
@@ -13,9 +13,11 @@ export function rememberAdminPage(href: string) {
 export function AdminHome({ isSuper }: { isSuper: boolean }) {
   const [q, setQ] = useState('');
   const [recent, setRecent] = useState<string[]>([]);
+  const [showRecent, setShowRecent] = useState(false);   // collapsed by default; remembered
+  const toggleRecent = () => setShowRecent(v => { try { localStorage.setItem('admin-recent-open', v ? '0' : '1'); } catch { /* optional */ } return !v; });
   const [badges, setBadges] = useState<{ orders: number; returns: number } | null>(null);
   useEffect(() => {
-    try { setRecent(JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')); } catch { /* optional */ }
+    try { setRecent(JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')); setShowRecent(localStorage.getItem('admin-recent-open') === '1'); } catch { /* optional */ }
     fetch('/api/admin/badges').then(r => r.ok ? r.json() : null).then(setBadges).catch(() => {});
   }, []);
   const groups = useMemo(() => {
@@ -46,8 +48,8 @@ export function AdminHome({ isSuper }: { isSuper: boolean }) {
       </div>
       {!q && recents.length > 0 && (
         <section className="mb-6">
-          <h2 className="flex items-center gap-1.5 text-xs font-bold text-gray-500 mb-1 px-1"><Clock className="w-3.5 h-3.5" />Recent</h2>
-          <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1">{recents.map(i => <Tile key={i.href} item={i} color={i.color} />)}</div>
+          <button type="button" onClick={toggleRecent} aria-expanded={showRecent} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-800 mb-1 px-1"><Clock className="w-3.5 h-3.5" />Recent<ChevronDown className={`w-3.5 h-3.5 transition-transform ${showRecent ? 'rotate-180' : ''}`} /></button>
+          {showRecent && <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1">{recents.map(i => <Tile key={i.href} item={i} color={i.color} />)}</div>}
         </section>
       )}
       {groups.map(g => (

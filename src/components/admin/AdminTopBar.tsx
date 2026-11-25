@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { LayoutGrid, Store, LogOut, ChevronRight } from 'lucide-react';
@@ -29,6 +30,7 @@ export function AdminTopBar({ user, isSuper }: { user: any; isSuper: boolean }) 
       <span className="flex-1" />
       <Link href="/" target="_blank" className="h-10 px-3 rounded-full hover:bg-gray-100 text-gray-700 flex items-center gap-1.5 text-xs font-semibold"><Store className="w-4 h-4" /><span className="hidden sm:inline">View store</span></Link>
       <span className="hidden md:block text-xs text-gray-500">{user?.name} · {isSuper ? 'Super admin' : 'Admin'}</span>
+      <NotificationBell scope="admin" />
       <button onClick={() => signOut({ callbackUrl: '/' })} aria-label="Sign out" className="w-10 h-10 inline-flex items-center justify-center rounded-full hover:bg-red-50 text-gray-500 hover:text-red-600"><LogOut className="w-4 h-4" /></button>
     </header>
   );

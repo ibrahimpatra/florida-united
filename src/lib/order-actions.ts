@@ -5,6 +5,7 @@
  * are notified by email and WhatsApp.
  */
 import { adminGetOrderById, adminUpdateOrderStatus, adminUpdateOrderTracking } from './firestore-admin';
+import { notifyOrderStatus } from '@/lib/notifications';
 import { sendOrderStatusUpdate } from './email';
 import { sendWhatsAppStatusUpdate } from './whatsapp';
 import { refundCardOrder, expireStripeSession } from './stripe';
@@ -41,6 +42,7 @@ export async function changeOrderStatus(i: ChangeInput) {
       } catch (e: any) { log.error('orders', 'automatic card refund FAILED - refund it manually in Stripe', { order: r.order?.orderNumber, error: e?.message }); }
     }
     if (!r.alreadyCancelled) {
+      notifyOrderStatus({ ...r.order, id: i.orderId }, 'cancelled');
       sendOrderStatusUpdate({ ...r.order, status: 'cancelled' }, 'cancelled', note).catch(e => log.error('email', 'cancel email failed', { error: e?.message }));
       sendWhatsAppStatusUpdate({ ...r.order, status: 'cancelled' }, 'cancelled').catch(e => log.error('whatsapp', 'cancel message failed', { error: e?.message }));
     }
@@ -76,6 +78,7 @@ export async function changeOrderStatus(i: ChangeInput) {
   if (trackingNumber && carrier) {
     await adminUpdateOrderTracking(i.orderId, String(trackingNumber).trim(), String(carrier).trim());
     if (order.status !== 'shipped') {
+      notifyOrderStatus(order, 'shipped');
       sendOrderStatusUpdate({ ...order, status: 'shipped' }, 'shipped', note).catch(e => log.error('email', 'status email failed', { order: order.orderNumber, error: e?.message }));
       sendWhatsAppStatusUpdate({ ...order, status: 'shipped' }, 'shipped').catch(e => log.error('whatsapp', 'status message failed', { order: order.orderNumber, error: e?.message }));
     }
@@ -91,6 +94,7 @@ export async function changeOrderStatus(i: ChangeInput) {
     } catch (e: any) { log.error('orders', 'could not book refund in revenue', { order: order.orderNumber, error: e?.message }); }
   }
   if (status === 'delivered') await awardForDelivered(i.orderId).catch(e => log.error('loyalty', 'could not award points', { order: order.orderNumber, error: e?.message }));
+  notifyOrderStatus(order, status!);
   sendOrderStatusUpdate({ ...order, status }, status!, note).catch(e => log.error('email', 'status email failed', { order: order.orderNumber, error: e?.message }));
   sendWhatsAppStatusUpdate({ ...order, status }, status!).catch(e => log.error('whatsapp', 'status message failed', { order: order.orderNumber, error: e?.message }));
   return { success: true, orderNumber: order.orderNumber as string, status: status! };

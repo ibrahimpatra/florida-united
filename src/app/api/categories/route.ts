@@ -4,11 +4,14 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { adminGetCategories, adminCreateCategory } from '@/lib/firestore-admin';
 
-async function __GET() {
+async function __GET(req: NextRequest) {
   try {
-    const cats = await adminGetCategories(false);
+    // ?admin=1 from a signed-in admin: never cached by the network, so a new category shows at once
+    const wantsAdmin = req.nextUrl.searchParams.get('admin') === '1';
+    const isAdmin = wantsAdmin && (await getServerSession(authOptions))?.user?.role === 'admin';
+    const cats = await adminGetCategories(false, isAdmin && req.nextUrl.searchParams.get('fresh') === '1');
     return NextResponse.json(cats, {
-      headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
+      headers: { 'Cache-Control': isAdmin ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=60' },
     });
   } catch (err) {
     console.error('[GET /api/categories]', err);

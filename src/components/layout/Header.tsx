@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { cachedJson } from '@/lib/client-cache';
 import Link from '@/components/ui/LocLink';
 import Image from 'next/image';
 import { useSession, signOut } from 'next-auth/react';
@@ -16,6 +17,7 @@ import { BrandMark } from '@/components/layout/BrandMark';
 import { useWishlistStore } from '@/store/wishlistStore';
 import { SearchModal } from '@/components/layout/SearchModal';
 import { MiniCart } from '@/components/cart/MiniCart';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useStoreSettings } from '@/lib/useStoreSettings';
@@ -40,15 +42,18 @@ export function Header() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allCats, setAllCats] = useState<Category[]>([]);
+  const [pop, setPop] = useState<{ slug: string; left: number; top: number } | null>(null);   // category menu (drawn outside the scrolling row so it is never clipped)
+  const [mobCat, setMobCat] = useState<string | null>(null);
+  const popTimer = useRef<any>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const cartCount = cartItems.reduce((sum, item) => item.unavailable ? sum : sum + item.quantity, 0);
 
   // Fetch root categories for nav bar
   useEffect(() => {
-    fetch('/api/categories')
-      .then(r => r.json())
-      .then((cats: Category[]) => setCategories(cats.filter(c => c.isActive && !c.parentId && (c.showOnNav ?? true))))
+    cachedJson<Category[]>('/api/categories')
+      .then((cats: Category[]) => { const on = cats.filter(c => c.isActive !== false); setAllCats(on); setCategories(on.filter(c => !c.parentId && (c.showOnNav ?? true))); })
       .catch(() => {});
   }, []);
 
@@ -163,6 +168,8 @@ export function Header() {
                 <Search className="w-5 h-5 text-gray-700" />
               </button>
 
+              {session && <NotificationBell />}
+
               {/* Wishlist */}
               <Link
                 href="/account/wishlist"
@@ -275,37 +282,23 @@ export function Header() {
                   {t('c1_nav.allProducts')}
                 </Link>
               </li>
-              {categories.map((cat) => {
-                return (
-                <li key={cat.slug} className="relative group">
-                  <button
-                    onMouseEnter={() => setActiveCategory(cat.slug)}
-                    onMouseLeave={() => setActiveCategory(null)}
-                    className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    {L(cat, 'name')}
-                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-                  </button>
-                  {/* Dropdown */}
-                  <div
-                    onMouseEnter={() => setActiveCategory(cat.slug)}
-                    onMouseLeave={() => setActiveCategory(null)}
-                    className={`absolute start-0 top-full w-52 bg-white rounded-2xl shadow-hover border border-gray-100 py-2 z-50 transition-all duration-200 ${
-                      activeCategory === cat.slug
-                        ? 'opacity-100 visible translate-y-0'
-                        : 'opacity-0 invisible -translate-y-2'
-                    }`}
-                  >
-                    <Link
-                      href={`/shop/${cat.slug}`}
-                      className="block px-4 py-2 text-sm text-brand-600 font-semibold hover:bg-brand-50 transition-colors"
-                    >
-                      {t('c1_nav.viewAllIn', { name: L(cat, 'name') })}
-                    </Link>
-                  </div>
-                </li>
-                );
-              })}
+              <li className="min-w-0 flex-1">
+                {/* Categories get their own row space: it scrolls sideways (thin bar) when there are many */}
+                <div className="thin-scroll overflow-x-auto overflow-y-hidden whitespace-nowrap flex items-center gap-1 pb-1.5 -mb-1.5" onScroll={() => setPop(null)}>
+                  {categories.map((cat) => {
+                    const kids = allCats.filter(c => c.parentId === cat.id);
+                    return (
+                      <Link key={cat.slug} href={`/shop/${cat.slug}`}
+                        onMouseEnter={e => { clearTimeout(popTimer.current); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setPop({ slug: cat.slug, left: r.left, top: r.bottom }); }}
+                        onMouseLeave={() => { popTimer.current = setTimeout(() => setPop(null), 160); }}
+                        className="flex-none flex items-center gap-1 px-3.5 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+                        {L(cat, 'name')}
+                        {kids.length > 0 && <ChevronDown className="w-3.5 h-3.5 opacity-60" />}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </li>
               <li>
                 <Link href="/bundles" className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors">
                   <Package2 className="w-4 h-4" /> {t('c1_nav.bundles')}
@@ -324,6 +317,19 @@ export function Header() {
             </ul>
           </div>
         </nav>
+
+        {pop && (() => {
+          const cat = categories.find(c => c.slug === pop.slug); if (!cat) return null;
+          const kids = allCats.filter(c => c.parentId === cat.id);
+          const w = 240; const left = Math.max(8, Math.min(pop.left, (typeof window !== 'undefined' ? window.innerWidth : 1200) - w - 8));
+          return (
+            <div onMouseEnter={() => clearTimeout(popTimer.current)} onMouseLeave={() => setPop(null)} style={{ position: 'fixed', top: pop.top + 2, left, width: w }}
+              className="hidden md:block z-50 bg-white rounded-2xl shadow-hover border border-gray-100 py-2 max-h-[70vh] overflow-y-auto thin-scroll">
+              <Link href={`/shop/${cat.slug}`} onClick={() => setPop(null)} className="block px-4 py-2 text-sm text-brand-700 font-semibold hover:bg-brand-50 transition-colors">{t('c1_nav.viewAllIn', { name: L(cat, 'name') })}</Link>
+              {kids.map(k => <Link key={k.id} href={`/shop/${k.slug}`} onClick={() => setPop(null)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-brand-700 transition-colors">{L(k, 'name')}</Link>)}
+            </div>
+          );
+        })()}
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
@@ -370,14 +376,18 @@ export function Header() {
                 <Link href="/shop" className="flex items-center gap-3 py-3 border-b border-gray-100 text-gray-700">
                   {t('c1_nav.allProducts')}
                 </Link>
-                {categories.map((cat) => (
-                  <div key={cat.slug}>
-                    <Link href={`/shop/${cat.slug}`} className="flex items-center justify-between py-3 border-b border-gray-100 text-gray-700 font-medium">
-                      <span className="flex items-center gap-2">{L(cat, 'name')}</span>
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
-                    </Link>
-                  </div>
-                ))}
+                {categories.map((cat) => {
+                  const kids = allCats.filter(c => c.parentId === cat.id); const open = mobCat === cat.slug;
+                  return (
+                    <div key={cat.slug} className="border-b border-gray-100">
+                      <div className="flex items-center">
+                        <Link href={`/shop/${cat.slug}`} className="flex-1 py-3 text-gray-700 font-medium">{L(cat, 'name')}</Link>
+                        {kids.length > 0 && <button type="button" aria-label="Sub-categories" onClick={() => setMobCat(open ? null : cat.slug)} className="p-3 text-gray-400"><ChevronDown className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} /></button>}
+                      </div>
+                      {open && <div className="pb-2 ps-3">{kids.map(k => <Link key={k.id} href={`/shop/${k.slug}`} className="block py-2 text-sm text-gray-600">{L(k, 'name')}</Link>)}</div>}
+                    </div>
+                  );
+                })}
                 <Link href="/bundles" className="flex items-center gap-3 py-3 border-b border-gray-100 text-gray-700 font-semibold">
                   <Package2 className="w-4 h-4" /> {t('c1_nav.bundles')}
                 </Link>

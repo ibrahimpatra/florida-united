@@ -21,6 +21,7 @@ import type {
 
 // ── helpers ──────────────────────────────────────────────────
 import { fixImageUrl } from './image-url';
+import { memo, dropMemo } from './memo';
 
 function toData<T>(snap: FirebaseFirestore.DocumentSnapshot): T | null {
   if (!snap.exists) return null;
@@ -48,9 +49,14 @@ function toList<T>(snaps: FirebaseFirestore.QuerySnapshot): T[] {
 // ── CATEGORIES ───────────────────────────────────────────────
 // NOTE: no Firestore orderBy here — orderBy silently DROPS documents that lack the
 // field (e.g. categories created without sortOrder). We sort in memory instead.
-export async function adminGetCategories(activeOnly = true): Promise<Category[]> {
-  const snap = await getAdminDb().collection('categories').get();
-  let list = toList<Category>(snap);
+export async function adminGetCategories(activeOnly = true, fresh = false): Promise<Category[]> {
+  if (!fresh) await syncCatalog();
+  if (fresh || !catCache) {
+    const snap = await getAdminDb().collection('categories').get();
+    catCache = { at: Date.now(), items: toList<Category>(snap) };
+    if (!syncedVer) { try { syncedVer = (await readMarker()).v; versionCheckedAt = Date.now(); } catch {} }
+  }
+  let list = [...catCache.items];
   if (activeOnly) list = list.filter(c => c.isActive !== false);
   return list.sort((x, y) => (x.sortOrder ?? 999) - (y.sortOrder ?? 999) || x.name.localeCompare(y.name));
 }
@@ -80,7 +86,7 @@ export async function adminCreateCategory(data: Omit<Category, 'id' | 'createdAt
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  invalidateProductCache();
+  invalidateProductCache(false, { cats: true });
   queueFill('categories', ref.id);
   return ref.id;
 }
@@ -126,8 +132,10 @@ export async function adminUpdateCategory(id: string, data: Partial<Category>): 
       targets.slice(i, i + 400).forEach(([ref, patch]) => batch.update(ref, patch));
       await batch.commit();
     }
+    invalidateProductCache();                         // product names changed too: everything is re-read once
+    return;
   }
-  invalidateProductCache();
+  invalidateProductCache(false, { cats: true });
 }
 
 export async function adminDeleteCategory(id: string): Promise<void> {
@@ -139,7 +147,7 @@ export async function adminDeleteCategory(id: string): Promise<void> {
   if (!kids.empty) throw new ProductError(409, 'This category has sub-categories. Move or delete them first.');
   if (!prods.empty) throw new ProductError(409, 'This category still has products. Move them to another category first.');
   await db.collection('categories').doc(id).delete();
-  invalidateProductCache();
+  invalidateProductCache(false, { cats: true });
 }
 
 export class ProductError extends Error {
@@ -157,12 +165,84 @@ export class ProductError extends Error {
 const PRODUCT_CAP = 3000;
 const PRODUCT_CACHE_MS = 10 * 60_000;   // the list stays in memory for 10 minutes; changes tell every server to drop it sooner (catalog-sync.ts)
 const VERSION_CHECK_MS = 20_000;
-let productCache: { at: number; items: Product[]; ver: string } | null = null;
+let productCache: { at: number; items: Product[] } | null = null;
+let catCache: { at: number; items: Category[] } | null = null;
+let syncedVer = 0;                 // marker version both caches are current with
 let versionCheckedAt = 0;
-/** Drops the in-memory list. With `broadcast`, only this server is told (the caller already wrote the marker). Without it, every server and the product pages are told too. */
-export function invalidateProductCache(local = false) {
-  productCache = null; versionCheckedAt = 0;
-  if (!local) import('./catalog-sync').then(m => m.catalogChanged([], { delayMs: 0 })).catch(() => {});
+let pendingIds = new Set<string>();   // changed on this server: re-read just these on the next load
+let syncing: Promise<void> | null = null;
+let cacheDb: unknown = null;       // the database the lists belong to (a different one = start over)
+
+/**
+ * Tells this server's lists that something changed.
+ *  - { ids }  : only those products changed (re-read just them, 1 read each)
+ *  - { cats } : categories changed
+ *  - nothing  : everything may have changed (re-read all once)
+ * Without `local`, every other server and the product pages are told too (catalog-sync.ts).
+ */
+export function invalidateProductCache(local = false, e: { ids?: string[]; cats?: boolean; full?: boolean } = {}) {
+  const full = e.full || (!e.ids?.length && !e.cats);
+  if (full) { productCache = null; catCache = null; pendingIds.clear(); }
+  else { (e.ids || []).forEach(id => pendingIds.add(id)); if (e.cats) catCache = null; }
+  versionCheckedAt = 0;
+  if (!local) import('./catalog-sync').then(m => m.catalogChanged(e.ids || [], { delayMs: 0, cats: e.cats, full: e.full })).catch(() => {});
+}
+
+async function readMarker(): Promise<{ v: number; base: number; log: any[] }> {
+  const d: any = (await getAdminDb().collection('config').doc('catalog').get()).data() || {};
+  return { v: Number(d.v) || 0, base: Number(d.base) || 0, log: Array.isArray(d.log) ? d.log : [] };
+}
+
+/** Re-reads only the given products into the cached list (removes the ones that no longer exist). */
+async function applyIds(ids: string[]) {
+  if (!productCache || !ids.length) return;
+  const db = getAdminDb(); const list = [...ids];
+  const byId = new Map(productCache.items.map(p => [p.id, p]));
+  for (let i = 0; i < list.length; i += 100) {
+    const snaps = await db.getAll(...list.slice(i, i + 100).map(id => db.collection('products').doc(id)));
+    for (const sn of snaps) { const d = toData<Product>(sn); if (d) byId.set(sn.id, d); else byId.delete(sn.id); }
+  }
+  productCache = { at: productCache.at, items: [...byId.values()] };
+}
+
+/**
+ * Keeps the in-memory lists current at the lowest cost: one small marker read (at most every 20 s) and, when something changed,
+ * only the products named in the marker's history. A full re-read happens only when this server is cold, too far behind, or told "everything".
+ */
+async function syncCatalog(): Promise<void> {
+  if (syncing) return syncing;
+  syncing = (async () => {
+    if (cacheDb !== getAdminDb()) { cacheDb = getAdminDb(); productCache = null; catCache = null; pendingIds.clear(); syncedVer = 0; versionCheckedAt = 0; }
+    const stale = (c: { at: number } | null) => !c || Date.now() - c.at > PRODUCT_CACHE_MS;
+    if (stale(productCache)) productCache = null;
+    if (stale(catCache)) catCache = null;
+    if ((productCache || catCache) && Date.now() - versionCheckedAt > VERSION_CHECK_MS) {
+      versionCheckedAt = Date.now();
+      try {
+        const m = await readMarker();
+        if (m.v !== syncedVer) {
+          const news = m.log.filter(x => Number(x.v) > syncedVer);
+          if (syncedVer < m.base || (syncedVer === 0 && m.v) || news.some(x => x.full)) { productCache = null; catCache = null; pendingIds.clear(); }
+          else {
+            news.forEach(x => (x.ids || []).forEach((id: string) => pendingIds.add(id)));
+            if (news.some(x => x.cats)) catCache = null;
+          }
+          syncedVer = m.v;
+        }
+      } catch { /* keep what we have */ }
+    }
+    if (productCache && pendingIds.size) { const ids = [...pendingIds]; pendingIds.clear(); try { await applyIds(ids); } catch { productCache = null; } }
+  })().finally(() => { syncing = null; });
+  return syncing;
+}
+
+async function loadAllProducts(fresh: boolean): Promise<Product[]> {
+  if (!fresh) { await syncCatalog(); if (productCache) return productCache.items; }
+  let m = 0; try { m = (await readMarker()).v; } catch {}
+  const snap = await getAdminDb().collection('products').limit(PRODUCT_CAP).get();
+  const items = toList<Product>(snap);
+  productCache = { at: Date.now(), items }; pendingIds.clear(); syncedVer = m || syncedVer; versionCheckedAt = Date.now();
+  return items;
 }
 
 /** Checks a saved product for missing SEO text and queues the background job. Runs after the response (waitUntil on Vercel). */
@@ -171,23 +251,9 @@ function queueSeoJob(productId: string) {
   import('@vercel/functions').then(v => v.waitUntil(work)).catch(() => {});
 }
 
-async function loadAllProducts(fresh: boolean): Promise<Product[]> {
-  if (!fresh && productCache && Date.now() - productCache.at < PRODUCT_CACHE_MS) {
-    // another server may have changed stock or a product: one small read of the marker, at most every 20 seconds
-    if (Date.now() - versionCheckedAt > VERSION_CHECK_MS) {
-      versionCheckedAt = Date.now();
-      try {
-        const v = String(((await getAdminDb().collection('config').doc('catalog').get()).data() as any)?.v || '');
-        if (v !== productCache.ver) productCache = null;
-      } catch { /* keep what we have */ }
-    }
-    if (productCache) return productCache.items;
-  }
-  let ver = ''; try { ver = String(((await getAdminDb().collection('config').doc('catalog').get()).data() as any)?.v || ''); } catch {}
-  const snap = await getAdminDb().collection('products').limit(PRODUCT_CAP).get();
-  const items = toList<Product>(snap);
-  if (!fresh) { productCache = { at: Date.now(), items, ver }; versionCheckedAt = Date.now(); }
-  return items;
+/** sku / slug / stock of every product from the in-memory list (no database reads while the list is fresh). Used by the import preview. */
+export async function getProductIndex(fresh = false): Promise<{ id: string; sku?: string; slug?: string; stock?: number }[]> {
+  return (await loadAllProducts(fresh)).map((p: any) => ({ id: p.id, sku: p.sku, slug: p.slug, stock: p.stock }));
 }
 
 /** categoryId + all of its descendants, so picking a parent also shows sub-category products. */
@@ -229,10 +295,11 @@ export async function stockForIds(ids: string[]): Promise<Record<string, { inSto
 }
 
 export async function adminGetProducts(
-  filters: ProductFilters & { admin?: boolean; stockStatus?: 'in' | 'out' | 'low' } = {}
+  filters: ProductFilters & { admin?: boolean; fresh?: boolean; stockStatus?: 'in' | 'out' | 'low' } = {}
 ): Promise<PaginatedResponse<Product>> {
   const { sortBy = 'newest', page = 1, pageSize = 24 } = filters;
-  let items = await loadAllProducts(!!filters.admin);
+  // admin lists use the same in-memory list as the shop (kept current by the catalog marker); only the Refresh button forces a full re-read
+  let items = await loadAllProducts(!!filters.admin && !!filters.fresh);
 
   if (!filters.admin) items = items.filter(p => p.isActive !== false);
 
@@ -389,7 +456,7 @@ export async function adminCreateProduct(
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  invalidateProductCache();
+  invalidateProductCache(false, { ids: [ref.id] });
   if (clean.brand) import('./brands').then(m => m.ensureBrands([clean.brand])).catch(e => reportIssue('brand auto-create', e));
   queueSeoJob(ref.id);
   return ref.id;
@@ -410,7 +477,7 @@ export async function adminUpdateProduct(id: string, data: Partial<Product>): Pr
     Object.assign(clean, await resolveCategory(clean.categoryId));
   }
   await getAdminDb().collection('products').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
-  invalidateProductCache();
+  invalidateProductCache(false, { ids: [id] });
   if (clean.brand) import('./brands').then(m => m.ensureBrands([clean.brand])).catch(e => reportIssue('brand auto-create', e));
   queueSeoJob(id);
 }
@@ -442,7 +509,7 @@ export async function adminDeleteProduct(id: string): Promise<{ deleted?: true; 
 
   if (await productHasOrderHistory(id)) {
     await ref.update({ isActive: false, isArchived: true, archivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    invalidateProductCache();
+    invalidateProductCache(false, { ids: [id] });
     return { archived: true, message: 'This product has order history, so it was archived instead of deleted. It is hidden from the shop and can be restored any time.' };
   }
   const deals = await db.collection('flashDeals').where('productIds', 'array-contains', id).get();
@@ -450,7 +517,7 @@ export async function adminDeleteProduct(id: string): Promise<{ deleted?: true; 
   deals.docs.forEach(d => batch.update(d.ref, { productIds: FieldValue.arrayRemove(id) }));
   batch.delete(ref);
   await batch.commit();
-  invalidateProductCache();
+  invalidateProductCache(false, { ids: [id] });
   return { deleted: true, message: 'Product deleted.' };
 }
 
@@ -673,18 +740,16 @@ export async function adminGetReturnRequests(filters: { status?: string } = {}):
 export async function adminGetBundles(activeOnly = false) {
   // Unconstrained read + in-memory sort/filter: orderBy/where on a field that is
   // missing on some docs would silently drop them (and needs a composite index).
-  const all = toList<any>(await getAdminDb().collection('bundles').get());
+  const read = async () => toList<any>(await getAdminDb().collection('bundles').get());
+  const all = activeOnly ? await memo('bundles:all', 60_000, read) : await read();   // the shop shares one read per minute; admin screens always read fresh
   const ts = (v: any) => (v ? new Date(v).getTime() || 0 : 0);
   return all.filter(b => !activeOnly || b.isActive !== false).sort((x, y) => ts(y.createdAt) - ts(x.createdAt));
 }
 
 /** Public view: adds live availability (min over components) and free-shipping flag. */
 export async function getStorefrontBundles() {
-  const db = getAdminDb();
   const bundles = await adminGetBundles(true);
-  const ids = [...new Set(bundles.flatMap((b: any) => (b.items || []).map((i: any) => i.productId)))] as string[];
-  const snaps = ids.length ? await db.getAll(...ids.map(id => db.collection('products').doc(id))) : [];
-  const prods = new Map(snaps.filter(s => s.exists).map(s => [s.id, s.data() as any]));
+  const prods = new Map((await loadAllProducts(false)).map(p => [p.id, p as any]));   // parts come from the shared product list: no extra reads
   return bundles.map((b: any) => {
     const comps = (b.items || []) as any[];
     let available = comps.length ? Infinity : 0, allFree = comps.length > 0, valid = comps.length > 0;
@@ -705,8 +770,7 @@ export async function getStorefrontBundle(id: string) {
   const b: any = toData<any>(await db.collection('bundles').doc(id).get());
   if (!b || b.isActive === false) return null;
   const comps = (b.items || []) as any[];
-  const snaps = comps.length ? await db.getAll(...comps.map(c => db.collection('products').doc(c.productId))) : [];
-  const prods = new Map(snaps.filter(x => x.exists).map(x => [x.id, x.data() as any]));
+  const prods = new Map((await loadAllProducts(false)).map(p => [p.id, p as any]));
   let available = comps.length ? Infinity : 0, allFree = comps.length > 0, valid = comps.length > 0;
   const items = comps.map(c => {
     const p = prods.get(c.productId);
@@ -769,18 +833,18 @@ export async function adminCreateBundle(data: any): Promise<string> {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  queueFill('bundles', ref.id);
+  dropMemo('bundles'); queueFill('bundles', ref.id);
   return ref.id;
 }
 
 export async function adminUpdateBundle(id: string, data: any): Promise<void> {
   const clean = await normaliseBundle(data, true);
   await getAdminDb().collection('bundles').doc(id).update({ ...clean, updatedAt: FieldValue.serverTimestamp() });
-  queueFill('bundles', id);
+  dropMemo('bundles'); queueFill('bundles', id);
 }
 
 export async function adminDeleteBundle(id: string): Promise<void> {
-  await getAdminDb().collection('bundles').doc(id).delete();
+  await getAdminDb().collection('bundles').doc(id).delete(); dropMemo('bundles');
 }
 
 // ── ALIASES & MISSING EXPORTS ─────────────────────────────────
@@ -955,10 +1019,10 @@ export async function adminUpdateReturnStatus(id: string, status: string, note?:
 
 /** Most common brands among active products (for the home page brand strip). */
 export async function getTopBrands(limit = 12): Promise<string[]> {
-  const snap = await getAdminDb().collection('products').select('brand', 'isActive').get();
+  const all = await loadAllProducts(false);
   const counts = new Map<string, number>();
-  snap.docs.forEach(d => {
-    const x = d.data() as any;
+  all.forEach(d => {
+    const x = d as any;
     const b = String(x.brand || '').trim();
     if (b && x.isActive !== false) counts.set(b, (counts.get(b) || 0) + 1);
   });

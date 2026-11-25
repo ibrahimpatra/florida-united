@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { cachedJson } from '@/lib/client-cache';
 import { Search, X, Package, FolderTree, Check, Loader2 } from 'lucide-react';
 
 /**
@@ -16,7 +17,7 @@ const cache: Record<Kind, Map<string, PickItem>> = { product: new Map(), categor
 let catsPromise: Promise<PickItem[]> | null = null;
 
 function loadCategories(): Promise<PickItem[]> {
-  catsPromise ??= fetch('/api/categories').then(r => r.json()).then((list: any[]) => {
+  catsPromise ??= cachedJson<any[]>('/api/categories?admin=1').then((list: any[]) => {
     const byId = new Map(list.map(c => [c.id, c]));
     const path = (c: any): string => (c.parentId && byId.get(c.parentId) ? `${path(byId.get(c.parentId))} > ${c.name}` : c.name);
     const items = (Array.isArray(list) ? list : []).map(c => ({ id: c.id, label: path(c), sub: c.nameAr || undefined, parentId: c.parentId || undefined }));

@@ -17,7 +17,7 @@ async function __GET(req: NextRequest) {
       isAdmin = session?.user?.role === 'admin';
     }
     const stock = searchParams.get('stock');
-    const filters: ProductFilters & { admin?: boolean } = {
+    const filters: ProductFilters & { admin?: boolean; fresh?: boolean } = {
       categoryId:   searchParams.get('categoryId')  || undefined,
       categorySlug: searchParams.get('categorySlug')|| undefined,
       minPrice:     searchParams.get('minPrice') ? Number(searchParams.get('minPrice')) : undefined,
@@ -33,6 +33,7 @@ async function __GET(req: NextRequest) {
       page:         parseInt(searchParams.get('page')  || '1'),
       pageSize:     parseInt(searchParams.get('limit') || '24'),
       admin:        isAdmin,
+      fresh:        isAdmin && searchParams.get('fresh') === '1',
     };
     let result: any;
     const onlyDeal = searchParams.get('deal');

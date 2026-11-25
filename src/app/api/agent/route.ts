@@ -10,7 +10,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { generate, GeminiError, explainGemini } from '@/lib/gemini';
-import { openaiConfigured, openaiAgent } from '@/lib/openai';
 import { explainAi as explain } from '@/lib/ai';
 import { FOLLOWUP_RULE, splitFollowUps } from '@/lib/agent/followups';
 
@@ -45,9 +44,9 @@ async function __POST(req: NextRequest) {
     catch (e: any) { return NextResponse.json({ reply: e?.message || 'Could not complete that.', error: true }); }
   }
 
-  if (!process.env.GEMINI_API_KEY && !openaiConfigured()) {
+  if (!process.env.GEMINI_API_KEY) {
     log.error('agent', 'No AI key set - the assistant is off');
-    return NextResponse.json({ reply: user.role === 'admin' ? 'The assistant is off: set GEMINI_API_KEY and/or OPENAI_API_KEY in the environment.' : 'The assistant is not configured yet.', error: true });
+    return NextResponse.json({ reply: user.role === 'admin' ? 'The assistant is off: set GEMINI_API_KEY in the environment.' : 'The assistant is not configured yet.', error: true });
   }
   const lang = body.lang === 'ar' ? 'ar' : 'en';
   const history: { role: 'user' | 'assistant'; text: string }[] = Array.isArray(body.messages) ? body.messages.slice(-12) : [];
@@ -59,23 +58,8 @@ async function __POST(req: NextRequest) {
   try {
     // Vercel ends a function after 60 s and the browser then only sees "connection problem": stop well before that.
     const deadline = Date.now() + 50_000;
-    const viaOpenAI = async () => {
-      const r = await openaiAgent({
-        system: systemPrompt(user, lang, await getBrand()), deadline,
-        history: history.filter(m => m && typeof m.text === 'string' && m.text.trim()).map(m => ({ role: m.role === 'assistant' ? 'assistant' as const : 'user' as const, text: String(m.text).slice(0, 2000) })),
-        tools: declsFor(user),
-        runTool: async (name, args) => { const r = await runTool(name, args, user); return { data: r.data, pending: r.pending }; },
-      });
-      const f = splitFollowUps(r.text, lang);
-      return NextResponse.json({ reply: f.text || (lang === 'ar' ? 'عذراً، لم أستطع الإجابة.' : 'Sorry, I could not answer that.'), pending: r.pending, followUps: r.pending.length ? [] : f.followUps });
-    };
-    if (!process.env.GEMINI_API_KEY) return await viaOpenAI();
-    try { return await viaGemini(); }
-    catch (e: any) {
-      if (!openaiConfigured()) throw e;
-      log.warn('agent', 'Gemini failed, answering with OpenAI', { error: explain(e) });
-      return await viaOpenAI();
-    }
+    // The chat assistant uses Gemini only (several Gemini models are tried in turn inside generate()).
+    return await viaGemini();
     async function viaGemini() {
     for (let turn = 0; turn < 8; turn++) {
       const data = await gemini(contents, user, lang, deadline);
