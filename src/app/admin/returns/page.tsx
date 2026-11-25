@@ -93,8 +93,8 @@ export default function AdminReturnsPage() {
   const pendingCount = returns.filter(r => ['pending', 'photo_submitted'].includes(r.status)).length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-black text-gray-900">Return Requests</h1>
           {pendingCount > 0 && <p className="text-sm text-orange-600 font-semibold mt-0.5">{pendingCount} pending review</p>}

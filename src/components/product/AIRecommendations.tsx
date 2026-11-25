@@ -38,7 +38,7 @@ export function AIRecommendations({ productId, currentCategory, ids }: Props) {
   }, [productId, ids]);
 
   if (loading) return (
-    <div className="flex items-center justify-center py-10 gap-3 text-gray-400">
+    <div className="flex items-center justify-center py-6 gap-3 text-gray-400">
       <Loader2 className="w-5 h-5 animate-spin" />
       <span className="text-sm">{t('c1_rec.finding')}</span>
     </div>

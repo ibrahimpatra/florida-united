@@ -32,8 +32,8 @@ export default function AdminPromoTilesPage() {
   const remove = async (id: string) => { if (!confirm('Delete this tile?')) return; await fetch(`/api/promo-tiles?id=${id}`, { method: 'DELETE' }); load(); };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
-      <div className="flex items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-4xl">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Promo tiles</h1>
           <p className="text-gray-500 text-sm">Small clickable boxes on the home page, like Clearance sale, New in or Bundles. Each one opens any page you choose.</p>
@@ -42,7 +42,7 @@ export default function AdminPromoTilesPage() {
       </div>
 
       {form && (
-        <div className="card p-5 mb-6 space-y-4">
+        <div className="card p-5 mb-4 space-y-4">
           <div className="grid sm:grid-cols-2 gap-3">
             <div><label className="label">Title (English) *</label><input className="input-field" value={form.title} onChange={e => f('title', e.target.value)} placeholder="Clearance sale" /></div>
             <div><label className="label">Title (Arabic)</label><input dir="rtl" className="input-field" value={form.titleAr || ''} onChange={e => f('titleAr', e.target.value)} /></div>

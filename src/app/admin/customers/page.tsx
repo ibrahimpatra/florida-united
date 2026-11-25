@@ -47,8 +47,8 @@ export default function AdminCustomersPage() {
   const totalPages = Math.ceil(total / 20);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Customers</h1>
           <p className="text-gray-500 text-sm">{total} registered customers</p>
@@ -58,7 +58,7 @@ export default function AdminCustomersPage() {
         </button>
       </div>
 
-      <div className="card p-4 mb-6">
+      <div className="card p-4 mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
           <input

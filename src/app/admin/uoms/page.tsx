@@ -105,8 +105,8 @@ export default function AdminUOMPage() {
   const filtered = filterCat === 'all' ? uoms : uoms.filter(u => u.category === filterCat);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display flex items-center gap-3"><Package className="w-7 h-7 text-brand-600"/>Units of Measure (UOM)</h1>
           <p className="text-gray-500 text-sm mt-0.5">{uoms.length} UOMs · Used for product quantity, pricing, and ordering</p>
@@ -122,7 +122,7 @@ export default function AdminUOMPage() {
       </div>
 
       {/* Category filter */}
-      <div className="flex gap-2 flex-wrap mb-6">
+      <div className="flex gap-2 flex-wrap mb-4">
         <button onClick={() => setFilterCat('all')} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${filterCat === 'all' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>All ({uoms.length})</button>
         {CATEGORIES.map(cat => (
           <button key={cat} onClick={() => setFilterCat(cat)}
@@ -138,7 +138,7 @@ export default function AdminUOMPage() {
         <div className="card p-16 text-center">
           <Package className="w-12 h-12 text-gray-300 mx-auto mb-4"/>
           <p className="text-gray-500 font-semibold mb-1">No UOMs configured</p>
-          <p className="text-gray-400 text-sm mb-6">Click "Seed Defaults" to add 35+ standard units</p>
+          <p className="text-gray-400 text-sm mb-4">Click "Seed Defaults" to add 35+ standard units</p>
           <button onClick={seedDefaults} disabled={seeding} className="btn-primary py-2 px-6 text-sm"><RefreshCw className="w-4 h-4"/>Seed Defaults</button>
         </div>
       ) : (
@@ -177,7 +177,7 @@ export default function AdminUOMPage() {
               <h3 className="font-bold text-gray-900 text-lg">{editingUOM.id ? 'Edit' : 'New'} Unit of Measure</h3>
               <button onClick={() => setEditingUOM(null)} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5"/></button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-4 space-y-4">
               <TranslateButton context="a unit of measure (and its abbreviation) for hardware products" fields={[
                 { en: editingUOM.name, ar: editingUOM.nameAr, set: v => setEditingUOM(u => ({ ...u!, nameAr: v })) },
                 { en: editingUOM.abbreviation, ar: (editingUOM as any).abbreviationAr, set: v => setEditingUOM(u => ({ ...u!, abbreviationAr: v } as any)) },

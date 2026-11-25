@@ -47,13 +47,13 @@ export function CartPageClient() {
     <div className="container-custom py-20 text-center">
       <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-6" />
       <h2 className="text-2xl font-bold text-gray-900 mb-3 font-display">{t('c1_cart2.emptyTitle')}</h2>
-      <p className="text-gray-500 mb-8">{t('c1_cart2.emptySub')}</p>
+      <p className="text-gray-500 mb-5">{t('c1_cart2.emptySub')}</p>
       <Link href="/shop" className="btn-primary">{t('c1_cart2.shopNow')}</Link>
     </div>
   );
 
   return (
-    <div className="container-custom py-8">
+    <div className="container-custom py-5">
       <h1 className="text-2xl font-bold text-gray-900 mb-6 font-display flex items-center gap-3"><ShoppingBag className="w-7 h-7 text-brand-600"/>{t('c1_cart2.title')} <span className="text-base font-normal text-gray-500">({t('c1_cart2.items', { n: items.length })})</span></h1>
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Items */}

@@ -63,7 +63,7 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        <div className="container-custom py-8 max-w-3xl">
+        <div className="container-custom py-5 max-w-3xl">
           {loading ? (
             <div className="space-y-4">{[1,2,3].map(i=>(
               <div key={i} className="card p-6 animate-pulse">

@@ -14,7 +14,7 @@ import { writeProductCopy } from './product-copy';
 import { SPECS, missingFields, fillEntity } from './entity-fill';
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
-export interface Job { id: string; type: 'seo' | 'fill'; collection?: string; status: JobStatus; productId: string; productName: string; attempts: number; error?: string; result?: any; provider?: string; createdAt: string; updatedAt: string }
+export interface Job { id: string; type: 'seo' | 'fill' | 'images'; collection?: string; status: JobStatus; productId: string; productName: string; attempts: number; error?: string; result?: any; provider?: string; createdAt: string; updatedAt: string }
 
 const COL = 'jobs';
 const MAX_ATTEMPTS = 3;
@@ -82,6 +82,17 @@ export async function enqueueFill(collection: string, entityId: string): Promise
 }
 
 /** Runs one job. Safe to call twice: the status check inside a transaction lets only one runner start it. */
+/** Queues "copy this product's linked pictures onto our storage" jobs (one per product; no AI involved). */
+export async function enqueueImageCopies(productIds: string[]): Promise<number> {
+  const db = getAdminDb(); const iso = new Date().toISOString(); const ids = [...new Set(productIds)];
+  for (let i = 0; i < ids.length; i += 400) {
+    const batch = db.batch();
+    ids.slice(i, i + 400).forEach(id => batch.set(db.collection(COL).doc(`images_${id}`), { type: 'images', status: 'queued', productId: id, productName: '', attempts: 0, error: '', createdAt: iso, updatedAt: iso }));
+    await batch.commit();
+  }
+  return ids.length;
+}
+
 export async function runJob(id: string): Promise<Job | null> {
   const db = getAdminDb(); const ref = db.collection(COL).doc(id);
   const claimed = await db.runTransaction(async (tx: any) => {
@@ -96,6 +107,29 @@ export async function runJob(id: string): Promise<Job | null> {
   running++;
   const finish = async (patch: any) => { await ref.update({ ...patch, updatedAt: new Date().toISOString() }); };
   try {
+    if (claimed.type === 'images') {
+      const { isExternalImage, ingestImage } = await import('./image-ingest');
+      const pRef = db.collection('products').doc(claimed.productId); const snap = await pRef.get();
+      if (!snap.exists) { await finish({ status: 'failed', error: 'The product no longer exists.', attempts: MAX_ATTEMPTS }); return null; }
+      const p: any = snap.data(); const imgs: string[] = Array.isArray(p.images) ? p.images : [];
+      const todo = imgs.filter(isExternalImage);
+      if (!todo.length) { await finish({ status: 'done', productName: String(p.name || ''), result: { copied: 0, note: 'Nothing to copy.' } }); return null; }
+      const next: string[] = []; let copied = 0; const failed: string[] = [];
+      for (const u of imgs) {
+        if (!isExternalImage(u)) { next.push(u); continue; }
+        try { next.push(await ingestImage(u, String(p.sku || p.name || ''))); copied++; }
+        catch (e: any) { next.push(u); failed.push(`${u.slice(0, 80)}: ${String(e?.message || e).slice(0, 120)}`); }   // keep the original link so the product still has a picture
+      }
+      // only the pictures changed; re-read the product first so edits made while we were downloading are not overwritten
+      const fresh = (await pRef.get()).data() as any;
+      const cur: string[] = Array.isArray(fresh?.images) ? fresh.images : imgs;
+      const map = new Map(imgs.map((o, i) => [o, next[i]]));
+      await pRef.update({ images: cur.map(u => map.get(u) ?? u), updatedAt: new Date().toISOString() });
+      try { (await import('./firestore-admin')).invalidateProductCache?.(false, { ids: [claimed.productId] }); } catch { /* refreshes on its own */ }
+      // a picture that could not be fetched is a final answer for this link: do not retry forever
+      await finish({ status: failed.length && !copied ? 'failed' : 'done', productName: String(p.name || ''), attempts: failed.length && !copied ? MAX_ATTEMPTS : claimed.attempts + 1, error: failed.join(' | ').slice(0, 400), result: { copied, failed: failed.length } });
+      return null;
+    }
     if (claimed.type === 'fill' && claimed.collection) {
       const spec = SPECS[claimed.collection]; const eRef = db.collection(claimed.collection).doc(claimed.productId); const es = await eRef.get();
       if (!spec || !es.exists) { await finish({ status: 'failed', error: 'The item no longer exists.', attempts: MAX_ATTEMPTS }); return null; }
@@ -145,7 +179,7 @@ export async function runQueued(budgetMs = 40_000): Promise<{ ran: number; left:
   const rows = (s: any) => s.docs.map((d: any) => ({ id: d.id, ...d.data() } as Job));
   const [q, r] = await Promise.all([col.where('status', '==', 'queued').limit(30).get(), col.where('status', '==', 'running').limit(50).get()]);
   const all = [...rows(q), ...rows(r).filter((j: Job) => Date.now() - new Date(j.updatedAt).getTime() > STALE_RUNNING_MS)];
-  if (all.length) { try { await (await import('./ai-usage')).assertBulkAllowed(); } catch (e: any) { if (e?.name === 'AiCapError') return { ran: 0, left: all.length }; } }
+  if (all.some((j: Job) => j.type !== 'images')) { try { await (await import('./ai-usage')).assertBulkAllowed(); } catch (e: any) { if (e?.name === 'AiCapError') return { ran: 0, left: all.length }; } }
   for (const j of all) {
     if (Date.now() - t0 > budgetMs - 12_000) break;
     await runJob(j.id); ran++;

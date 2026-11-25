@@ -22,7 +22,7 @@ export function InfoPage({ title, intro, sections, updated }: { title: Bi; intro
             {updated && <p className="mt-3 text-xs text-gray-400">{isArabic ? 'آخر تحديث' : 'Last updated'}: {updated}</p>}
           </div>
         </div>
-        <div className="container-custom py-10 grid lg:grid-cols-[14rem_1fr] gap-10">
+        <div className="container-custom py-6 grid lg:grid-cols-[14rem_1fr] gap-10">
           <nav className="hidden lg:block">
             <ul className="sticky top-28 space-y-2 border-s border-gray-200 ps-4 text-sm">
               {sections.map((s, i) => <li key={i}><a href={`#s${i}`} className="text-gray-500 hover:text-brand-700">{x(s.h)}</a></li>)}

@@ -11,7 +11,7 @@ export default function EditProductPage() {
   }, [id]);
   if (loading) return <div className="p-8"><div className="skeleton h-96 w-full rounded-2xl"/></div>;
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-3 sm:p-4 lg:p-5">
       <ProductForm initialData={product} productId={id} />
     </div>
   );

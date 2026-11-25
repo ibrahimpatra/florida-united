@@ -35,7 +35,7 @@ export default function ContactPage() {
           <p className="text-gray-500">{t('c2_contact.sub')}</p>
         </div>
       </div>
-      <div className="container-custom py-12">
+      <div className="container-custom py-5">
         <div className="grid lg:grid-cols-3 gap-10">
           {/* Info */}
           <div className="space-y-6">

@@ -58,8 +58,8 @@ export default function AccountSettingsPage() {
     <><Header />
     <main className="bg-gray-50 min-h-screen">
       <div className="page-hero"><div className="container-custom"><h1 className="text-2xl font-bold text-gray-900 font-display">{t('c2_set.title')}</h1></div></div>
-      <div className="container-custom py-8 max-w-2xl">
-        <div className="flex gap-1 border-b border-gray-200 mb-8">
+      <div className="container-custom py-5 max-w-2xl">
+        <div className="flex gap-1 border-b border-gray-200 mb-5">
           {tabs.map(([key, label, Icon]) => (
             <button key={key} onClick={() => setTab(key)}
               className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>

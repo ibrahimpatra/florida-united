@@ -212,9 +212,9 @@ export function ProductForm({ initialData, productId }: Props) {
           {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <><Save className="w-4 h-4"/>{productId?'Save':'Create'}</>}
         </button>
       </div>
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-3 gap-4">
         {/* Main */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4">
           {/* Basic Info */}
           <div className="card p-6">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">

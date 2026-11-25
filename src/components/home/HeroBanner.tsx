@@ -60,7 +60,7 @@ export function HeroBanner() {
             {slide.badge && <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-brand-950 bg-accent-500 mb-4">{slide.badge}</span>}
             <h1 className="text-[1.75rem] md:text-4xl lg:text-5xl font-extrabold text-white leading-[1.15] mb-2 font-display">{slide.title}</h1>
             {slide.subtitle && <p className="text-white/85 font-medium mb-4 text-base md:text-lg">{slide.subtitle}</p>}
-            {slide.description && <p className="text-white/70 text-sm md:text-base mb-8 leading-relaxed max-w-lg">{slide.description}</p>}
+            {slide.description && <p className="text-white/70 text-sm md:text-base mb-5 leading-relaxed max-w-lg">{slide.description}</p>}
             <div className="flex flex-wrap gap-3">
               {slide.cta && <Link href={slide.ctaLink} className="inline-flex items-center gap-2 px-6 py-3 bg-accent-500 text-brand-950 font-bold rounded-full shadow-soft hover:bg-accent-400 active:scale-[0.98] transition">{slide.cta}</Link>}
               {slide.cta2 && <Link href={slide.cta2Link || '/shop'} className="inline-flex items-center gap-2 px-6 py-3 text-white font-semibold rounded-full border border-white/40 hover:bg-white/10 active:scale-[0.98] transition">{slide.cta2}</Link>}

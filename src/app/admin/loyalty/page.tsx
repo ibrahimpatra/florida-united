@@ -27,7 +27,7 @@ export default function AdminLoyaltyPage() {
   const worth100 = Math.round(100 * s.pointValueKwd * 1000) / 1000;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl space-y-6">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-3xl space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 font-display">Loyalty points</h1>
         <p className="text-gray-500 text-sm">Customers earn points when an order is delivered and can spend them at checkout. Cancelled orders give used points back; refunded returns take back the points earned.</p>

@@ -315,7 +315,7 @@ export function SmartReturnFlow({ order, onSuccess, onCancel }: Props) {
   );
 
   if (step === 'submitting') return (
-    <div className="text-center py-10 space-y-4">
+    <div className="text-center py-6 space-y-4">
       <Loader2 className="w-12 h-12 text-brand-600 animate-spin mx-auto" />
       <p className="font-semibold text-gray-700">{progress || t('c2_ret.submitting')}</p>
     </div>

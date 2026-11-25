@@ -39,7 +39,7 @@ export default function AdminNotificationsPage() {
   const set = (k: keyof typeof EMPTY) => (e: any) => setF(p => ({ ...p, [k]: e.target.value }));
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
       <div>
         <h1 className="text-xl font-black text-gray-900 flex items-center gap-2"><Bell className="w-5 h-5 text-brand-600" />Notifications</h1>
         <p className="text-sm text-gray-500 mt-1">Send an offer or announcement to every customer's bell. Order updates, new orders and return requests are sent automatically.</p>

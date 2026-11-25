@@ -11,7 +11,7 @@ export function LoyaltyCard() {
   const info = useLoyalty();
   if (!info?.enabled || !info.settings) return null;
   return (
-    <Link href="/account/loyalty" className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 p-4 mb-8 hover:border-brand-300 transition-colors">
+    <Link href="/account/loyalty" className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 p-4 mb-5 hover:border-brand-300 transition-colors">
       <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center"><Gift className="w-5 h-5" /></div>
       <div className="flex-1 min-w-0">
         <p className="font-bold text-gray-900 text-sm">{isArabic ? 'المكافآت' : 'Rewards'}</p>

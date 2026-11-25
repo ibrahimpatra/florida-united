@@ -11,7 +11,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex flex-col h-screen bg-concrete overflow-hidden">
       <AdminTopBar user={session.user} isSuper={isSuper} />
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto admin-dense">{children}</main>
     </div>
   );
 }

@@ -41,8 +41,8 @@ export default function OrderTrackingPage() {
     <><Header />
     <main className="bg-gray-50 min-h-screen">
       <div className="page-hero"><div className="container-custom"><h1 className="text-3xl font-bold text-gray-900 font-display">{t('c2_trk.title')}</h1><p className="text-gray-500 mt-1">{t('c2_trk.sub')}</p></div></div>
-      <div className="container-custom py-10 max-w-3xl">
-        <div className="card p-6 mb-8">
+      <div className="container-custom py-6 max-w-3xl">
+        <div className="card p-6 mb-5">
           <div className="grid sm:grid-cols-[1fr_1fr_auto] gap-3">
             <input value={orderNo} onChange={e => setOrderNo(e.target.value)} onKeyDown={onKey} placeholder={t('c2_trk.numPh')} dir="ltr" className="input-field" />
             <input value={contact} onChange={e => setContact(e.target.value)} onKeyDown={onKey} placeholder={t('c2_trk.contactPh')} dir="ltr" className="input-field" />

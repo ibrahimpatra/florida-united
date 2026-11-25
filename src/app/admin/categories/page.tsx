@@ -119,8 +119,8 @@ export default function AdminCategoriesPage() {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Categories</h1>
           <p className="text-gray-500 text-sm">{cats.length} categories total</p>
@@ -133,7 +133,7 @@ export default function AdminCategoriesPage() {
 
       {/* ── Form Panel ─────────────────────────────────────── */}
       {(creating || editing) && (
-        <div className="card p-6 mb-6 border-2 border-brand-200">
+        <div className="card p-6 mb-4 border-2 border-brand-200">
           {/* Save and Cancel stay on top while you scroll the form */}
           <div className="sticky top-0 z-10 -mx-6 -mt-6 mb-5 px-6 py-3 bg-white/95 backdrop-blur border-b border-gray-100 rounded-t-2xl flex items-center gap-2">
             <h3 className="flex-1 min-w-0 font-bold text-gray-800 truncate">{editing ? `Edit: ${editing.name}` : 'New category'}</h3>
@@ -239,7 +239,7 @@ export default function AdminCategoriesPage() {
             </Collapsible></div>
 
             {/* Visibility toggles */}
-            <div className="sm:col-span-2 flex flex-wrap gap-6 pt-2 border-t border-gray-100">
+            <div className="sm:col-span-2 flex flex-wrap gap-4 pt-2 border-t border-gray-100">
               <Toggle label="Active" icon={X} field="isActive"/>
               <Toggle label="Show on Homepage Grid" icon={Home} field="showOnHome"/>
               <Toggle label="Show in Nav Bar" icon={Navigation} field="showOnNav"/>

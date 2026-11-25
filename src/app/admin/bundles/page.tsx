@@ -141,9 +141,9 @@ export default function AdminBundlesPage() {
   const f = (key: string, value: any) => setForm((p: any) => ({ ...p, [key]: value }));
 
   return (
-    <div className="p-4 lg:p-8">
+    <div className="p-3 lg:p-5">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-xl lg:text-2xl font-bold text-gray-900 font-display flex items-center gap-2">
             <Gift className="w-6 h-6 text-brand-600" /> Product Bundles
@@ -160,14 +160,14 @@ export default function AdminBundlesPage() {
 
       {/* ── Form ── */}
       {(creating || editing) && (
-        <div className="card p-5 mb-6 border-2 border-brand-200">
+        <div className="card p-5 mb-4 border-2 border-brand-200">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-bold text-gray-800 text-lg">{editing ? `Edit: ${editing.name}` : 'New Bundle'}</h3>
             <button onClick={() => { setEditing(null); setCreating(false); setForm(EMPTY_BUNDLE); }}
               className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
+          <div className="grid lg:grid-cols-2 gap-4">
             <div className="space-y-4">
               <div>
                 <label className="label">Bundle Name *</label>

@@ -31,8 +31,8 @@ export default function LoyaltyPage() {
 
   const body = () => {
     if (status === 'loading' || loading) return <div className="py-20 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-brand-600" /></div>;
-    if (status === 'unauthenticated') return <div className="text-center py-16"><p className="text-gray-600 mb-4">{x.signin}</p><Link href="/auth/login?callbackUrl=/account/loyalty" className="btn-primary">Sign in</Link></div>;
-    if (!info?.enabled || !info.settings) return <p className="text-center text-gray-500 py-16">{x.off}</p>;
+    if (status === 'unauthenticated') return <div className="text-center py-6"><p className="text-gray-600 mb-4">{x.signin}</p><Link href="/auth/login?callbackUrl=/account/loyalty" className="btn-primary">Sign in</Link></div>;
+    if (!info?.enabled || !info.settings) return <p className="text-center text-gray-500 py-6">{x.off}</p>;
     const s = info.settings;
     const tierName = info.tier ? (isArabic && info.tier.nameAr ? info.tier.nameAr : info.tier.name) : '';
     if (!info.joined) return (

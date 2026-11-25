@@ -121,8 +121,8 @@ export default function AdminSettingsPage() {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Store Settings</h1>
           <p className="text-gray-500 text-sm">All changes save to Firestore and apply site-wide instantly — no code edits needed.</p>
@@ -132,7 +132,7 @@ export default function AdminSettingsPage() {
         </button>
       </div>
 
-      <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-6 flex gap-3">
+      <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4 flex gap-3">
         <Info className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-brand-700">
           <strong>Single source of truth.</strong> Phone, address, email, and free shipping threshold set here

@@ -59,8 +59,8 @@ export default function AdminBrandsPage() {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div><h1 className="text-2xl font-bold text-gray-900 font-display">Brands</h1><p className="text-gray-500 text-sm">{brands.length} brands. Brands used on products are added here automatically.</p></div>
         <div className="flex gap-2">
           <Link href="/admin/import" className="btn-secondary py-2 px-4 text-sm flex items-center gap-2"><Upload className="w-4 h-4" />Import from Excel</Link>
@@ -69,7 +69,7 @@ export default function AdminBrandsPage() {
       </div>
 
       {(creating || editing) && (
-        <div className="card p-6 mb-6 border-2 border-brand-200">
+        <div className="card p-6 mb-4 border-2 border-brand-200">
           {/* Save and Cancel stay on top while you scroll the form */}
           <div className="sticky top-0 z-10 -mx-6 -mt-6 mb-5 px-6 py-3 bg-white/95 backdrop-blur border-b border-gray-100 rounded-t-2xl flex items-center gap-2">
             <h3 className="flex-1 min-w-0 font-bold text-gray-800 truncate">{editing ? `Edit: ${editing.name}` : 'New brand'}</h3>
@@ -107,7 +107,7 @@ export default function AdminBrandsPage() {
             </div>
               </div>
             </Collapsible></div>
-            <div className="sm:col-span-2 flex flex-wrap gap-6 pt-2 border-t border-gray-100"><Toggle label="Active" field="isActive" /><Toggle label="Show on homepage" field="showOnHome" /></div>
+            <div className="sm:col-span-2 flex flex-wrap gap-4 pt-2 border-t border-gray-100"><Toggle label="Active" field="isActive" /><Toggle label="Show on homepage" field="showOnHome" /></div>
           </div>
         </div>
       )}

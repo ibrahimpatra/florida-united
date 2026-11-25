@@ -79,7 +79,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
   };
 
   return (
-    <div className="container-custom py-8">
+    <div className="container-custom py-5">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6" aria-label={t('c1_pd.breadcrumb')}>
         <Link href="/" className="hover:text-brand-600">{t('c1_pd.home')}</Link><ChevronRight className="w-4 h-4 rtl:rotate-180" />
@@ -223,7 +223,7 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-8">
+      <div className="border-b border-gray-200 mb-5">
         <div className="flex gap-6">
           {(['desc', 'specs'] as const).map(k => (
             <button key={k} onClick={() => setTab(k)}

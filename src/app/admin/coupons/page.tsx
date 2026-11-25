@@ -84,14 +84,14 @@ export default function AdminCouponsPage() {
   const expired = (c: Coupon) => !!c.expiresAt && new Date(c.expiresAt) < new Date();
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div><h1 className="text-2xl font-bold text-gray-900 font-display">Coupons</h1><p className="text-gray-500 text-sm">{coupons.length} coupons</p></div>
         <button onClick={() => setForm({ ...EMPTY })} className="btn-primary py-2 px-4 text-sm"><Plus className="w-4 h-4" />New Coupon</button>
       </div>
 
       {form && (
-        <div className="card p-4 sm:p-6 mb-6">
+        <div className="card p-4 sm:p-6 mb-4">
           <div className="flex justify-between mb-4"><h3 className="font-bold text-gray-800">{form.id ? 'Edit Coupon' : 'Create Coupon'}</h3><button onClick={() => setForm(null)}><X className="w-4 h-4 text-gray-400" /></button></div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div><label className="label">Code *</label><input value={form.code} onChange={e => f('code', e.target.value.toUpperCase())} className="input-field font-mono uppercase" placeholder="SUMMER20" /></div>

@@ -60,8 +60,8 @@ export default function AdminBannersPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="p-3 sm:p-4 lg:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Homepage Banners</h1>
           <p className="text-gray-500 text-sm">{banners.length} banners. Active banners replace the default hero slides on the homepage, in sort order.</p>
@@ -70,7 +70,7 @@ export default function AdminBannersPage() {
       </div>
 
       {form && (
-        <div className="card p-4 sm:p-6 mb-6">
+        <div className="card p-4 sm:p-6 mb-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-gray-800">{form.id ? 'Edit Banner' : 'New Banner'}</h3>
             <button onClick={() => setForm(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>

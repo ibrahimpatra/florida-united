@@ -128,7 +128,7 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        <div className="container-custom py-8 max-w-2xl space-y-5">
+        <div className="container-custom py-5 max-w-2xl space-y-5">
 
           {/* Status + Action Buttons */}
           <div className="card p-5">

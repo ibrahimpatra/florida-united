@@ -19,7 +19,7 @@ export default function AiUsagePage() {
     <div className={`card p-4 ${warn ? 'border-amber-300 bg-amber-50' : ''}`}><p className="text-xs text-gray-500">{label}</p><p className="text-2xl font-black text-gray-900 mt-1">{value}</p>{sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}</div>
   );
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl">
+    <div className="p-3 sm:p-4 lg:p-5 max-w-5xl">
       <h1 className="text-2xl font-bold text-gray-900 font-display flex items-center gap-2"><Sparkles className="w-6 h-6 text-brand-600" />AI usage</h1>
       <p className="text-sm text-gray-500 mb-5">Counted by this app on every AI call (no prompts or answers are stored). Costs are estimates from list prices; your Google and OpenAI bills are the truth.</p>
 

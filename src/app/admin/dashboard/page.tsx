@@ -52,7 +52,7 @@ export default function AdminDashboard() {
   };
 
   if (loading) return (
-    <div className="p-4 lg:p-8 space-y-6">
+    <div className="p-3 lg:p-5 space-y-4">
       <div className="skeleton h-8 w-48 rounded-xl" />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[1,2,3,4].map(i => <div key={i} className="skeleton h-28 rounded-2xl" />)}
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
   );
 
   if (loadError && !stats) return (
-    <div className="p-4 lg:p-8"><div className="card p-8 text-center">
+    <div className="p-3 lg:p-5"><div className="card p-8 text-center">
       <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2" />
       <p className="font-semibold text-gray-800">{loadError}</p>
       <button onClick={() => { setLoading(true); load(); }} className="btn-primary mt-4 px-4 py-2 text-sm">Retry</button>
@@ -82,9 +82,9 @@ export default function AdminDashboard() {
   const returnsOpen   = ['return_requested', 'return_approved', 'return_picked_up'].reduce((a, k) => a + (stats?.ordersByStatus?.[k] || 0), 0);
 
   return (
-    <div className="p-4 lg:p-8">
+    <div className="p-3 lg:p-5">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-xl lg:text-2xl font-bold text-gray-900 font-display">Dashboard</h1>
           <p className="text-gray-500 text-sm mt-0.5">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -113,7 +113,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
         {statCards.map(({ icon: Icon, label, value, change, color, href }) => (
           <Link key={label} href={href} className="card p-4 hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
             <div className="flex items-center justify-between mb-3">
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Revenue — only money that is really earned */}
-      <div className="card p-4 lg:p-5 mb-6">
+      <div className="card p-4 lg:p-5 mb-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
           <h2 className="font-bold text-gray-900">Revenue</h2>
           <p className="text-xs text-gray-500">Counted once an order is delivered and its return period has ended. Cancelled, returned and refunded orders are never counted.</p>
@@ -179,7 +179,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl mb-6 w-fit">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl mb-4 w-fit">
         {(['overview', 'products', 'categories'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold capitalize transition-all ${activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -190,7 +190,7 @@ export default function AdminDashboard() {
 
       {/* ── Overview Tab ── */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Revenue Chart */}
           <div className="card p-5">
             <h3 className="font-bold text-gray-800 mb-5 flex items-center gap-2">

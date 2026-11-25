@@ -236,13 +236,57 @@ async function syncCatalog(): Promise<void> {
   return syncing;
 }
 
-async function loadAllProducts(fresh: boolean): Promise<Product[]> {
-  if (!fresh) { await syncCatalog(); if (productCache) return productCache.items; }
-  let m = 0; try { m = (await readMarker()).v; } catch {}
+/** Reads the whole products collection straight from the database, with the marker version read first so a snapshot is never older than its number says. */
+async function readAllFromDb(): Promise<{ v: number; items: Product[] }> {
+  let v = 0; try { v = (await readMarker()).v; } catch {}
   const snap = await getAdminDb().collection('products').limit(PRODUCT_CAP).get();
-  const items = toList<Product>(snap);
-  productCache = { at: Date.now(), items }; pendingIds.clear(); syncedVer = m || syncedVer; versionCheckedAt = Date.now();
-  return items;
+  return { v, items: toList<Product>(snap) };
+}
+
+/**
+ * One copy of the catalog shared by EVERY server instance (Vercel data cache), so a cold instance starts from it instead of re-reading
+ * every product. It may be up to an hour old; the marker's change log (syncCatalog) then brings it up to date with a handful of reads.
+ * Returns null outside the Next runtime (tests, scripts) or when the platform cache is unavailable: callers then read the database.
+ */
+let snapshotOverride: null | (() => Promise<{ v: number; items: Product[] } | null>) = null;
+export function __setSnapshotProvider(f: typeof snapshotOverride) { snapshotOverride = f; }   // tests only
+
+async function sharedSnapshot(): Promise<{ v: number; items: Product[] } | null> {
+  if (snapshotOverride) return snapshotOverride();
+  try {
+    const { unstable_cache } = await import('next/cache');
+    const get = unstable_cache(async () => {
+      const r = await readAllFromDb();
+      const kb = Math.round(JSON.stringify(r).length / 1024);
+      if (kb > 1800) console.warn(`[catalog] snapshot is ${kb} KB: the platform cache keeps entries up to 2 MB only, so sharing will stop working soon`);
+      return r;
+    }, ['catalog-snapshot-v1'], { revalidate: 3600, tags: ['catalog-snapshot'] });
+    return await get();
+  } catch { return null; }
+}
+
+/** Tells the shared copy to refresh on its next use (after a full re-read, so cold servers do not start from an old one). */
+async function dropSharedSnapshot() {
+  try { const { revalidateTag } = await import('next/cache'); revalidateTag('catalog-snapshot'); } catch { /* not in the Next runtime */ }
+}
+
+async function loadAllProducts(fresh: boolean): Promise<Product[]> {
+  let usedShared = false;
+  if (!fresh) {
+    await syncCatalog(); if (productCache) return productCache.items;
+    // cold server: start from the shared copy (0 database reads), then catch up through the change log
+    const snap = await sharedSnapshot();
+    usedShared = !!snap;
+    if (snap?.items.length) {
+      productCache = { at: Date.now(), items: snap.items }; pendingIds.clear(); syncedVer = snap.v; versionCheckedAt = 0;
+      await syncCatalog();
+      if (productCache) return productCache.items;   // (null = the log said "reload everything": fall through to the database)
+    }
+  }
+  const r = await readAllFromDb();
+  productCache = { at: Date.now(), items: r.items }; pendingIds.clear(); syncedVer = r.v || syncedVer; versionCheckedAt = Date.now();
+  if (fresh || usedShared) void dropSharedSnapshot();   // the shared copy was unusable or is being replaced: refresh it
+  return r.items;
 }
 
 /** Checks a saved product for missing SEO text and queues the background job. Runs after the response (waitUntil on Vercel). */
@@ -295,7 +339,7 @@ export async function stockForIds(ids: string[]): Promise<Record<string, { inSto
 }
 
 export async function adminGetProducts(
-  filters: ProductFilters & { admin?: boolean; fresh?: boolean; stockStatus?: 'in' | 'out' | 'low' } = {}
+  filters: ProductFilters & { admin?: boolean; fresh?: boolean; stockStatus?: 'in' | 'out' | 'low'; status?: 'active' | 'inactive' | 'archived' } = {}
 ): Promise<PaginatedResponse<Product>> {
   const { sortBy = 'newest', page = 1, pageSize = 24 } = filters;
   // admin lists use the same in-memory list as the shop (kept current by the catalog marker); only the Refresh button forces a full re-read
@@ -326,6 +370,9 @@ export async function adminGetProducts(
   const brandCount = new Map<string, number>();
   if (!filters.admin) items.forEach(p => { const b = String(p.brand || '').trim(); if (b) brandCount.set(b, (brandCount.get(b) || 0) + 1); });
   if (filters.brand) items = items.filter(p => p.brand?.toLowerCase() === filters.brand!.toLowerCase());
+  if (filters.admin && filters.status === 'active') items = items.filter(p => p.isActive !== false && !(p as any).isArchived);
+  if (filters.admin && filters.status === 'inactive') items = items.filter(p => p.isActive === false && !(p as any).isArchived);
+  if (filters.admin && filters.status === 'archived') items = items.filter(p => !!(p as any).isArchived);
   if (filters.inStock) items = items.filter(p => (p.stock ?? 0) > 0);
   if (filters.stockStatus === 'out') items = items.filter(p => (p.stock ?? 0) <= 0);
   if (filters.stockStatus === 'low') items = items.filter(p => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= (p.lowStockAlert ?? 5));
@@ -343,6 +390,8 @@ export async function adminGetProducts(
     rating:     (a, b) => num(b.avgRating) - num(a.avgRating),
     name_asc:   (a, b) => (a.name || '').localeCompare(b.name || ''),
     name_desc:  (a, b) => (b.name || '').localeCompare(a.name || ''),
+    stock_asc:  (a, b) => (a.stock ?? 0) - (b.stock ?? 0),
+    stock_desc: (a, b) => (b.stock ?? 0) - (a.stock ?? 0),
     newest:     (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
   };
   if (scores && sortBy === 'newest') items = [...items].sort((a, b) => (scores!.get(b.id)! - scores!.get(a.id)!) || by.newest(a, b));
@@ -519,6 +568,76 @@ export async function adminDeleteProduct(id: string): Promise<{ deleted?: true; 
   await batch.commit();
   invalidateProductCache(false, { ids: [id] });
   return { deleted: true, message: 'Product deleted.' };
+}
+
+// ── BULK PRODUCT ACTIONS ─────────────────────────────────────
+export type BulkAction =
+  | { action: 'activate' | 'deactivate' | 'archive' | 'feature' | 'unfeature' | 'outOfStock' | 'delete' }
+  | { action: 'category'; categoryId: string }
+  | { action: 'brand'; brand: string }
+  | { action: 'price'; mode: 'percent' | 'amount'; value: number }
+  | { action: 'stock'; value: number };
+
+/**
+ * Applies one change to many products. Uses the shared product list for current prices (no per-product reads), writes in batches of 400,
+ * and tells the catalogue once at the end. Delete goes one by one because each product's order history and bundles must be checked.
+ */
+export async function adminBulkProducts(ids: string[], a: BulkAction): Promise<{ updated: number; skipped: number; archived?: number; deleted?: number; errors: string[] }> {
+  const list = [...new Set(ids.filter(Boolean))].slice(0, 500);
+  if (!list.length) throw new ProductError(400, 'Select at least one product.');
+  const db = getAdminDb();
+  const byId = new Map((await loadAllProducts(false)).map(p => [p.id, p as any]));
+  const errors: string[] = []; let skipped = 0;
+  const known = list.filter(id => { if (byId.has(id)) return true; skipped++; return false; });
+
+  if (a.action === 'delete') {
+    let deleted = 0, archived = 0;
+    for (const id of known) {
+      try { const r = await adminDeleteProduct(id); if (r.deleted) deleted++; else archived++; }
+      catch (e: any) { errors.push(`${byId.get(id)?.name || id}: ${e?.message || 'failed'}`); }
+    }
+    return { updated: deleted + archived, skipped, deleted, archived, errors };
+  }
+
+  const patch = new Map<string, any>();
+  const now = FieldValue.serverTimestamp();
+  if (a.action === 'category') {
+    if (!a.categoryId) throw new ProductError(400, 'Choose a category.');
+    const cat = await resolveCategory(a.categoryId);
+    known.forEach(id => patch.set(id, { categoryId: a.categoryId, ...cat }));
+  } else if (a.action === 'brand') {
+    const brand = String(a.brand || '').trim();
+    known.forEach(id => patch.set(id, { brand }));
+  } else if (a.action === 'price') {
+    const v = Number(a.value);
+    if (!Number.isFinite(v) || v === 0) throw new ProductError(400, 'Enter a price change that is not zero.');
+    for (const id of known) {
+      const old = Number(byId.get(id).price) || 0;
+      const next = Math.round((a.mode === 'percent' ? old * (1 + v / 100) : old + v) * 1000) / 1000;
+      if (!(next >= 0)) { errors.push(`${byId.get(id).name}: the new price would be below zero`); continue; }
+      patch.set(id, { price: next });
+    }
+  } else if (a.action === 'stock') {
+    const v = Math.floor(Number(a.value));
+    if (!(v >= 0)) throw new ProductError(400, 'Stock must be zero or more.');
+    known.forEach(id => patch.set(id, { stock: v }));
+  } else if (a.action === 'outOfStock') known.forEach(id => patch.set(id, { stock: 0 }));
+  else if (a.action === 'activate') known.forEach(id => patch.set(id, { isActive: true, isArchived: false }));
+  else if (a.action === 'deactivate') known.forEach(id => patch.set(id, { isActive: false }));
+  else if (a.action === 'archive') known.forEach(id => patch.set(id, { isActive: false, isArchived: true, archivedAt: now }));
+  else if (a.action === 'feature') known.forEach(id => patch.set(id, { isFeatured: true }));
+  else if (a.action === 'unfeature') known.forEach(id => patch.set(id, { isFeatured: false }));
+  else throw new ProductError(400, 'Unknown bulk action.');
+
+  const entries = [...patch.entries()];
+  for (let i = 0; i < entries.length; i += 400) {
+    const batch = db.batch();
+    entries.slice(i, i + 400).forEach(([id, data]) => batch.update(db.collection('products').doc(id), { ...data, updatedAt: now }));
+    await batch.commit();
+  }
+  if (entries.length) invalidateProductCache(false, { ids: entries.map(e => e[0]) });
+  if (a.action === 'brand' && a.brand?.trim()) import('./brands').then(m => m.ensureBrands([a.brand.trim()])).catch(e => reportIssue('brand auto-create', e));
+  return { updated: entries.length, skipped, errors };
 }
 
 // ── ORDERS ───────────────────────────────────────────────────
@@ -747,6 +866,12 @@ export async function adminGetBundles(activeOnly = false) {
 }
 
 /** Public view: adds live availability (min over components) and free-shipping flag. */
+/** A bundle part shown to shoppers: name, picture and price come from the LIVE product (the copy saved with the bundle is only a fallback if the product is gone). */
+function liveBundleItem(c: any, p: any) {
+  if (!p) return c;
+  return { ...c, productName: p.name, name: p.name, productNameAr: p.nameAr || '', nameAr: p.nameAr || '', price: Number(p.price) || 0, image: p.images?.[0] || c.image || '', slug: p.slug || c.slug || '' };
+}
+
 export async function getStorefrontBundles() {
   const bundles = await adminGetBundles(true);
   const prods = new Map((await loadAllProducts(false)).map(p => [p.id, p as any]));   // parts come from the shared product list: no extra reads
@@ -759,7 +884,7 @@ export async function getStorefrontBundles() {
       available = Math.min(available, Math.floor(Number(p.stock || 0) / (Number(c.quantity) || 1)));
       if (!p.freeShipping) allFree = false;
     }
-    return { ...b, available: valid && Number.isFinite(available) ? available : 0, freeShipping: allFree };
+    return { ...b, items: comps.map(c => liveBundleItem(c, prods.get(c.productId))), available: valid && Number.isFinite(available) ? available : 0, freeShipping: allFree };
   });
 }
 
@@ -776,7 +901,7 @@ export async function getStorefrontBundle(id: string) {
     const p = prods.get(c.productId);
     if (!p || p.isActive === false) valid = false;
     else { available = Math.min(available, Math.floor(Number(p.stock || 0) / (Number(c.quantity) || 1))); if (!p.freeShipping) allFree = false; }
-    return { ...c, slug: p?.slug || '', image: p?.images?.[0] || c.image || '', price: Number(c.price ?? p?.price ?? 0) };
+    return { ...liveBundleItem(c, p), slug: p?.slug || '' };
   });
   const cap = SHOPPER_QTY_CAP;   // shoppers never see the real number
   return { ...b, items, available: valid && Number.isFinite(available) ? Math.max(0, Math.min(available, cap)) : 0, freeShipping: allFree };
