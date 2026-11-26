@@ -1,6 +1,11 @@
 import type { p2En } from './p2.en';
 export const p2Ar: typeof p2En = {
   c2_chk: {
+    calculating: "جارٍ حساب التوصيل، لحظة…",
+    fixFields: "يرجى إكمال الحقول المظللة.",
+    retry: "حاول مرة أخرى",
+    pickGov: "اختر المحافظة لعرض سعر التوصيل.",
+    sheetClose: "إغلاق",
     placing: "جارٍ إرسال طلبك…",
     failGeneric: "تعذّر إتمام طلبك حاليًا. لم يتم خصم أي مبلغ. يرجى المحاولة مرة أخرى.",
     failShort: "فشل الطلب.",

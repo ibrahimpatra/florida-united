@@ -5,7 +5,7 @@ import { useStoreSettings } from '@/lib/useStoreSettings';
 import { useState, useRef, useEffect, ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { CreditCard, Banknote, MapPin, User, ChevronDown, Loader2, Lock, AlertTriangle, Plus } from 'lucide-react';
+import { CreditCard, Banknote, MapPin, User, ChevronDown, Loader2, Lock, AlertTriangle, Plus, ChevronUp } from 'lucide-react';
 import { formatPrice, govLabel } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import { KUWAIT_GOVERNORATES } from '@/types';
@@ -22,7 +22,8 @@ interface FormData {
 interface Props {
   items: CartItem[];
   governorate: string; onGovernorateChange: (g: string) => void;
-  rateId?: string; quoteReady: boolean; codFee: number; total: number;
+  rateId?: string; quoteReady: boolean; quoteLoading?: boolean; quoteError?: string | null; onRetryQuote?: () => void;
+  itemCount?: number; onOpenSummary?: () => void; codFee: number; total: number;
   couponCode?: string; redeemPoints?: number; userEmail?: string; shippingSlot: ReactNode;
 }
 type Pay = 'card' | 'cod';
@@ -34,7 +35,7 @@ async function readJson(res: Response): Promise<any | null> {
   try { return await res.json(); } catch { return null; }
 }
 
-export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, rateId, quoteReady, codFee, total, couponCode, redeemPoints, userEmail, shippingSlot }: Props) {
+export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, rateId, quoteReady, quoteLoading, quoteError, onRetryQuote, itemCount, onOpenSummary, codFee, total, couponCode, redeemPoints, userEmail, shippingSlot }: Props) {
   const router = useRouter();
   const { t, isArabic } = useLanguage();
   const { clearCart, removeCoupon } = useCartStore();
@@ -47,6 +48,15 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [govError, setGovError] = useState(false);
+  const [typing, setTyping] = useState(false);   // phones: the bottom bar steps aside while the on-screen keyboard is open, so it can never cover the field being typed in
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return;
+    const check = () => setTyping(vv.height < window.innerHeight * 0.75);   // the keyboard takes more than a quarter of the screen
+    vv.addEventListener('resize', check); check();
+    return () => vv.removeEventListener('resize', check);
+  }, []);
+  const goTo = (id: string) => { const el = document.getElementById(id); if (!el) return; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => (el as HTMLElement).focus?.({ preventScroll: true }), 350); };
   const [saved, setSaved] = useState<any[]>([]);
   const [pickedId, setPickedId] = useState<string>('new');
   const inFlight = useRef(false);          // synchronous guard — state updates are async and a fast double-click beats them
@@ -87,8 +97,9 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
 
   const onSubmit = async (d: FormData) => {
     if (inFlight.current || done) return;
-    if (!governorate) { setGovError(true); toast.error(t('checkout.selectGovernorate')); return; }
-    if (!quoteReady || !rateId) { toast.error(t('checkout.quoteFailed')); return; }
+    if (!governorate) { setGovError(true); toast.error(t('checkout.selectGovernorate')); goTo('f-gov'); return; }
+    if (quoteLoading) { toast(t('c2_chk.calculating')); return; }
+    if (!quoteReady || !rateId) { toast.error(quoteError || t('checkout.quoteFailed')); onRetryQuote?.(); return; }
     inFlight.current = true; setBusy(true);
     const stopBusy = startBusy(t('c2_chk.placing'));
 
@@ -153,11 +164,22 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
     }
   };
 
+  // The button is never silently dead: if something is missing the shopper is taken to it and told what it is.
+  const onInvalid = (errs: any) => {
+    const first = Object.keys(errs)[0];
+    if (!governorate) setGovError(true);
+    toast.error(t('c2_chk.fixFields'));
+    if (first) goTo(`f-${first}`);
+  };
+  const PlaceLabel = () => busy
+    ? <><Loader2 className="w-5 h-5 animate-spin" />{t('checkout.processing')}</>
+    : pay === 'card' ? <><CreditCard className="w-5 h-5" />{t('c2_pay.payCard')} — {quoteReady ? formatPrice(total) : '...'}</>
+    : <><Banknote className="w-5 h-5" />{t('checkout.placeCod')} — {quoteReady ? formatPrice(total + codFee) : '...'}</>;
   const L = ({ k, req }: { k: string; req?: boolean }) => <label className="text-xs text-gray-500 font-semibold mb-1 block">{t(k)}{req ? ' *' : ''}</label>;
   const E = ({ m }: { m?: string }) => (m ? <p className="text-red-500 text-xs mt-1">{m}</p> : null);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-7" noValidate>
+    <form id="checkout-form" onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-7" noValidate>
       {saved.length > 0 && (
         <section>
           <h3 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-600" />{t('checkout.savedAddresses')}</h3>
@@ -181,15 +203,15 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
       <section>
         <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><User className="w-4 h-4 text-brand-600" />{t('checkout.contactInfo')}</h3>
         <div className="grid grid-cols-2 gap-3">
-          <div><input {...register('firstName', { required: t('checkout.required') })} placeholder={t('checkout.firstName')} className="input-field" autoComplete="given-name" /><E m={errors.firstName?.message} /></div>
-          <div><input {...register('lastName')} placeholder={t('checkout.lastName')} className="input-field" autoComplete="family-name" /></div>
+          <div><input id="f-firstName" {...register('firstName', { required: t('checkout.required') })} placeholder={t('checkout.firstName')} className="input-field" autoComplete="given-name" /><E m={errors.firstName?.message} /></div>
+          <div><input id="f-lastName" {...register('lastName')} placeholder={t('checkout.lastName')} className="input-field" autoComplete="family-name" /></div>
           <div className="col-span-2">
-            <input {...register('email', { required: t('checkout.required'), pattern: { value: /\S+@\S+\.\S+/, message: t('checkout.invalidEmail') } })}
+            <input id="f-email" {...register('email', { required: t('checkout.required'), pattern: { value: /\S+@\S+\.\S+/, message: t('checkout.invalidEmail') } })}
               type="email" placeholder={t('checkout.email')} className="input-field" dir="ltr" autoComplete="email" /><E m={errors.email?.message} />
           </div>
           <div className="col-span-2 relative">
             <span className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-semibold" dir="ltr">+965</span>
-            <input {...register('phone', { required: t('checkout.required'), setValueAs: v => String(v || '').replace(/\D/g, '').replace(/^965/, ''), pattern: { value: /^[569]\d{7}$/, message: t('checkout.invalidPhone') } })}
+            <input id="f-phone" {...register('phone', { required: t('checkout.required'), setValueAs: v => String(v || '').replace(/\D/g, '').replace(/^965/, ''), pattern: { value: /^[569]\d{7}$/, message: t('checkout.invalidPhone') } })}
               inputMode="numeric" placeholder={t('checkout.mobile')} className="input-field ps-14" maxLength={12} dir="ltr" autoComplete="tel-national" />
             <E m={errors.phone?.message} />
           </div>
@@ -202,7 +224,7 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
           <div className="col-span-2 sm:col-span-1">
             <L k="checkout.governorate" req />
             <div className="relative">
-              <select value={governorate} onChange={e => { onGovernorateChange(e.target.value); setGovError(false); }}
+              <select id="f-gov" value={governorate} onChange={e => { onGovernorateChange(e.target.value); setGovError(false); }}
                 className={`input-field appearance-none pe-8 ${govError ? 'border-red-400' : ''}`}>
                 <option value="">{t('checkout.selectGovernorate')}</option>
                 {KUWAIT_GOVERNORATES.map(g => <option key={g} value={g}>{govLabel(g, isArabic)}</option>)}
@@ -211,10 +233,10 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
             </div>
             {govError && <E m={t('checkout.required')} />}
           </div>
-          <div className="col-span-2 sm:col-span-1"><L k="checkout.areaCity" req /><input {...register('city', { required: t('checkout.required') })} className="input-field" /><E m={errors.city?.message} /></div>
-          <div><L k="checkout.block" req /><input {...register('block', { required: t('checkout.required') })} className="input-field" /><E m={errors.block?.message} /></div>
-          <div><L k="checkout.street" req /><input {...register('street', { required: t('checkout.required') })} className="input-field" /><E m={errors.street?.message} /></div>
-          <div><L k="checkout.building" req /><input {...register('building', { required: t('checkout.required') })} className="input-field" /><E m={errors.building?.message} /></div>
+          <div className="col-span-2 sm:col-span-1"><L k="checkout.areaCity" req /><input id="f-city" {...register('city', { required: t('checkout.required') })} className="input-field" /><E m={errors.city?.message} /></div>
+          <div><L k="checkout.block" req /><input id="f-block" {...register('block', { required: t('checkout.required') })} className="input-field" /><E m={errors.block?.message} /></div>
+          <div><L k="checkout.street" req /><input id="f-street" {...register('street', { required: t('checkout.required') })} className="input-field" /><E m={errors.street?.message} /></div>
+          <div><L k="checkout.building" req /><input id="f-building" {...register('building', { required: t('checkout.required') })} className="input-field" /><E m={errors.building?.message} /></div>
           <div><L k="checkout.floor" /><input {...register('floor')} className="input-field" /></div>
           <div className="col-span-2"><L k="checkout.apartment" /><input {...register('apartment')} className="input-field" /></div>
           <div className="col-span-2"><L k="checkout.notes" /><textarea {...register('notes')} placeholder={t('checkout.notesPlaceholder')} className="input-field resize-none h-16 text-sm" /></div>
@@ -263,12 +285,33 @@ export function KuwaitCheckoutForm({ items, governorate, onGovernorateChange, ra
         </div>
       )}
 
-      <button type="submit" disabled={busy || done || !quoteReady}
-        className="md:sticky md:bottom-3 md:z-30 shadow-float w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-full flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-base">
-        {busy ? <><Loader2 className="w-5 h-5 animate-spin" />{t('checkout.processing')}</>
-          : pay === 'card' ? <><CreditCard className="w-5 h-5" />{t('c2_pay.payCard')} — {quoteReady ? formatPrice(total) : '...'}</>
-          : <><Banknote className="w-5 h-5" />{t('checkout.placeCod')} — {quoteReady ? formatPrice(total + codFee) : '...'}</>}
+      {/* Delivery price problems are shown right above the button, with a way to retry */}
+      {governorate && quoteError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <span>{quoteError}</span>
+          <button type="button" onClick={onRetryQuote} className="font-bold underline shrink-0">{t('c2_chk.retry')}</button>
+        </div>
+      )}
+      {!governorate && <p className="text-sm text-gray-500 text-center">{t('c2_chk.pickGov')}</p>}
+
+      <button type="submit" disabled={busy || done}
+        className="hidden md:flex shadow-float w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-full items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-base">
+        <PlaceLabel />
       </button>
+
+      {/* Phones: one bar at the bottom: order summary (opens a sheet) + Place order */}
+      <div className={`md:hidden fixed inset-x-0 bottom-0 z-50 bg-white border-t border-gray-200 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-transform duration-200 ${typing ? 'translate-y-full' : 'translate-y-0'}`}>
+        <div className="flex items-center gap-2.5">
+          <button type="button" onClick={onOpenSummary} className="flex-1 min-w-0 text-start rounded-xl bg-gray-50 border border-gray-100 px-3 py-2 active:bg-gray-100" aria-label={t('checkout.orderSummary')}>
+            <span className="flex items-center gap-1 text-[11px] text-gray-500 font-semibold"><ChevronUp className="w-3.5 h-3.5" />{t('checkout.orderSummary')} ({itemCount ?? items.length})</span>
+            <span className="block font-black text-gray-900 text-base leading-tight">{quoteReady ? formatPrice(pay === 'card' ? total : total + codFee) : (quoteLoading ? '...' : '—')}</span>
+          </button>
+          <button type="submit" disabled={busy || done}
+            className="flex-[1.15] py-3.5 bg-brand-600 active:bg-brand-700 text-white font-bold rounded-full flex items-center justify-center gap-2 disabled:opacity-60 text-[15px]">
+            {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null}{busy ? t('checkout.processing') : (pay === 'card' ? t('c2_pay.payCard') : t('checkout.placeCod'))}
+          </button>
+        </div>
+      </div>
     </form>
   );
 }

@@ -26,6 +26,7 @@ module.exports = {
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',
         'slide-up': 'slideUp 0.4s ease-out',
+        'sheet-up': 'sheetUp 0.25s ease-out',
         'slide-down': 'slideDown 0.3s ease-out',
         'scale-in': 'scaleIn 0.2s ease-out',
         'shimmer': 'shimmer 1.5s infinite',
@@ -40,6 +41,10 @@ module.exports = {
         slideUp: {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        sheetUp: {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
         },
         slideDown: {
           '0%': { transform: 'translateY(-10px)', opacity: '0' },

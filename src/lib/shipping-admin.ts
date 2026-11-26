@@ -2,7 +2,7 @@
  * shipping-admin.ts — Admin SDK versions of shippingService functions
  * Use in API routes only. Never import in client components.
  */
-import { memo, dropMemo } from './memo';
+import { memo, dropMemo, cfgMemo, dropCfg } from './memo';
 import { getAdminDb } from './firebase-admin';
 import { queueFill } from './bg';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -18,25 +18,24 @@ function toList<T>(snap: FirebaseFirestore.QuerySnapshot): T[] {
 
 // ── Shipping Zones ────────────────────────────────────────────
 export async function adminGetShippingZones(): Promise<ShippingZone[]> {
-  return toList<ShippingZone>(await getAdminDb().collection('shippingZones').get()).sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || String(a.name || '').localeCompare(String(b.name || '')));
+  return (await cfgMemo(getAdminDb(), 'zones', 5 * 60_000, async () => toList<ShippingZone>(await getAdminDb().collection('shippingZones').get()))).slice().sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || String(a.name || '').localeCompare(String(b.name || '')));
 }
-export async function adminCreateShippingZone(data: Omit<ShippingZone,'id'|'createdAt'|'updatedAt'>): Promise<string> {
+export async function adminCreateShippingZone(data: Omit<ShippingZone,'id'|'createdAt'|'updatedAt'>): Promise<string> { dropCfg();
   const ref = await getAdminDb().collection('shippingZones').add({ ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
   return ref.id;
 }
-export async function adminUpdateShippingZone(id: string, data: Partial<ShippingZone>): Promise<void> {
+export async function adminUpdateShippingZone(id: string, data: Partial<ShippingZone>): Promise<void> { dropCfg();
   await getAdminDb().collection('shippingZones').doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
 }
-export async function adminDeleteShippingZone(id: string): Promise<void> {
+export async function adminDeleteShippingZone(id: string): Promise<void> { dropCfg();
   await getAdminDb().collection('shippingZones').doc(id).delete();
 }
 
 // ── Shipping Config ───────────────────────────────────────────
 export async function adminGetShippingConfig(): Promise<ShippingConfig | null> {
-  const snap = await getAdminDb().doc('config/shippingConfig').get();
-  return snap.exists ? (snap.data() as ShippingConfig) : null;
+  return cfgMemo(getAdminDb(), 'shipping-config', 5 * 60_000, async () => { const snap = await getAdminDb().doc('config/shippingConfig').get(); return snap.exists ? (snap.data() as ShippingConfig) : null; });
 }
-export async function adminSaveShippingConfig(config: Partial<ShippingConfig>): Promise<void> {
+export async function adminSaveShippingConfig(config: Partial<ShippingConfig>): Promise<void> { dropCfg();
   await getAdminDb().doc('config/shippingConfig').set({ ...config, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 

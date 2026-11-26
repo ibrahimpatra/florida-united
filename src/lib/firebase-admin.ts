@@ -4,6 +4,7 @@ import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getStorage, Storage } from 'firebase-admin/storage';
 import { log } from './logger';
+import './read-meter';   // counts database reads per route (Admin > Read meter)
 
 let adminApp: App;
 let adminDb: Firestore;

@@ -214,6 +214,7 @@ export const p1Ar: typeof p1En = {
     sku: "رمز المنتج",
   },
   c1_pd: {
+    qty: 'الكمية',
     home: "الرئيسية",
     shop: "المتجر",
     breadcrumb: "مسار التنقل",

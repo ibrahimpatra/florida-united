@@ -8,15 +8,16 @@
  * Give back: cancelling an order returns the points that were used. A refunded return takes back the points earned on the refunded part.
  */
 import { FieldValue } from 'firebase-admin/firestore';
+import { cfgMemo, dropCfg } from './memo';
 import { getAdminDb } from './firebase-admin';
 import { returnWindowDays, deliveredAtOf } from './returns';
 import { DEFAULT_LOYALTY, earnPoints, round3, sanitizeLoyalty, type LoyaltySettings } from './loyalty-core';
 
 export async function loadLoyaltySettings(db = getAdminDb()): Promise<LoyaltySettings> {
-  try { const s = await db.collection('settings').doc('loyalty').get(); return s.exists ? sanitizeLoyalty(s.data()) : DEFAULT_LOYALTY; }
+  try { return await cfgMemo(db, 'loyalty-settings', 10 * 60_000, async () => { const s = await db.collection('settings').doc('loyalty').get(); return s.exists ? sanitizeLoyalty(s.data()) : DEFAULT_LOYALTY; }); }
   catch { return DEFAULT_LOYALTY; }
 }
-export async function saveLoyaltySettings(b: any) { const s = sanitizeLoyalty(b); await getAdminDb().collection('settings').doc('loyalty').set(s); return s; }
+export async function saveLoyaltySettings(b: any) { dropCfg(); const s = sanitizeLoyalty(b); await getAdminDb().collection('settings').doc('loyalty').set(s); return s; }
 
 export async function getBalance(userId: string) {
   const u: any = (await getAdminDb().collection('users').doc(userId).get()).data() || {};

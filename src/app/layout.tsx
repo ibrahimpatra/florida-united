@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import '../styles/globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { AgentChat } from '@/components/agent/AgentChat';
+import { AdminErrorTray } from '@/components/layout/AdminErrorTray';
 import { ClientIssueLogger } from '@/components/layout/ClientIssueLogger';
 import { siteUrl } from '@/lib/seo';
 import { getBrand } from '@/lib/brand-server';
@@ -73,6 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <ClientIssueLogger />
           {children}
           <AgentChat />
+          <AdminErrorTray />
           <Toaster
             position="top-center"
             toastOptions={{ duration: 3000, style: { borderRadius: '12px', fontWeight: 600 } }}

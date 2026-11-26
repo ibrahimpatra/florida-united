@@ -1,6 +1,6 @@
 'use client';
 import { useEffect } from 'react';
-import { toast } from 'react-hot-toast';
+import { pushAdminError } from './AdminErrorTray';
 
 /**
  * Browser console: prints only problems - uncaught errors, unhandled promise rejections and failed /api calls
@@ -47,8 +47,7 @@ export function ClientIssueLogger() {
             try {
               const j = await res.clone().json();
               if (j?.adminDetail && !url.includes('/api/popups/') && !url.includes('/api/admin/issues')) {
-                const msg = `[admin only] ${method} ${url.replace(location.origin, '').split('?')[0]} ${res.status}: ${j.adminDetail}`;
-                if (w.__fkLastAdminToast !== msg) { w.__fkLastAdminToast = msg; setTimeout(() => { w.__fkLastAdminToast = ''; }, 5000); toast.error(msg, { duration: 9000, style: { fontSize: '12px', maxWidth: '480px', wordBreak: 'break-word' } }); }
+                pushAdminError({ method, route: url.replace(location.origin, '').split('?')[0], status: res.status, message: String(j.adminDetail) });
               }
             } catch { /* not JSON */ }
           }

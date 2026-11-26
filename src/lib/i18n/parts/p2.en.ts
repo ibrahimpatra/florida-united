@@ -1,6 +1,11 @@
 // Generated dictionary part p2 (English).
 export const p2En = {
   c2_chk: {
+    calculating: "Calculating delivery, one moment…",
+    fixFields: "Please complete the highlighted fields.",
+    retry: "Try again",
+    pickGov: "Choose your governorate to see the delivery price.",
+    sheetClose: "Close",
     placing: "Placing your order…",
     failGeneric: "We could not place your order right now. Nothing was charged. Please try again.",
     failShort: "Order failed.",

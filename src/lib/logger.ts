@@ -81,6 +81,9 @@ const jsonResponse = (body: any, res: Response) => { const h = new Headers(res.h
  * Wraps an API route handler: logs the request (method, path, query, redacted JSON body),
  * the response status and duration, error bodies, and turns uncaught exceptions into a logged 500.
  */
+/** Saving anything here changes small shared settings that servers keep in memory (see cfgMemo in memo.ts). */
+const CFG_PATH = /^\/api\/(admin|banners|popups|promo-tiles|settings|flash-deals|uoms|shipping\/(zones|config|rates)|loyalty\/settings|payments\/settings)/;
+
 export function withLog<H extends (...args: any[]) => any>(method: string, path: string, handler: H): H {
   const wrapped = async (...args: any[]) => {
     const req = args[0] as Request | undefined;
@@ -96,8 +99,10 @@ export function withLog<H extends (...args: any[]) => any>(method: string, path:
     const store: ReqStore = { notes: [] };
     try {
       let res: Response = await reqStore.run(store, () => handler(...args));
+      try { (await import('./read-meter')).recordRoute(`${method} ${path}`, store.reads || 0); } catch { /* optional */ }
       const ms = Date.now() - t0;
       const status = (res as any)?.status ?? 200;
+      if (method !== 'GET' && status < 400 && CFG_PATH.test(path)) { try { (await import('./memo')).dropCfg(); } catch { /* optional */ } }   // a saved admin change shows on this server at once
       if (status >= 400) {
         let text = '';
         try { text = (await res.clone().text()).slice(0, 300); } catch {}
