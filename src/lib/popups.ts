@@ -3,6 +3,7 @@
  * Pure helpers live here so they can be tested; Firestore access is at the bottom.
  */
 import { queueFill } from './bg';
+import { cfgMemo, dropCfg } from './memo';
 import { getAdminDb } from './firebase-admin';
 
 export const POPUP_TRIGGERS = ['delay', 'exit', 'scroll'] as const;
@@ -58,22 +59,22 @@ const col = () => getAdminDb().collection('popups');
 const shape = (d: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): Popup => ({ views: 0, clicks: 0, ...(d.data() as any), id: d.id });
 
 export async function listPopups(onlyLive: boolean): Promise<Popup[]> {
-  const snap = await col().get();
-  const all = snap.docs.map(shape).sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
+  const docs = await cfgMemo(getAdminDb(), 'popups', 10 * 60_000, async () => (await col().get()).docs);
+  const all = docs.map(shape).sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
   return onlyLive ? all.filter(p => popupIsLive(p)) : all;
 }
-export async function createPopup(raw: any): Promise<string> {
+export async function createPopup(raw: any): Promise<string> { dropCfg();
   const ref = await col().add({ ...sanitizePopup(raw), views: 0, clicks: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   queueFill('popups', ref.id);
   return ref.id;
 }
-export async function updatePopup(id: string, raw: any) {
+export async function updatePopup(id: string, raw: any) { dropCfg();
   const ref = col().doc(id); const cur = await ref.get();
   if (!cur.exists) throw new Error('Popup not found.');
   await ref.update({ ...sanitizePopup({ ...cur.data(), ...raw }), updatedAt: new Date().toISOString() });
   queueFill('popups', id);
 }
-export const deletePopup = (id: string) => col().doc(id).delete();
+export const deletePopup = async (id: string) => { await col().doc(id).delete(); dropCfg(); };
 export async function popupEvent(id: string, type: 'view' | 'click') {
   const { FieldValue } = await import('firebase-admin/firestore');
   const ref = col().doc(id); if (!(await ref.get()).exists) return;

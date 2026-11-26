@@ -214,6 +214,7 @@ export const p1En = {
     sku: "SKU",
   },
   c1_pd: {
+    qty: "Quantity",
     home: "Home",
     shop: "Shop",
     breadcrumb: "Breadcrumb",

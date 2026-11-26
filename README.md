@@ -337,6 +337,13 @@ A new look for every customer-facing page. No logic, server, database or env cha
 - **Order lines keep their snapshot on purpose.** Name, SKU, price and quantity are saved on every order so old invoices, returns and revenue never change when a product is renamed, repriced or deleted. Reading them from products instead would cost more reads and change history.
 - **Tighter layout.** Smaller page padding, gaps and section spacing in the shop and in admin (cards are slightly less rounded in admin). Mobile checkout: the Place order button no longer floats over the form fields.
 
+### 9k. v28 reads + checkout round
+- **Reads**: product cache TTL 3h (marker check every 60s, only changed products re-read). Cold instances load a shared gzip snapshot from R2 (`system/catalog-snapshot.json.gz`, written at most every 2 min after a full DB read); without R2 it falls back to `unstable_cache`. Small config reads (shipping, deals, banners, popups, promo tiles, loyalty, `/api/settings/public`) are memoised with `cfgMemo` (`src/lib/memo.ts`) and cleared by `dropCfg()` on every admin save (`CFG_PATH` in `logger.ts`). Delivery quotes use cached products; placing an order still reads fresh. No env changes (R2 vars already used for images).
+- **Read meter**: Admin > Read meter (super admin) and `[reads]` lines in Vercel logs (>=40 reads in one request). Per server instance.
+- **Checkout (phone)**: Place order is never silently disabled: missing fields scroll + toast, quote failure shows "Try again". Bottom bar with total opens an order-summary sheet; bar hides while the keyboard is open.
+- **Product page (phone)**: bottom bar holds quantity (- 1 +) and add to cart; no in-page quantity on phones.
+- **Admin error tray** (`AdminErrorTray.tsx`): one line per error, eye opens, cross dismisses, never auto-hides; same method+route+message = x N badge; shows operation, page and last button pressed; Save to logs / Close / Copy details; max 3 lines then "+N more". Server 5xx are already auto-saved to Admin > Issues, Save adds the context row.
+
 ## 10. SEO
 
 Every public page has its own title, description and canonical link. English and Arabic versions (`/ar/...`) point to each other with `hreflang`. The sitemap lists both and only active products. Product pages carry price and stock data; the home page carries organisation and search-box data; product and category pages carry breadcrumbs. A default share image and app icons are included. Order tracking, cart, checkout and account pages are kept out of search results.

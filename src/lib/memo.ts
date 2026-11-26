@@ -15,3 +15,13 @@ export async function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>):
   return p;
 }
 export function dropMemo(prefix: string) { for (const k of [...store.keys()]) if (k.startsWith(prefix)) store.delete(k); }
+
+/**
+ * Small shared settings that every page needs (store settings, shipping zones, banners, popups, promo tiles, loyalty rules, deals).
+ * Read once per `ttlMs` on each server instead of on every page view. The key includes which database object was used, so tests
+ * (and a changed connection) never see another database's copy. Any successful admin change clears them all (dropCfg, called by withLog).
+ */
+const ids = new WeakMap<object, number>(); let nextId = 1;
+const dbId = (db: object) => { let i = ids.get(db); if (!i) { i = nextId++; ids.set(db, i); } return i; };
+export const cfgMemo = <T>(db: object, key: string, ttlMs: number, fn: () => Promise<T>) => memo(`cfg:${dbId(db)}:${key}`, ttlMs, fn);
+export const dropCfg = () => dropMemo('cfg:');

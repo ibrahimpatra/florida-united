@@ -11,6 +11,7 @@
  *    transaction; on collision a new number is drawn.
  *  - Cancel restores stock + rollups exactly once (already-cancelled is a no-op).
  */
+import { cfgMemo } from './memo';
 import { catalogChanged } from './catalog-sync';
 import { loadLoyaltySettings } from './loyalty';
 import { redeemPlan } from './loyalty-core';
@@ -36,6 +37,9 @@ const kuwaitDay = (d = new Date()) => new Date(d.getTime() + 3 * 3600e3).toISOSt
 
 // ── Settings ─────────────────────────────────────────────────
 export async function loadShippingSettings(db: Firestore = getAdminDb()): Promise<{ zones: ZoneLike[]; settings: ShippingSettings }> {
+  return cfgMemo(db, 'shipping-settings', 5 * 60_000, () => loadShippingSettingsFresh(db));   // 3 small reads + zones, once per 5 min per server, not per request
+}
+async function loadShippingSettingsFresh(db: Firestore): Promise<{ zones: ZoneLike[]; settings: ShippingSettings }> {
   const [zoneSnap, shipSnap, storeSnap] = await Promise.all([
     db.collection('shippingZones').get(),
     db.doc('config/shippingConfig').get(),
@@ -67,7 +71,7 @@ export interface RawItem { productId: string; quantity: number; variantId?: stri
 
 /** Live deals + the ones this customer has already used up (their per-customer limit). */
 async function loadDeals(db: Firestore, userId?: string) {
-  const all = (await db.collection('flashDeals').get()).docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  const all = await cfgMemo(db, 'deals-raw', 2 * 60_000, async () => (await db.collection('flashDeals').get()).docs.map(d => ({ id: d.id, ...(d.data() as any) })));
   const blocked = new Set<string>();
   if (userId) {
     const limited = all.filter(d => Number(d.maxUsesPerUser) > 0);
@@ -85,15 +89,15 @@ export async function resolveLines(db: Firestore, raw: RawItem[], opts: { userId
 
 const COUPON_WITH_DEAL = 'This coupon cannot be used together with an offer that is in your cart.';
 
-export async function resolveLinesWithDeals(db: Firestore, raw: RawItem[], opts: { userId?: string } = {}): Promise<{ lines: PricedLine[]; usedDealIds: string[]; totalSaving: number; noCoupon?: boolean }> {
-  const base = await resolveBaseLines(db, raw);
+export async function resolveLinesWithDeals(db: Firestore, raw: RawItem[], opts: { userId?: string; cached?: boolean } = {}): Promise<{ lines: PricedLine[]; usedDealIds: string[]; totalSaving: number; noCoupon?: boolean }> {
+  const base = await resolveBaseLines(db, raw, !!opts.cached);
   let deals: any[] = [], blocked = new Set<string>();
   try { ({ deals, blocked } = await loadDeals(db, opts.userId)); } catch (e) { console.error('[deals] load failed, pricing without deals', e); }
   const r = applyFlashDeals(base, deals, { blocked });
   return { ...r, noCoupon: deals.some(d => r.usedDealIds.includes(d.id) && d.noCoupon === true) };
 }
 
-async function resolveBaseLines(db: Firestore, raw: RawItem[]): Promise<PricedLine[]> {
+async function resolveBaseLines(db: Firestore, raw: RawItem[], cached = false): Promise<PricedLine[]> {
   if (!Array.isArray(raw) || raw.length === 0) throw new OrderError(400, 'Your cart is empty.', 'EMPTY_CART');
   if (raw.length > 60) throw new OrderError(400, 'Too many items in one order.');
 
@@ -115,8 +119,12 @@ async function resolveBaseLines(db: Firestore, raw: RawItem[]): Promise<PricedLi
       (b.items || []).forEach((i: any) => productIds.add(i.productId));
     } else productIds.add(w.productId);
   }
-  const pSnaps = productIds.size ? await db.getAll(...[...productIds].map(id => db.collection('products').doc(id))) : [];
-  const products = new Map(pSnaps.filter(s => s.exists).map(s => [s.id, s.data() as any]));
+  let products: Map<string, any>;
+  if (cached) products = productIds.size ? await (await import('./firestore-admin')).getProductsByIdsCached([...productIds]) : new Map();   // the delivery quote only displays prices: no per-product reads
+  else {
+    const pSnaps = productIds.size ? await db.getAll(...[...productIds].map(id => db.collection('products').doc(id))) : [];
+    products = new Map(pSnaps.filter(s => s.exists).map(s => [s.id, s.data() as any]));
+  }
 
   const lines: PricedLine[] = [];
   for (const w of wanted) {
@@ -170,7 +178,7 @@ export function couponCtx(lines: PricedLine[], segments?: string[]) {
 /** Used by /api/shipping/calculate so the checkout display == what gets charged. */
 export async function quoteShipping(rawItems: RawItem[], governorate: string | undefined, userId?: string, couponCode?: string) {
   const db = getAdminDb();
-  const { lines, totalSaving, noCoupon } = await resolveLinesWithDeals(db, rawItems, { userId });
+  const { lines, totalSaving, noCoupon } = await resolveLinesWithDeals(db, rawItems, { userId, cached: true });
   const { zones, settings } = await loadShippingSettings(db);
   const subtotal = round3(lines.reduce((s, l) => s + l.total, 0));
   // Same rule placeOrder applies, so the checkout summary shows exactly what will be charged.

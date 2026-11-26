@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /** Collects the problems that happen while ONE API request is handled, so the response can explain them to an admin. */
-export interface ReqStore { notes: string[] }
+export interface ReqStore { notes: string[]; reads?: number }
 export const reqStore = new AsyncLocalStorage<ReqStore>();
 
 const fmt = (args: any[]) => args.map(a => a instanceof Error ? a.message : typeof a === 'string' ? a : (() => { try { return JSON.stringify(a)?.slice(0, 200); } catch { return String(a); } })()).join(' ').replace(/\x1b\[[0-9;]*m/g, '').slice(0, 400);

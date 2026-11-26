@@ -157,11 +157,11 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
 
           {/* Qty + Add to cart */}
           {cartLine ? (
-            <div className="flex items-center justify-center rounded-full border border-brand-100 bg-brand-50 py-2 mb-4">
+            <div className="hidden md:flex items-center justify-center rounded-full border border-brand-100 bg-brand-50 py-2 mb-4">
               <QtyStepper qty={cartLine.quantity} max={Math.max(stock, 0)} onChange={q => updateQuantity(product.id, q, unitId)} />
             </div>
           ) : (
-          <div className="flex items-center gap-3 mb-4">
+          <div className="hidden md:flex items-center gap-3 mb-4">
             <div className="flex items-center border border-gray-200 bg-white rounded-full overflow-hidden">
               <button onClick={() => setQty(q => Math.max(1, q - 1))} className="px-3 py-3 hover:bg-gray-50 transition-colors"><Minus className="w-4 h-4" /></button>
               <span className="px-4 py-3 font-bold text-gray-800 min-w-[3rem] text-center">{qty}</span>
@@ -176,18 +176,30 @@ export function ProductDetailClient({ product, relatedProducts }: { product: Pro
           )}
           {/* Phones: the one bottom bar for this page: save, share, WhatsApp and Add to cart with the price */}
           <div className="md:hidden fixed inset-x-3 z-40 no-print" style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
-            <div className="flex items-center gap-1.5 rounded-full bg-brand-900/95 backdrop-blur-md shadow-float p-1.5">
+            <div className="flex items-center gap-1 rounded-full bg-brand-900/95 backdrop-blur-md shadow-float p-1.5">
               <button type="button" onClick={() => toggleItem(product.id)} aria-label={inWishlist ? t('c1_pd.wishlisted') : t('c1_pd.wishlist')}
-                className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center transition active:scale-90 ${inWishlist ? 'bg-red-500 text-white' : 'bg-white/10 text-white'}`}>
+                className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition active:scale-90 ${inWishlist ? 'bg-red-500 text-white' : 'bg-white/10 text-white'}`}>
                 <Heart className="w-5 h-5" fill={inWishlist ? 'currentColor' : 'none'} />
               </button>
-              <button type="button" onClick={handleShare} aria-label={t('c1_pd.share')} className="shrink-0 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-90 transition"><Share2 className="w-5 h-5" /></button>
-              <button type="button" onClick={handleWhatsApp} aria-label={t('c1_pd.whatsapp')} className="shrink-0 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-90 transition"><MessageCircle className="w-5 h-5" /></button>
+              <button type="button" onClick={handleShare} aria-label={t('c1_pd.share')} className="shrink-0 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-90 transition"><Share2 className="w-5 h-5" /></button>
+              <button type="button" onClick={handleWhatsApp} aria-label={t('c1_pd.whatsapp')} className="shrink-0 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-90 transition"><MessageCircle className="w-5 h-5" /></button>
+              {/* quantity lives here, not in the page: before adding it picks how many; once in the cart it changes the cart line */}
+              {stock > 0 && (() => {
+                const shown = cartLine ? cartLine.quantity : qty;
+                const set = (n: number) => { if (cartLine) updateQuantity(product.id, n, unitId); else setQty(n); };
+                return (
+                  <div className="shrink-0 flex items-center rounded-full bg-white/10 text-white" role="group" aria-label={t('c1_pd.qty') || 'Quantity'}>
+                    <button type="button" onClick={() => set(Math.max(cartLine ? 0 : 1, shown - 1))} className="w-8 h-10 flex items-center justify-center active:scale-90" aria-label="−"><Minus className="w-4 h-4" /></button>
+                    <span className="min-w-[1.25rem] text-center text-sm font-bold tabular-nums">{shown}</span>
+                    <button type="button" onClick={() => set(Math.min(stock, shown + 1))} disabled={shown >= stock} className="w-8 h-10 flex items-center justify-center active:scale-90 disabled:opacity-40" aria-label="+"><Plus className="w-4 h-4" /></button>
+                  </div>
+                );
+              })()}
               {cartLine ? (
-                <Link href="/cart" className="flex-1 min-w-0 inline-flex items-center justify-center h-11 rounded-full bg-accent-500 text-brand-950 font-bold text-sm whitespace-nowrap px-2">{t('bnav.cart')} · {cartLine.quantity}</Link>
+                <Link href="/cart" className="flex-1 min-w-0 inline-flex items-center justify-center gap-1 h-10 rounded-full bg-accent-500 text-brand-950 font-bold text-sm whitespace-nowrap px-2"><ShoppingCart className="w-4 h-4" />{t('bnav.cart')}</Link>
               ) : (
-                <button onClick={handleAddToCart} disabled={stock === 0 || adding} className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 h-11 rounded-full bg-accent-500 text-brand-950 font-bold text-sm whitespace-nowrap px-2 disabled:opacity-50">
-                  {stock === 0 ? t('c1_pd.oos') : adding ? t('c1_pd.adding') : <><span>{t('c1_pd.addCart')}</span><span className="font-extrabold">{formatPrice(dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : unitPrice)}</span></>}
+                <button onClick={handleAddToCart} disabled={stock === 0 || adding} className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 h-10 rounded-full bg-accent-500 text-brand-950 font-bold text-sm whitespace-nowrap px-2 disabled:opacity-50">
+                  {stock === 0 ? t('c1_pd.oos') : adding ? t('c1_pd.adding') : <><ShoppingCart className="w-4 h-4 shrink-0" /><span className="font-extrabold truncate">{formatPrice((dealHit && dealHit.deal.type !== 'bogo' ? dealHit.price : unitPrice) * qty)}</span></>}
                 </button>
               )}
             </div>

@@ -1,5 +1,5 @@
 'use client';
-import { ChevronDown } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -63,6 +63,14 @@ export default function CheckoutPage() {
   }, [governorate, itemsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchQuote(); }, [fetchQuote]);
+  // the summary sheet: page behind it does not scroll, and Escape closes it
+  useEffect(() => {
+    if (!sumOpen) return;
+    const prev = document.body.style.overflow; document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSumOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+  }, [sumOpen]);
 
   const clientSubtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
   const subtotal = serverSubtotal ?? clientSubtotal;
@@ -108,9 +116,9 @@ export default function CheckoutPage() {
 
   return (
     <><Header />
-    <div className="container-custom py-6 md:py-10 max-w-6xl">
-      <h1 className="text-2xl font-black text-gray-900 mb-6 md:mb-8">{t('checkout.title')}</h1>
-      <div className="grid lg:grid-cols-2 gap-8 lg:gap-10">
+    <div className="container-custom py-4 md:py-8 max-w-6xl pb-28 lg:pb-10">
+      <h1 className="text-xl md:text-2xl font-black text-gray-900 mb-3 md:mb-6">{t('checkout.title')}</h1>
+      <div className="grid lg:grid-cols-2 gap-5 lg:gap-10">
         <div>
           <KuwaitCheckoutForm
             items={items}
@@ -118,6 +126,11 @@ export default function CheckoutPage() {
             onGovernorateChange={setGovernorate}
             rateId={chosen?.rateId}
             quoteReady={!!chosen && !quoteLoading}
+            quoteLoading={quoteLoading}
+            quoteError={quoteError}
+            onRetryQuote={fetchQuote}
+            itemCount={items.length}
+            onOpenSummary={() => setSumOpen(true)}
             codFee={quote?.codFee ?? 0}
             total={total}
             couponCode={couponCode ?? undefined}
@@ -130,14 +143,20 @@ export default function CheckoutPage() {
           />
         </div>
 
-        <div className="lg:sticky lg:top-28 space-y-4 h-fit order-first lg:order-none">
-          <div className="bg-gray-50 rounded-2xl p-5">
-            <button type="button" onClick={() => setSumOpen(o => !o)} aria-expanded={sumOpen} className="lg:hidden w-full flex items-center justify-between gap-3 text-start">
-              <span className="font-bold text-gray-900">{t('checkout.orderSummary')} ({items.length})</span>
-              <span className="flex items-center gap-2 font-extrabold text-brand-700">{chosen ? formatPrice(total) : ''}<ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sumOpen ? 'rotate-180' : ''}`} /></span>
-            </button>
+        {sumOpen && <div className="fixed inset-0 z-[55] bg-black/40 lg:hidden" onClick={() => setSumOpen(false)} aria-hidden="true" />}
+        <div className="lg:sticky lg:top-28 space-y-4 h-fit">
+          {/* Phones: this card is the sheet that slides up from the bottom bar. Large screens: it stays in the side column. */}
+          <div role={sumOpen ? 'dialog' : undefined} aria-label={t('checkout.orderSummary')}
+            className={`${sumOpen ? 'fixed inset-x-0 bottom-0 z-[60] max-h-[88vh] overflow-y-auto overscroll-contain rounded-t-3xl bg-white shadow-[0_-12px_40px_rgba(0,0,0,0.25)] px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] animate-sheet-up' : 'hidden'} lg:static lg:block lg:max-h-none lg:overflow-visible lg:rounded-2xl lg:bg-gray-50 lg:p-5 lg:shadow-none lg:animate-none`}>
+            <div className="lg:hidden">
+              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-300" />
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-gray-900 text-lg">{t('checkout.orderSummary')} ({items.length})</h3>
+                <button type="button" onClick={() => setSumOpen(false)} aria-label={t('c2_chk.sheetClose')} className="p-2 -me-2 rounded-full text-gray-500 hover:bg-gray-100"><X className="w-5 h-5" /></button>
+              </div>
+            </div>
             <h3 className="hidden lg:block font-bold text-gray-900 mb-4">{t('checkout.orderSummary')} ({items.length})</h3>
-            <div className={`${sumOpen ? 'block mt-4' : 'hidden'} lg:block`}>
+            <div>
             {soldOut.length > 0 && (
               <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
                 {soldOut.map(i => (

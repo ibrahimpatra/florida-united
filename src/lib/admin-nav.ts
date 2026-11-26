@@ -1,5 +1,5 @@
 /** The admin menu: one list used by the full-page grid and the top bar. Add a page here and it appears everywhere. */
-import { LayoutDashboard, ShoppingCart, RotateCcw, Users, Package, Gift, Tag, Award, Ruler, Upload, Image, Megaphone, Sparkles, Zap, Percent, Truck, Settings, ListChecks, AlertTriangle, Network, BarChart2, Bell, Sparkles as SparklesIcon } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, RotateCcw, Users, Package, Gift, Tag, Award, Ruler, Upload, Image, Megaphone, Sparkles, Zap, Percent, Truck, Settings, ListChecks, AlertTriangle, Network, BarChart2, Bell, Sparkles as SparklesIcon, Gauge } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: any; superOnly?: boolean; badge?: 'orders' | 'returns'; keywords?: string }
 export interface NavGroup { id: string; label: string; color: string; items: NavItem[] }
@@ -35,6 +35,7 @@ export const ADMIN_GROUPS: NavGroup[] = [
     { href: '/admin/shipping', label: 'Shipping zones', icon: Truck, superOnly: true, keywords: 'delivery' },
     { href: '/admin/jobs', label: 'Background jobs', icon: ListChecks, superOnly: true, keywords: 'seo cron' },
     { href: '/admin/issues', label: 'Issues', icon: AlertTriangle, superOnly: true, keywords: 'errors logs' },
+    { href: '/admin/reads', label: 'Read meter', icon: Gauge, superOnly: true, keywords: 'firestore reads usage quota cost' },
     { href: '/admin/ai-usage', label: 'AI usage', icon: SparklesIcon, superOnly: true, keywords: 'gemini openai tokens cost' },
     { href: '/admin/graph', label: 'Code graph', icon: Network, superOnly: true },
   ] },

@@ -1,5 +1,6 @@
 import { queueFill } from './bg';
 import { getAdminDb } from './firebase-admin';
+import { cfgMemo, dropCfg } from './memo';
 
 export interface PromoTile {
   id: string; title: string; titleAr?: string; badge?: string; badgeAr?: string; link: string; image?: string;
@@ -29,10 +30,10 @@ export function cleanTile(b: any, partial = false): Record<string, any> {
 }
 
 export async function listTiles(activeOnly: boolean): Promise<PromoTile[]> {
-  const snap = await getAdminDb().collection('promoTiles').get();
-  return snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as PromoTile))
+  const docs = await cfgMemo(getAdminDb(), 'promo-tiles', 10 * 60_000, async () => (await getAdminDb().collection('promoTiles').get()).docs);
+  return docs.map((d: any) => ({ id: d.id, ...d.data() } as PromoTile))
     .filter(t => !activeOnly || t.isActive).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 }
-export async function createTile(b: any) { const r = await getAdminDb().collection('promoTiles').add({ ...cleanTile(b), createdAt: new Date().toISOString() }); queueFill('promoTiles', r.id); return r.id; }
-export async function updateTile(id: string, b: any) { await getAdminDb().collection('promoTiles').doc(id).update(cleanTile(b, true)); queueFill('promoTiles', id); }
-export async function deleteTile(id: string) { await getAdminDb().collection('promoTiles').doc(id).delete(); }
+export async function createTile(b: any) { dropCfg(); const r = await getAdminDb().collection('promoTiles').add({ ...cleanTile(b), createdAt: new Date().toISOString() }); queueFill('promoTiles', r.id); return r.id; }
+export async function updateTile(id: string, b: any) { dropCfg(); await getAdminDb().collection('promoTiles').doc(id).update(cleanTile(b, true)); queueFill('promoTiles', id); }
+export async function deleteTile(id: string) { dropCfg(); await getAdminDb().collection('promoTiles').doc(id).delete(); }

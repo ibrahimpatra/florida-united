@@ -21,7 +21,7 @@ import type {
 
 // ── helpers ──────────────────────────────────────────────────
 import { fixImageUrl } from './image-url';
-import { memo, dropMemo } from './memo';
+import { memo, dropMemo, cfgMemo, dropCfg } from './memo';
 
 function toData<T>(snap: FirebaseFirestore.DocumentSnapshot): T | null {
   if (!snap.exists) return null;
@@ -163,8 +163,10 @@ export class ProductError extends Error {
 // Ceiling: PRODUCT_CAP docs. Beyond that, move search/filter to Algolia/Typesense —
 // everything goes through this one function so the swap is local.
 const PRODUCT_CAP = 3000;
-const PRODUCT_CACHE_MS = 10 * 60_000;   // the list stays in memory for 10 minutes; changes tell every server to drop it sooner (catalog-sync.ts)
-const VERSION_CHECK_MS = 20_000;
+// The change log (catalog-sync.ts) keeps the list current, so it is NOT thrown away on a short timer (that used to re-read every product every 10 minutes).
+// The long limit is only a safety net for edits made directly in the Firebase console, which bypass the log; the Refresh button covers those at once.
+const PRODUCT_CACHE_MS = 3 * 60 * 60_000;
+const VERSION_CHECK_MS = 60_000;      // one small marker read per minute per server while it is being used
 let productCache: { at: number; items: Product[] } | null = null;
 let catCache: { at: number; items: Category[] } | null = null;
 let syncedVer = 0;                 // marker version both caches are current with
@@ -251,9 +253,43 @@ async function readAllFromDb(): Promise<{ v: number; items: Product[] }> {
 let snapshotOverride: null | (() => Promise<{ v: number; items: Product[] } | null>) = null;
 export function __setSnapshotProvider(f: typeof snapshotOverride) { snapshotOverride = f; }   // tests only
 
+const SNAP_KEY = 'system/catalog-snapshot.json.gz';   // private object in the image bucket (never served by /media)
+let lastSnapWrite = 0;
+
+async function readR2Snapshot(): Promise<{ v: number; items: Product[] } | null> {
+  try {
+    const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+    const { r2Client } = await import('./r2');
+    const out: any = await r2Client().send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: SNAP_KEY }), { abortSignal: AbortSignal.timeout(6000) });
+    const zlib = await import('node:zlib');
+    const j = JSON.parse(zlib.gunzipSync(Buffer.from(await out.Body.transformToByteArray())).toString('utf8'));
+    return Array.isArray(j?.items) ? { v: Number(j.v) || 0, items: j.items } : null;
+  } catch { return null; }   // missing (first run) or unreachable: the caller reads the database
+}
+
+async function writeR2Snapshot(r: { v: number; items: Product[] }) {
+  if (Date.now() - lastSnapWrite < 120_000) return;   // at most one upload every 2 minutes per server
+  lastSnapWrite = Date.now();
+  try {
+    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    const { r2Client } = await import('./r2');
+    const zlib = await import('node:zlib');
+    await r2Client().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: SNAP_KEY, Body: zlib.gzipSync(Buffer.from(JSON.stringify({ v: r.v, at: Date.now(), items: r.items }))), ContentType: 'application/gzip', CacheControl: 'no-store' }));
+  } catch (e) { console.warn('[catalog] could not save the shared snapshot', (e as any)?.message); }
+}
+
+/** Saves a fresh full read so the next cold server can start from it. */
+async function saveSharedSnapshot(r: { v: number; items: Product[] }) {
+  if (snapshotOverride) return;
+  const { r2Enabled } = await import('./r2');
+  if (r2Enabled()) await writeR2Snapshot(r); else await dropSharedSnapshot();
+}
+
 async function sharedSnapshot(): Promise<{ v: number; items: Product[] } | null> {
   if (snapshotOverride) return snapshotOverride();
   try {
+    const { r2Enabled } = await import('./r2');
+    if (r2Enabled()) return await readR2Snapshot();   // any size, no platform limits, no Firestore reads
     const { unstable_cache } = await import('next/cache');
     const get = unstable_cache(async () => {
       const r = await readAllFromDb();
@@ -285,7 +321,7 @@ async function loadAllProducts(fresh: boolean): Promise<Product[]> {
   }
   const r = await readAllFromDb();
   productCache = { at: Date.now(), items: r.items }; pendingIds.clear(); syncedVer = r.v || syncedVer; versionCheckedAt = Date.now();
-  if (fresh || usedShared) void dropSharedSnapshot();   // the shared copy was unusable or is being replaced: refresh it
+  void saveSharedSnapshot(r);   // the shared copy was missing, too old or is being replaced: save this fresh read for the next cold server
   return r.items;
 }
 
@@ -296,6 +332,12 @@ function queueSeoJob(productId: string) {
 }
 
 /** sku / slug / stock of every product from the in-memory list (no database reads while the list is fresh). Used by the import preview. */
+/** Products by id from the shared in-memory list (no database reads). For display-only uses such as the delivery quote; placing an order still reads fresh. */
+export async function getProductsByIdsCached(ids: string[]): Promise<Map<string, any>> {
+  const want = new Set(ids);
+  return new Map((await loadAllProducts(false)).filter(p => want.has(p.id)).map(p => [p.id, p as any]));
+}
+
 export async function getProductIndex(fresh = false): Promise<{ id: string; sku?: string; slug?: string; stock?: number }[]> {
   return (await loadAllProducts(fresh)).map((p: any) => ({ id: p.id, sku: p.sku, slug: p.slug, stock: p.stock }));
 }
@@ -810,7 +852,7 @@ export async function adminValidateCoupon(code: string, orderAmount: number, use
 // ── BANNERS ──────────────────────────────────────────────────
 export async function adminGetBanners(activeOnly = false): Promise<Banner[]> {
   // unconstrained read, sorted in memory: orderBy('sortOrder') would silently drop banners missing that field
-  const all = toList<Banner>(await getAdminDb().collection('banners').get());
+  const all = await cfgMemo(getAdminDb(), 'banners', 10 * 60_000, async () => toList<Banner>(await getAdminDb().collection('banners').get()));
   const ser = (v: any) => (v && typeof v.toDate === 'function' ? v.toDate().toISOString() : v);
   return all.filter(b => !activeOnly || b.isActive !== false)
     .map(b => ({ ...b, createdAt: ser(b.createdAt), updatedAt: ser((b as any).updatedAt) }) as Banner)
@@ -830,7 +872,7 @@ function cleanBanner(data: any, partial: boolean) {
   return d;
 }
 
-export async function adminCreateBanner(data: any): Promise<string> {
+export async function adminCreateBanner(data: any): Promise<string> { dropCfg();
   const ref = await getAdminDb().collection('banners').add({
     isActive: true, sortOrder: 0, ...cleanBanner(data, false), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
@@ -838,12 +880,12 @@ export async function adminCreateBanner(data: any): Promise<string> {
   return ref.id;
 }
 
-export async function adminUpdateBanner(id: string, data: any): Promise<void> {
+export async function adminUpdateBanner(id: string, data: any): Promise<void> { dropCfg();
   await getAdminDb().collection('banners').doc(id).update({ ...cleanBanner(data, true), updatedAt: FieldValue.serverTimestamp() });
   queueFill('banners', id);
 }
 
-export async function adminDeleteBanner(id: string): Promise<void> {
+export async function adminDeleteBanner(id: string): Promise<void> { dropCfg();
   await getAdminDb().collection('banners').doc(id).delete();
 }
 
